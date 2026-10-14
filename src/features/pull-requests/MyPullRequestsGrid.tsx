@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { commandErrorMessage, listMyCreatedPullRequests } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
@@ -17,6 +17,7 @@ import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
+import { useKeyedGridSelection } from "@/lib/useKeyedGridSelection";
 import { copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
@@ -130,7 +131,6 @@ const MemoCreatedPrRow = memo(function MemoCreatedPrRow({
 // to the right of the grid.
 export function MyPullRequestsGrid() {
   const organizationId = useActiveOrganizationId();
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
   const [showDrafts, setShowDrafts] = useState(true);
@@ -196,9 +196,8 @@ export function MyPullRequestsGrid() {
     return data;
   }, [allPrs, textFilter, showDrafts, sort]);
 
-  useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(0, rows.length - 1)));
-  }, [rows.length]);
+  // Keyed, so a refetch that reorders or replaces rows keeps the same PR selected.
+  const { selectedIndex, setSelectedIndex } = useKeyedGridSelection(rows, (pr) => `${pr.repositoryId}:${pr.pullRequestId}`);
 
   const selection = useRangeSelection({
     rows,

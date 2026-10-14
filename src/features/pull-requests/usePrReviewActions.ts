@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   commandErrorMessage,
@@ -10,6 +10,7 @@ import {
   submitPullRequestVote,
   updatePullRequest,
   updatePullRequestDetails,
+  type PrLocatorInput,
   type PullRequestAction,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
@@ -22,28 +23,45 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
   const experimental = useExperimentalFlags();
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Reset error state when another PR is selected.
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+
+  // Another PR selected: drop the error and any title/description edit, which
+  // would otherwise be saved onto the newly selected PR.
+  const prKey = `${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`;
+  const currentKey = useRef(prKey);
+  currentKey.current = prKey;
   useEffect(() => {
     setActionError(null);
-  }, [pr.organizationId, pr.pullRequestId, pr.repositoryId]);
+    setEditingDetails(false);
+  }, [prKey]);
 
-  function invalidateReview() {
+  /** Refreshes the PR a mutation ran on, which may no longer be the selected one. */
+  function invalidateReview(target: PrLocatorInput) {
     void queryClient.invalidateQueries({
-      queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+      queryKey: ["prReview", target.organizationId, target.repositoryId, target.pullRequestId],
     });
-    void queryClient.invalidateQueries({ queryKey: ["myReviews", pr.organizationId] });
+    void queryClient.invalidateQueries({ queryKey: ["myReviews", target.organizationId] });
+    void queryClient.invalidateQueries({ queryKey: ["myCreatedPullRequests", target.organizationId] });
+  }
+
+  /** A failure is shown only while the PR it happened on is still selected. */
+  function showError(mutationError: unknown, target: PrLocatorInput) {
+    if (`${target.organizationId}:${target.repositoryId}:${target.pullRequestId}` !== currentKey.current) return;
+    setActionError(commandErrorMessage(mutationError));
   }
 
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
-    onSuccess: () => { setActionError(null); invalidateReview(); },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onSuccess: (_data, variables) => { setActionError(null); invalidateReview(variables); },
+    onError: showError,
   });
 
   const commentMutation = useMutation({
     mutationFn: postPullRequestComment,
-    onSuccess: () => { setActionError(null); invalidateReview(); },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onSuccess: (_data, variables) => { setActionError(null); invalidateReview(variables); },
+    onError: showError,
   });
 
   const statusMutation = useMutation({
@@ -54,21 +72,21 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
         recordUsage("resolvedThreads", experimental.usageStats);
       }
       setActionError(null);
-      invalidateReview();
+      invalidateReview(variables);
     },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onError: showError,
   });
 
   const editMutation = useMutation({
     mutationFn: editPullRequestComment,
-    onSuccess: () => { setActionError(null); invalidateReview(); },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onSuccess: (_data, variables) => { setActionError(null); invalidateReview(variables); },
+    onError: showError,
   });
 
   const deleteMutation = useMutation({
     mutationFn: deletePullRequestComment,
-    onSuccess: () => { setActionError(null); invalidateReview(); },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onSuccess: (_data, variables) => { setActionError(null); invalidateReview(variables); },
+    onError: showError,
   });
 
   const [mergeStrategy, setMergeStrategy] = useState("squash");
@@ -77,22 +95,18 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
 
   const updateMutation = useMutation({
     mutationFn: updatePullRequest,
-    onSuccess: () => { setActionError(null); invalidateReview(); },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onSuccess: (_data, variables) => { setActionError(null); invalidateReview(variables); },
+    onError: showError,
   });
-
-  const [editingDetails, setEditingDetails] = useState(false);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftDescription, setDraftDescription] = useState("");
 
   const detailsMutation = useMutation({
     mutationFn: updatePullRequestDetails,
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setActionError(null);
       setEditingDetails(false);
-      invalidateReview();
+      invalidateReview(variables);
     },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+    onError: showError,
   });
 
   function startEditingDetails(currentTitle: string, currentDescription: string) {

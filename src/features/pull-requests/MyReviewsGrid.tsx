@@ -83,6 +83,16 @@ export function MyReviewsGrid({
   });
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    // Dock panels render through portals, so keys typed in the preview, the
+    // linked work items or the Agent panel bubble up here too. They are not
+    // the grid's: ↓ in a reply box, Esc in a select or `a` on a button there
+    // must not move the row, clear the filters or vote.
+    if (
+      e.target instanceof Element &&
+      e.target.closest('[data-review-preview], [data-linked-work-items], [data-agent-panel]')
+    ) {
+      return;
+    }
     const editable = isEditableTarget(e.target);
     if (e.key === 'Escape' && !editable && !g.openFilterCol && (g.showDone || g.showSnoozed)) {
       e.preventDefault();

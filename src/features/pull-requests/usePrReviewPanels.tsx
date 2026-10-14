@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePublishAgentListScope, type AgentListScope } from "@/components/agent/agentListScope";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -98,6 +98,11 @@ export function usePrReviewPanels({
   // here (alongside the review query) so the header can stay presentational.
   const queryClient = useQueryClient();
   const [reviewerError, setReviewerError] = useState<string | null>(null);
+  // A reviewer / label failure belongs to the PR it happened on.
+  const selectedKey = selectedPr
+    ? `${selectedPr.organizationId}:${selectedPr.repositoryId}:${selectedPr.pullRequestId}`
+    : null;
+  useEffect(() => setReviewerError(null), [selectedKey]);
   function invalidateReviewerData() {
     if (!selectedPr) return;
     void queryClient.invalidateQueries({
@@ -193,6 +198,7 @@ export function usePrReviewPanels({
   function withChrome(body: ReactNode, compactHeader = false) {
     return (
       <aside
+        data-review-preview="true"
         onKeyDown={handlePreviewKeyDown}
         className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
       >

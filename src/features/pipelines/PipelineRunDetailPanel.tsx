@@ -129,6 +129,18 @@ export function PipelineRunDetailPanel({
     refetchInterval: () => (inProgress ? LOG_REFRESH_INTERVAL_MS : false),
   });
 
+  // When the run finishes, fetch the log once more: the last poll can be up to
+  // an interval old and miss the closing lines (often the error itself).
+  const wasInProgress = useRef(inProgress);
+  useEffect(() => {
+    if (wasInProgress.current && !inProgress) {
+      void queryClient.invalidateQueries({
+        queryKey: ["pipelineRunLog", organizationId, projectId, buildId],
+      });
+    }
+    wasInProgress.current = inProgress;
+  }, [inProgress, organizationId, projectId, buildId, queryClient]);
+
   const artifactsQuery = useQuery({
     queryKey: ["pipelineArtifacts", organizationId, projectId, buildId],
     queryFn: () => listPipelineArtifacts({ organizationId, projectId, buildId: buildId as number }),

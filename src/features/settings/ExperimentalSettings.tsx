@@ -83,7 +83,15 @@ export function ExperimentalSettings() {
       experimentalAutoUpdateCheck:
         settings?.experimentalAutoUpdateCheck ?? false,
     });
-  }, [settingsQuery.data]);
+    // Only this section's own fields, so another section saving keeps unsaved edits here.
+  }, [
+    settingsQuery.data?.experimentalFeaturesEnabled,
+    settingsQuery.data?.experimentalUsageStats,
+    settingsQuery.data?.experimentalRetryToasts,
+    settingsQuery.data?.experimentalDiagnosticsExport,
+    settingsQuery.data?.experimentalCrossOrgSummary,
+    settingsQuery.data?.experimentalAutoUpdateCheck,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutation = useMutation({
     mutationFn: updateAppSettings,

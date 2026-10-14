@@ -71,7 +71,12 @@ export function AgentCommandSettings() {
       codexModel: data?.codexModel ?? "",
       codexModelChoices: data?.codexModelChoices ?? "",
     });
-  }, [settingsQuery.data]);
+  }, [
+    settingsQuery.data?.claudeModel,
+    settingsQuery.data?.claudeModelChoices,
+    settingsQuery.data?.codexModel,
+    settingsQuery.data?.codexModelChoices,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutation = useMutation({
     mutationFn: updateAppSettings,

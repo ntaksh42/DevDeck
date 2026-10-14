@@ -33,8 +33,11 @@ export function useSyncManager(organizationsLength: number, activeView: View) {
 
   function refreshCurrentView(): void {
     if (activeView === "pipelines") {
-      // Pipelines are fetched live, not via background sync.
-      void queryClient.invalidateQueries({ queryKey: ["pipelineRuns"] });
+      // Pipelines are fetched live, not via background sync: refetch every
+      // pipeline query (board history, run detail, log, approvals, ...).
+      void queryClient.invalidateQueries({
+        predicate: (query) => typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("pipeline"),
+      });
       return;
     }
     if (organizationsLength > 0 && !syncMutation.isPending) {
