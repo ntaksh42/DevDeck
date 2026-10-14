@@ -74,20 +74,21 @@ pub(crate) fn thread_texts<'a>(
     texts
 }
 
-/// Starts summarizing new items of `kinds` in the background, unless it is off
-/// or a run is already going. `threads` supplies the full comment text for PR
-/// items.
+/// Starts summarizing new items of `org_id` and `kinds` in the background,
+/// unless it is off or a run is already going. `threads` supplies the full
+/// comment text for that organization's PR items.
 pub(crate) fn start(
     db: &AppDatabase,
     settings: &AppSettings,
     handle: &AppHandle,
+    org_id: &str,
     kinds: &[&str],
     threads: ThreadTexts,
 ) {
     if !settings.inbox_insight_enabled || RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
-    let items = match db.inbox_items_needing_insight(kinds, ITEMS_PER_RUN) {
+    let items = match db.inbox_items_needing_insight(org_id, kinds, ITEMS_PER_RUN) {
         Ok(items) if !items.is_empty() => items,
         Ok(_) => {
             RUNNING.store(false, Ordering::SeqCst);
@@ -191,9 +192,10 @@ fn run_claude(
         .spawn()
         .map_err(|e| format!("could not start claude: {e}"))?;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(prompt.as_bytes())
-            .map_err(|e| e.to_string())?;
+        if let Err(e) = stdin.write_all(prompt.as_bytes()) {
+            let _ = child.kill();
+            return Err(e.to_string());
+        }
     }
     // Read on another thread so a full pipe cannot stall the wait below.
     let mut stdout = child.stdout.take().ok_or("no stdout")?;

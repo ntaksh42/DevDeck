@@ -149,7 +149,14 @@ async fn sync_org_prs(
                 .iter()
                 .map(move |thread| (pr.pr.repository_id.as_str(), thread))
         }));
-        crate::inbox_insight::start(db, settings, handle, &crate::db::PR_INSIGHT_KINDS, threads);
+        crate::inbox_insight::start(
+            db,
+            settings,
+            handle,
+            &org.id,
+            &crate::db::PR_INSIGHT_KINDS,
+            threads,
+        );
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn
     // which PRs remain snoozed so their notifications can be suppressed.
@@ -242,6 +249,7 @@ async fn sync_org_work_items(
                 db,
                 settings,
                 handle,
+                &org.id,
                 &crate::db::WI_INSIGHT_KINDS,
                 Default::default(),
             );
