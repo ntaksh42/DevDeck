@@ -330,3 +330,38 @@ fn insights_are_picked_only_for_the_syncing_organization() {
     assert_eq!(org2.len(), 1);
     assert_eq!(org2[0].organization_id, "org2");
 }
+
+#[test]
+fn a_failed_insight_is_written_again_after_an_hour() {
+    let (_tf, db) = setup();
+    db.insert_inbox_items(&[item("org1", 1, 1)]).unwrap();
+    let id = db
+        .inbox_items_needing_insight("org1", &PR_INSIGHT_KINDS, 10)
+        .unwrap()[0]
+        .id;
+    let failed = InboxInsight {
+        status: "failed".into(),
+        error: Some("rate limited".into()),
+        ..InboxInsight::default()
+    };
+    db.save_inbox_insight(id, &failed).unwrap();
+    // Just failed: not yet.
+    assert!(db
+        .inbox_items_needing_insight("org1", &PR_INSIGHT_KINDS, 10)
+        .unwrap()
+        .is_empty());
+
+    let conn = db.open().unwrap();
+    conn.execute(
+        "UPDATE action_inbox_insights SET updated_at = '2000-01-01T00:00:00Z' WHERE item_id = ?1",
+        [id],
+    )
+    .unwrap();
+    let again = db
+        .inbox_items_needing_insight("org1", &PR_INSIGHT_KINDS, 10)
+        .unwrap();
+    assert_eq!(
+        again.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![id]
+    );
+}

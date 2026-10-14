@@ -18,6 +18,8 @@ use super::{AppDatabase, InboxItem};
 /// only the PR sync has the full comment threads at hand.
 pub const PR_INSIGHT_KINDS: [&str; 2] = ["pr_mention", "pr_reply"];
 pub const WI_INSIGHT_KINDS: [&str; 1] = ["wi_mention"];
+/// How long a failed insight waits before it is written again.
+const FAILED_RETRY_HOURS: i64 = 1;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -103,6 +105,8 @@ pub(super) fn attach_insights(conn: &Connection, items: &mut [InboxItem]) -> Res
 impl AppDatabase {
     /// Open items of `org_id` and `kinds` without an insight yet, newest first.
     /// Scoped to the organization whose sync has the comment threads at hand.
+    /// A failed insight is written again once it is an hour old: failures are
+    /// often passing (rate limit, `claude` not signed in yet).
     pub fn inbox_items_needing_insight(
         &self,
         org_id: &str,
@@ -121,11 +125,17 @@ impl AppDatabase {
                     state, snoozed_until, detected_at, done_at, file_path, line \
              FROM action_inbox_items i \
              WHERE org_id = ?1 AND state = 'open' AND kind IN ({kinds}) \
-               AND NOT EXISTS (SELECT 1 FROM action_inbox_insights s WHERE s.item_id = i.id) \
+               AND NOT EXISTS (SELECT 1 FROM action_inbox_insights s WHERE s.item_id = i.id \
+                   AND NOT (s.status = 'failed' AND s.updated_at < ?3)) \
              ORDER BY detected_at DESC, id DESC LIMIT ?2"
         );
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![org_id, limit], super::action_inbox::map_inbox_item)?;
+        let retry_before = (Utc::now() - chrono::Duration::hours(FAILED_RETRY_HOURS))
+            .to_rfc3339_opts(SecondsFormat::Secs, true);
+        let rows = stmt.query_map(
+            params![org_id, limit, retry_before],
+            super::action_inbox::map_inbox_item,
+        )?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 

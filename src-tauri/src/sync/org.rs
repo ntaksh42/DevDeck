@@ -138,7 +138,9 @@ async fn sync_org_prs(
     }
     let inbox_update = crate::prs::update_action_inbox(db, org, &scanned);
     let state_update = super::inbox::retire_condition_items(db, org);
-    if inbox_update.changed() || state_update.changed() {
+    let closed_update =
+        super::inbox::retire_closed_pr_items(db, client, org, &scanned, budget).await;
+    if inbox_update.changed() || state_update.changed() || closed_update.changed() {
         if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
             tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
         }

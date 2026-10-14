@@ -7,6 +7,7 @@ use crate::error::Result;
 
 mod action_inbox;
 mod inbox_insight;
+mod inbox_refs;
 mod migrate;
 mod notifications;
 mod organizations;
@@ -42,6 +43,7 @@ mod tests_work_items;
 
 pub use action_inbox::*;
 pub use inbox_insight::{InboxInsight, InsightEvidence, PR_INSIGHT_KINDS, WI_INSIGHT_KINDS};
+pub use inbox_refs::*;
 pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;

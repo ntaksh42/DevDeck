@@ -232,6 +232,8 @@ export type UpdateAppSettingsInput = {
 
 export type GetReviewResultPreviewInput = {
   pullRequestId: number;
+  /** Prefers a result file that also names the repository (PR numbers repeat across repositories). */
+  repositoryName?: string;
 };
 
 export type GetWorkItemResultPreviewInput = {

@@ -72,6 +72,10 @@ pub struct UpdateAppSettingsInput {
 #[serde(rename_all = "camelCase")]
 pub struct GetReviewResultPreviewInput {
     pub pull_request_id: i64,
+    /// The PR's repository. PR numbers repeat across repositories, so a result
+    /// file that also names the repository is preferred over one that does not.
+    #[serde(default)]
+    pub repository_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -315,8 +319,11 @@ impl SettingsService {
             )));
         }
 
-        let Some(file_path) =
-            result_files::find_review_result_file(&folder, input.pull_request_id)?
+        let Some(file_path) = result_files::find_review_result_file(
+            &folder,
+            input.pull_request_id,
+            input.repository_name.as_deref(),
+        )?
         else {
             return Ok(None);
         };

@@ -390,6 +390,7 @@ mod tests {
     fn a_later_comment_by_me_answers_the_mention() {
         let open = [
             StateInboxRef {
+                project_id: String::new(),
                 id: 1,
                 kind: KIND_WI_MENTION.into(),
                 repository_id: String::new(),
@@ -397,6 +398,7 @@ mod tests {
                 comment_id: 10,
             },
             StateInboxRef {
+                project_id: String::new(),
                 id: 2,
                 kind: KIND_WI_MENTION.into(),
                 repository_id: String::new(),
