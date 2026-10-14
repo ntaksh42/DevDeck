@@ -36,6 +36,14 @@ fn split_order_by(wiql: &str) -> Option<usize> {
             index += 1;
             continue;
         }
+        // A bracketed field reference (`[Custom.AsOf]`) is a name, not a clause.
+        if byte == b'[' {
+            index = bytes[index..]
+                .iter()
+                .position(|&b| b == b']')
+                .map_or(bytes.len(), |end| index + end + 1);
+            continue;
+        }
         if (byte == b'o' || byte == b'O') && starts_keyword(wiql, index, "order") {
             if let Some(after) = keyword_end(wiql, index + "order".len(), "by") {
                 let _ = after;
@@ -61,7 +69,8 @@ fn starts_keyword(text: &str, index: usize, keyword: &str) -> bool {
     }
     if index > 0 {
         let prev = text[..index].chars().next_back();
-        if prev.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '[') {
+        // `.`: the tail of an unbracketed reference name such as `Custom.AsOf`.
+        if prev.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '[' || c == '.') {
             return false;
         }
     }
@@ -111,6 +120,14 @@ pub fn has_asof_clause(wiql: &str) -> bool {
         if byte == b'\'' {
             in_string = true;
             index += 1;
+            continue;
+        }
+        // A bracketed field reference (`[Custom.AsOf]`) is a name, not a clause.
+        if byte == b'[' {
+            index = bytes[index..]
+                .iter()
+                .position(|&b| b == b']')
+                .map_or(bytes.len(), |end| index + end + 1);
             continue;
         }
         if (byte == b'a' || byte == b'A') && starts_keyword(wiql, index, "asof") {
@@ -206,6 +223,24 @@ mod tests {
     fn rejects_a_query_that_already_has_asof() {
         let wiql = "SELECT [System.Id] FROM WorkItems ASOF '2026-01-01T00:00:00Z'";
         assert!(with_asof(wiql, "2026-08-05T00:00:00Z").is_err());
+    }
+
+    #[test]
+    fn a_field_named_asof_is_not_a_clause() {
+        assert!(!has_asof_clause(
+            "SELECT [System.Id] FROM WorkItems WHERE [Custom.AsOf] = 1"
+        ));
+        assert!(!has_asof_clause(
+            "SELECT [System.Id] FROM WorkItems WHERE Custom.AsOf = 1"
+        ));
+        assert!(!has_asof_clause(
+            "SELECT [System.Id] FROM WorkItems WHERE [My AsOf] = 1"
+        ));
+        let query = "SELECT [System.Id] FROM WorkItems WHERE [Custom.Order By] = 1";
+        assert_eq!(
+            with_asof(query, "2026-08-05T00:00:00Z").unwrap(),
+            format!("{query}\nASOF '2026-08-05T00:00:00Z'")
+        );
     }
 
     #[test]

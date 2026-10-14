@@ -396,12 +396,38 @@ impl AdoClient {
         content_type: &str,
         body: &B,
     ) -> Result<T> {
+        self.patch_json_with(path, query, content_type, body, true)
+            .await
+    }
+
+    /// PATCH whose body is not safe to apply twice (a JSON Patch that appends
+    /// to or removes from a list by index), so an ambiguous 5xx or timeout is
+    /// not retried: the first attempt may already have been applied.
+    pub(crate) async fn patch_json_once<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+    ) -> Result<T> {
+        self.patch_json_with(path, query, content_type, body, false)
+            .await
+    }
+
+    async fn patch_json_with<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+        idempotent: bool,
+    ) -> Result<T> {
         let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "PATCH",
             path,
-            true,
+            idempotent,
             || {
                 self.http
                     .patch(url.clone())

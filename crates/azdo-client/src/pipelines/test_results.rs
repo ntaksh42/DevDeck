@@ -59,8 +59,17 @@ impl AdoClient {
     ) -> Result<Vec<TestRun>> {
         let path = format!("{project_id}/_apis/test/runs");
         let build_uri = format!("vstfs:///Build/Build/{build_id}");
+        // Without `includeRunDetails` the list returns shallow runs that leave
+        // out `runStatistics`, so every run would count as having no failures.
         let response: ListResponse<TestRun> = self
-            .get_json(&path, &[("api-version", "7.1"), ("buildUri", &build_uri)])
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1"),
+                    ("buildUri", &build_uri),
+                    ("includeRunDetails", "true"),
+                ],
+            )
             .await?;
         Ok(response.value)
     }
@@ -112,6 +121,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/proj/_apis/test/runs"))
             .and(query_param("buildUri", "vstfs:///Build/Build/77"))
+            .and(query_param("includeRunDetails", "true"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "value": [{
                     "id": 5, "name": "Unit", "totalTests": 10, "passedTests": 7,
