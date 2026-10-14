@@ -42,6 +42,8 @@ export function AnalyzeGroupList({
   }
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
+    // App-level chords (Ctrl+K palette, Ctrl+J Agent, ...) are not list keys.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     let handled = true;
     switch (event.key) {
       case "ArrowDown":

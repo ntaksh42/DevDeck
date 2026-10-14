@@ -36,6 +36,8 @@ mod tests_prs;
 #[cfg(test)]
 mod tests_work_item_follows;
 #[cfg(test)]
+mod tests_work_item_search;
+#[cfg(test)]
 mod tests_work_items;
 
 pub use action_inbox::*;

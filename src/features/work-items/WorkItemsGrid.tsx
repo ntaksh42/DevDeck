@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { focusPrimaryGrid, isEditableTarget } from '@/lib/utils';
 import { ListStateChip } from '@/components/ListStatusBar';
@@ -103,6 +103,15 @@ export function WorkItemsGrid({
     { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
+  // A refetch carries the server's current values (including changes made by
+  // others since a bulk edit), so the local overrides for edited rows go.
+  const { setItemOverrides } = state;
+  const lastDataUpdatedAt = useRef(dataUpdatedAt);
+  useEffect(() => {
+    if (lastDataUpdatedAt.current === dataUpdatedAt) return;
+    lastDataUpdatedAt.current = dataUpdatedAt;
+    setItemOverrides((current) => (current.size === 0 ? current : new Map()));
+  }, [dataUpdatedAt, setItemOverrides]);
   usePublishAgentListScope(
     agentList && searched
       ? wiAgentList(agentList, g.displayed, () => wiFilterNotes(state.columnFilters, state.staleOnly))

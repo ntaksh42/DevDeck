@@ -133,14 +133,66 @@ pub(crate) fn search_work_items(
     Ok(result)
 }
 
+/// Project / state / type filters of a text search. They are applied in SQL,
+/// before each query's row limit: filtering afterwards would leave a project
+/// empty when the most recent matches all belong to other projects.
+#[derive(Default, Clone, Copy)]
+pub(crate) struct WorkItemFilters<'a> {
+    pub project_ids: Option<&'a [String]>,
+    pub states: Option<&'a [String]>,
+    pub work_item_types: Option<&'a [String]>,
+}
+
+const SELECT_WORK_ITEM: &str = "SELECT org_id, project_id, project_name, id, title, \
+     work_item_type, state, assigned_to, changed_date, web_url, \
+     assigned_to_unique_name, tags FROM work_items";
+
+/// Runs `sql` (which already binds the values in `bind`) after appending the
+/// filters, `ORDER BY order` and the row limit.
+fn query_filtered(
+    conn: &Connection,
+    mut sql: String,
+    mut bind: Vec<Box<dyn rusqlite::ToSql>>,
+    filters: WorkItemFilters<'_>,
+    order: &str,
+) -> Result<Vec<CachedWorkItem>> {
+    push_in_clause(&mut sql, &mut bind, "project_id", filters.project_ids);
+    push_in_clause(&mut sql, &mut bind, "state", filters.states);
+    push_in_clause(
+        &mut sql,
+        &mut bind,
+        "work_item_type",
+        filters.work_item_types,
+    );
+    sql.push_str(&format!(" ORDER BY {order} LIMIT 200"));
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt.query_map(params.as_slice(), map_cached_work_item)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
 pub(crate) fn search_work_items_fts(
     conn: &Connection,
     org_id: &str,
     query: &str,
 ) -> Result<Vec<CachedWorkItem>> {
+    search_work_items_text(conn, org_id, query, WorkItemFilters::default())
+}
+
+pub(crate) fn search_work_items_text(
+    conn: &Connection,
+    org_id: &str,
+    query: &str,
+    filters: WorkItemFilters<'_>,
+) -> Result<Vec<CachedWorkItem>> {
     // Numeric queries also match work item IDs (exact match first, then prefix).
     let mut result = if !query.is_empty() && query.bytes().all(|b| b.is_ascii_digit()) {
-        search_work_items_by_id_prefix(conn, org_id, query)?
+        search_work_items_by_id_prefix(conn, org_id, query, filters)?
     } else {
         Vec::new()
     };
@@ -148,30 +200,20 @@ pub(crate) fn search_work_items_fts(
     if fts_query.is_empty() {
         return Ok(result);
     }
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT w.org_id, w.project_id, w.project_name, w.id, w.title,
-               w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url,
-               w.assigned_to_unique_name, w.tags
-        FROM work_items w
-        WHERE w.org_id = ?2
-          AND w.id IN (
-              SELECT item_id FROM work_items_fts
-              WHERE work_items_fts MATCH ?1 AND org_id = ?2
-          )
-        ORDER BY w.changed_date DESC
-        LIMIT 200
-        "#,
+    let mut text_matches = query_filtered(
+        conn,
+        format!(
+            "{SELECT_WORK_ITEM} WHERE org_id = ?2 AND id IN (\
+             SELECT item_id FROM work_items_fts WHERE work_items_fts MATCH ?1 AND org_id = ?2)"
+        ),
+        vec![Box::new(fts_query), Box::new(org_id.to_string())],
+        filters,
+        "changed_date DESC",
     )?;
-    let rows = stmt.query_map(params![fts_query, org_id], map_cached_work_item)?;
-    let mut text_matches = Vec::new();
-    for row in rows {
-        text_matches.push(row?);
-    }
     if text_matches.is_empty() {
         // FTS tokenization cannot match substrings inside CJK text; fall back
         // to a LIKE scan so Japanese queries still find cached work items.
-        text_matches = search_work_items_like(conn, org_id, query)?;
+        text_matches = search_work_items_like(conn, org_id, query, filters)?;
     }
     if result.is_empty() {
         return Ok(text_matches);
@@ -195,55 +237,41 @@ fn search_work_items_by_id_prefix(
     conn: &Connection,
     org_id: &str,
     digits: &str,
+    filters: WorkItemFilters<'_>,
 ) -> Result<Vec<CachedWorkItem>> {
-    let pattern = format!("{digits}%");
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT org_id, project_id, project_name, id, title,
-               work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name, tags
-        FROM work_items
-        WHERE org_id = ?1
-          AND CAST(id AS TEXT) LIKE ?2
-        ORDER BY (CAST(id AS TEXT) = ?3) DESC, changed_date DESC
-        LIMIT 200
-        "#,
-    )?;
-    let rows = stmt.query_map(params![org_id, pattern, digits], map_cached_work_item)?;
-    let mut result = Vec::new();
-    for row in rows {
-        result.push(row?);
-    }
-    Ok(result)
+    query_filtered(
+        conn,
+        format!("{SELECT_WORK_ITEM} WHERE org_id = ?1 AND CAST(id AS TEXT) LIKE ?2"),
+        vec![
+            Box::new(org_id.to_string()),
+            Box::new(format!("{digits}%")),
+            Box::new(digits.to_string()),
+        ],
+        filters,
+        "(CAST(id AS TEXT) = ?3) DESC, changed_date DESC",
+    )
 }
 
 fn search_work_items_like(
     conn: &Connection,
     org_id: &str,
     query: &str,
+    filters: WorkItemFilters<'_>,
 ) -> Result<Vec<CachedWorkItem>> {
-    let pattern = format!("%{}%", escape_like_pattern(query));
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT org_id, project_id, project_name, id, title,
-               work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name, tags
-        FROM work_items
-        WHERE org_id = ?1
-          AND (title LIKE ?2 ESCAPE '\'
-               OR work_item_type LIKE ?2 ESCAPE '\'
-               OR assigned_to LIKE ?2 ESCAPE '\'
-               OR assigned_to_unique_name LIKE ?2 ESCAPE '\')
-        ORDER BY changed_date DESC
-        LIMIT 200
-        "#,
-    )?;
-    let rows = stmt.query_map(params![org_id, pattern], map_cached_work_item)?;
-    let mut result = Vec::new();
-    for row in rows {
-        result.push(row?);
-    }
-    Ok(result)
+    query_filtered(
+        conn,
+        format!(
+            "{SELECT_WORK_ITEM} WHERE org_id = ?1 \
+             AND (title LIKE ?2 ESCAPE '\\' OR work_item_type LIKE ?2 ESCAPE '\\' \
+             OR assigned_to LIKE ?2 ESCAPE '\\' OR assigned_to_unique_name LIKE ?2 ESCAPE '\\')"
+        ),
+        vec![
+            Box::new(org_id.to_string()),
+            Box::new(format!("%{}%", escape_like_pattern(query))),
+        ],
+        filters,
+        "changed_date DESC",
+    )
 }
 
 pub(crate) fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {

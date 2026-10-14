@@ -13,9 +13,14 @@ import {
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
 
-/** Mirrors the backend guard so the error surfaces before a request is made. */
-function containsAsof(wiql: string): boolean {
-  return /(^|[^\w[])asof\b/i.test(wiql);
+/**
+ * Mirrors the backend guard (`has_asof_clause`) so the error surfaces before a
+ * request is made: string literals (`'asof'`) and field names (`[Custom.AsOf]`,
+ * `Custom.AsOf`) are not a clause.
+ */
+export function containsAsof(wiql: string): boolean {
+  const code = wiql.replace(/'(?:[^']|'')*'/g, " ").replace(/\[[^\]]*\]/g, " ");
+  return /(^|[^\w.])asof\b/i.test(code);
 }
 
 export type AnalyzeGroupDialogProps = {

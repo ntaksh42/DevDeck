@@ -37,10 +37,20 @@ pub(super) const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
 pub(super) struct SyncWorkItemsResult {
     warning: Option<String>,
     pub(super) was_full_sync: bool,
+    /// Some project failed and kept its old rows, so its changes since the
+    /// last delta mark are still unfetched.
+    projects_skipped: bool,
 }
 
 pub(super) fn full_sync_scope(org_id: &str) -> String {
     format!("internal:wi_full_sync:{org_id}")
+}
+
+/// When every project was last brought up to date. A delta sync fetches from
+/// here; it only moves when no project was skipped, so a project that failed
+/// for a while still gets the changes it missed once it recovers.
+pub(super) fn delta_mark_scope(org_id: &str) -> String {
+    format!("internal:wi_delta_mark:{org_id}")
 }
 
 pub(super) fn wiql_with_changed_date_filter(base: &str, since_date: &str) -> String {
@@ -57,10 +67,10 @@ pub(super) fn delta_sync_since(db: &AppDatabase, org: &Organization) -> Option<S
         .get_sync_state(&full_sync_scope(&org.id))
         .ok()??
         .last_synced_at?;
-    let last_at = db
-        .get_sync_state(&format!("work_items:{}", org.id))
-        .ok()??
-        .last_synced_at?;
+    // Before the delta mark existed, the last sync time served as the mark.
+    let last_at = [delta_mark_scope(&org.id), format!("work_items:{}", org.id)]
+        .iter()
+        .find_map(|scope| db.get_sync_state(scope).ok().flatten()?.last_synced_at)?;
     let full_time = DateTime::parse_from_rfc3339(&full_at)
         .ok()?
         .with_timezone(&Utc);
@@ -70,6 +80,11 @@ pub(super) fn delta_sync_since(db: &AppDatabase, org: &Organization) -> Option<S
     if Utc::now() - full_time >= chrono::Duration::hours(FULL_WI_SYNC_INTERVAL_HOURS) {
         return None;
     }
+    // A mark held back by a failing project widens the window, but no further
+    // than one full-sync interval: anything older is refetched by the next full
+    // sync, which keeps running on schedule.
+    let last_time =
+        last_time.max(Utc::now() - chrono::Duration::hours(FULL_WI_SYNC_INTERVAL_HOURS));
     // WIQL date literals are day-precision; back off one extra day for safety.
     Some(
         (last_time - chrono::Duration::days(1))
@@ -135,7 +150,10 @@ async fn fetch_project_work_items(
         (Err(e), _) | (_, Err(e)) => Err(e),
         (Ok(None), _) | (_, Ok(None)) => Ok(None),
         (Ok(Some(all)), Ok(Some(my))) => {
-            write_all_work_items_to_shared_cache(&org, &project, &all.items, was_full_sync);
+            // A capped result is cut off, so like DevDeck's own cache it is merged
+            // rather than replacing the project's rows.
+            let replace = was_full_sync && all.queried_count < SYNC_WORK_ITEM_QUERY_TOP;
+            write_all_work_items_to_shared_cache(&org, &project, &all.items, replace);
             Ok(Some((all, my)))
         }
     };
@@ -155,7 +173,7 @@ fn write_all_work_items_to_shared_cache(
     org: &Organization,
     project: &TeamProject,
     items: &[CachedWorkItem],
-    was_full_sync: bool,
+    replace_project: bool,
 ) {
     let rows: Vec<shared_cache::SharedWorkItem> = items
         .iter()
@@ -173,7 +191,7 @@ fn write_all_work_items_to_shared_cache(
         .collect();
     let outcome = (|| -> Result<()> {
         let mut conn = shared_cache::open()?;
-        if was_full_sync {
+        if replace_project {
             shared_cache::write_work_items(&mut conn, &org.name, &project.name, &rows)?;
         } else {
             shared_cache::upsert_work_items(&mut conn, &org.name, &project.name, &rows)?;
@@ -220,6 +238,16 @@ pub(crate) async fn sync_work_items_for_org(
             if result.was_full_sync {
                 db.update_sync_state(
                     &full_sync_scope(&org.id),
+                    &org.id,
+                    Some(&now),
+                    0,
+                    None,
+                    None,
+                )?;
+            }
+            if !result.projects_skipped {
+                db.update_sync_state(
+                    &delta_mark_scope(&org.id),
                     &org.id,
                     Some(&now),
                     0,
@@ -358,6 +386,7 @@ pub(super) async fn do_sync_work_items(
     Ok(SyncWorkItemsResult {
         warning: sync_warning(&skipped_projects, capped_query_count),
         was_full_sync,
+        projects_skipped: !skipped_projects.is_empty(),
     })
 }
 

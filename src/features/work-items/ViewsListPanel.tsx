@@ -16,6 +16,7 @@ import {
   Rows3,
 } from 'lucide-react';
 import { type WorkItemQueryView, type WorkItemViewLayout } from './workItemViewsStorage';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import type { WorkItemViewsCardMode } from './workItemViewsDisplayStorage';
 import {
   ViewCard,
@@ -86,7 +87,8 @@ export function ViewsListPanel({
   onEditView,
   onKeyDown,
 }: ViewsListPanelProps) {
-  const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index]));
+  const organizationId = useActiveOrganizationId();
+  const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index], organizationId));
 
   // "Collapsed" is the default one-row chip display (a borderless toolbar row,
   // same height as the search rows); expanded is the card/compact-row grid.

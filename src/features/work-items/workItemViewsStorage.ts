@@ -217,6 +217,15 @@ function loadStoredViewCounts(): Record<string, number> {
   }
 }
 
+/**
+ * Key of a view's stored counts. Views are shared by every connection but run
+ * against the active one, so counts are kept per organization; otherwise the
+ * delta badge and sparkline would mix two organizations' numbers.
+ */
+export function viewCountKey(organizationId: string, viewId: string): string {
+  return `${organizationId}:${viewId}`;
+}
+
 export function viewCountBaseline(viewId: string): number | null {
   if (sessionCountBaselines === null) sessionCountBaselines = loadStoredViewCounts();
   return sessionCountBaselines[viewId] ?? null;

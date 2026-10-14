@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { WorkItemQueryCountPoint } from "@/lib/azdoCommands";
 import { AnalyzeView } from "./AnalyzeView";
@@ -146,6 +146,18 @@ describe("AnalyzeView", () => {
         "true",
       ),
     );
+  });
+
+  it("leaves Ctrl / Alt chords to the app instead of moving the selection", async () => {
+    saveAnalyzeGroups([group(), group({ id: "g2", name: "Portal" })]);
+    renderView();
+
+    const row = await screen.findByRole("button", { name: /Payments/ });
+    const event = createEvent.keyDown(row, { key: "k", ctrlKey: true });
+    fireEvent(row, event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(row.getAttribute("aria-current")).toBe("true");
   });
 
   it("deletes the selected group with the Delete key", async () => {

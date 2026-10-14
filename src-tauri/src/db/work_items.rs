@@ -4,8 +4,8 @@ use crate::error::{AppError, Result};
 
 use super::AppDatabase;
 use super::{
-    list_my_work_items, search_work_items, search_work_items_fts, update_my_work_item_if_present,
-    upsert_my_work_items, upsert_work_items,
+    list_my_work_items, search_work_items, search_work_items_text, update_my_work_item_if_present,
+    upsert_my_work_items, upsert_work_items, WorkItemFilters,
 };
 
 #[derive(Debug, Clone)]
@@ -52,9 +52,21 @@ impl AppDatabase {
         )
     }
 
+    #[cfg(test)]
     pub fn search_work_items_fts(&self, org_id: &str, query: &str) -> Result<Vec<CachedWorkItem>> {
         let conn = self.open()?;
-        search_work_items_fts(&conn, org_id, query)
+        super::search_work_items_fts(&conn, org_id, query)
+    }
+
+    /// Text search with the project / state / type filters applied in SQL.
+    pub fn search_work_items_text(
+        &self,
+        org_id: &str,
+        query: &str,
+        filters: WorkItemFilters<'_>,
+    ) -> Result<Vec<CachedWorkItem>> {
+        let conn = self.open()?;
+        search_work_items_text(&conn, org_id, query, filters)
     }
 
     pub fn list_my_work_items(&self, org_id: &str) -> Result<Vec<CachedWorkItem>> {

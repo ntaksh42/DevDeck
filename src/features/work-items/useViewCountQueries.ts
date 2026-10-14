@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { countWorkItemQuery, type WorkItemProjectOption } from '@/lib/azdoCommands';
 import { workItemQueryKeys } from './queryKeys';
-import { recordViewCount, type WorkItemQueryView } from './workItemViewsStorage';
+import { recordViewCount, viewCountKey, type WorkItemQueryView } from './workItemViewsStorage';
 import { recordViewCountHistory } from './workItemViewsDisplayStorage';
 
 type UseViewCountQueriesParams = {
@@ -50,12 +50,12 @@ export function useViewCountQueries({
     .map((view, index) => `${view.id}:${viewCountQueries[index]?.data ?? ""}`)
     .join("|");
   useEffect(() => {
-    const ids = views.map((view) => view.id);
-    views.forEach((view, index) => {
+    const ids = views.map((view) => viewCountKey(selectedOrganizationId, view.id));
+    views.forEach((_view, index) => {
       const count = viewCountQueries[index]?.data;
       if (typeof count !== "number") return;
-      recordViewCount(view.id, count, ids);
-      recordViewCountHistory(view.id, count, ids);
+      recordViewCount(ids[index], count, ids);
+      recordViewCountHistory(ids[index], count, ids);
     });
     // viewCountQueries is a fresh array each render; the signature captures the inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
