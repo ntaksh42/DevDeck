@@ -16,6 +16,12 @@ type Status =
   | { kind: "installing" }
   | { kind: "error"; message: string };
 
+/** The updater plugin rejects with a plain string, not an Error; keep its reason. */
+function updateErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" && error.trim() ? error : fallback;
+}
+
 export function SoftwareUpdateSettings() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const supported = isTauriRuntime();
@@ -31,7 +37,7 @@ export function SoftwareUpdateSettings() {
       // Safe skip: a failed check leaves the current version running.
       setStatus({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not check for updates.",
+        message: updateErrorMessage(error, "Could not check for updates."),
       });
     }
   }
@@ -54,7 +60,7 @@ export function SoftwareUpdateSettings() {
     } catch (error) {
       setStatus({
         kind: "error",
-        message: error instanceof Error ? error.message : "Update failed.",
+        message: updateErrorMessage(error, "Update failed."),
       });
     }
   }
