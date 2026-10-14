@@ -282,12 +282,16 @@ pub(super) async fn update_work_item_mentions(
                 line: None,
             })
             .collect();
-        match db.insert_inbox_items(&new_items) {
-            Ok(count) => update.added += count,
-            Err(e) => {
-                tracing::warn!(org = %org.name, error = ?e, "inbox: failed to store work item mentions")
+        let stored = match db.insert_inbox_items(&new_items) {
+            Ok(count) => {
+                update.added += count;
+                true
             }
-        }
+            Err(e) => {
+                tracing::warn!(org = %org.name, error = ?e, "inbox: failed to store work item mentions");
+                false
+            }
+        };
 
         let mine: Vec<&StateInboxRef> = open
             .iter()
@@ -303,6 +307,10 @@ pub(super) async fn update_work_item_mentions(
             }
         }
 
+        // Unstored mentions are read again on the next sync.
+        if !stored {
+            continue;
+        }
         if let Err(e) = db.set_inbox_cursor(
             &org.id,
             WORK_ITEM_CURSOR_KEY,

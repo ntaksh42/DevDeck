@@ -192,7 +192,12 @@ export function InboxView() {
     if (!selected || !detail.thread) return;
     const entry = selected;
     const resolving = !detail.thread.isResolved;
-    await detail.setResolved(resolving);
+    try {
+      await detail.setResolved(resolving);
+    } catch {
+      // The preview shows why; the item stays where it is.
+      return;
+    }
     // Resolving handles the item; reactivating a thread leaves it where it is.
     if (resolving) changeState(entry, "done", undefined, true);
   }

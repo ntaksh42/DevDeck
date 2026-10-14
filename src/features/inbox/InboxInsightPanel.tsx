@@ -18,7 +18,8 @@ export function InboxInsightPanel({
   onUseDraft,
 }: {
   insight: InboxInsight | null;
-  onUseDraft: (text: string) => void;
+  /** Unset in read-only validation mode, where nothing can be posted. */
+  onUseDraft?: (text: string) => void;
 }) {
   if (!insight) return null;
   const verdict = insight.verdict ? VERDICTS[insight.verdict] : undefined;
@@ -75,13 +76,15 @@ export function InboxInsightPanel({
       {insight.replyDraft ? (
         <div className="mt-1.5 border-t border-dashed border-border pt-1">
           <p className="whitespace-pre-line break-words">{insight.replyDraft}</p>
-          <button
-            type="button"
-            onClick={() => onUseDraft(insight.replyDraft ?? "")}
-            className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            Use as reply <Kbd>Shift+R</Kbd>
-          </button>
+          {onUseDraft ? (
+            <button
+              type="button"
+              onClick={() => onUseDraft(insight.replyDraft ?? "")}
+              className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              Use as reply <Kbd>Shift+R</Kbd>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

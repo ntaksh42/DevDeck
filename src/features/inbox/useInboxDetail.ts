@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addWorkItemComment,
@@ -112,6 +112,13 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
       });
     },
   });
+  // A failed reply / resolve / comment belongs to the item it was made on.
+  const itemId = item?.id;
+  useEffect(() => {
+    replyMutation.reset();
+    statusMutation.reset();
+    commentMutation.reset();
+  }, [itemId]); // eslint-disable-line react-hooks/exhaustive-deps
   const mutationError =
     replyMutation.error ??
     statusMutation.error ??
