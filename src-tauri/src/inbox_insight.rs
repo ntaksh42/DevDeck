@@ -74,18 +74,20 @@ pub(crate) fn thread_texts<'a>(
     texts
 }
 
-/// Starts summarizing new items in the background, unless it is off or a run
-/// is already going. `threads` supplies the full comment text for PR items.
+/// Starts summarizing new items of `kinds` in the background, unless it is off
+/// or a run is already going. `threads` supplies the full comment text for PR
+/// items.
 pub(crate) fn start(
     db: &AppDatabase,
     settings: &AppSettings,
     handle: &AppHandle,
+    kinds: &[&str],
     threads: ThreadTexts,
 ) {
     if !settings.inbox_insight_enabled || RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
-    let items = match db.inbox_items_needing_insight(ITEMS_PER_RUN) {
+    let items = match db.inbox_items_needing_insight(kinds, ITEMS_PER_RUN) {
         Ok(items) if !items.is_empty() => items,
         Ok(_) => {
             RUNNING.store(false, Ordering::SeqCst);

@@ -13,8 +13,11 @@ use crate::error::Result;
 
 use super::{AppDatabase, InboxItem};
 
-/// Kinds that get a summary: comments addressed to the user.
-const INSIGHT_KINDS: [&str; 3] = ["pr_mention", "pr_reply", "wi_mention"];
+/// Kinds that get a summary: comments addressed to the user. The PR and work
+/// item syncs run side by side, and each summarizes only its own kinds, since
+/// only the PR sync has the full comment threads at hand.
+pub const PR_INSIGHT_KINDS: [&str; 2] = ["pr_mention", "pr_reply"];
+pub const WI_INSIGHT_KINDS: [&str; 1] = ["wi_mention"];
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -98,10 +101,18 @@ pub(super) fn attach_insights(conn: &Connection, items: &mut [InboxItem]) -> Res
 }
 
 impl AppDatabase {
-    /// Open comment items without an insight yet, newest first.
-    pub fn inbox_items_needing_insight(&self, limit: u32) -> Result<Vec<InboxItem>> {
+    /// Open items of `kinds` without an insight yet, newest first.
+    pub fn inbox_items_needing_insight(
+        &self,
+        kinds: &[&str],
+        limit: u32,
+    ) -> Result<Vec<InboxItem>> {
         let conn = self.open()?;
-        let kinds = INSIGHT_KINDS.map(|kind| format!("'{kind}'")).join(", ");
+        let kinds = kinds
+            .iter()
+            .map(|kind| format!("'{kind}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!(
             "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id, \
                     repository_name, thread_id, comment_id, title, author, snippet, web_url, \

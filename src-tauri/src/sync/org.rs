@@ -149,7 +149,7 @@ async fn sync_org_prs(
                 .iter()
                 .map(move |thread| (pr.pr.repository_id.as_str(), thread))
         }));
-        crate::inbox_insight::start(db, settings, handle, threads);
+        crate::inbox_insight::start(db, settings, handle, &crate::db::PR_INSIGHT_KINDS, threads);
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn
     // which PRs remain snoozed so their notifications can be suppressed.
@@ -238,7 +238,13 @@ async fn sync_org_work_items(
                     tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
                 }
             }
-            crate::inbox_insight::start(db, settings, handle, Default::default());
+            crate::inbox_insight::start(
+                db,
+                settings,
+                handle,
+                &crate::db::WI_INSIGHT_KINDS,
+                Default::default(),
+            );
             // Revive snoozed work items past their deadline or with a newer
             // ChangedDate; remember which stay snoozed.
             let snoozed_ids = match snooze.reconcile_work_items(

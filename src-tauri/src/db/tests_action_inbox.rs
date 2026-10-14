@@ -253,7 +253,9 @@ fn insights_are_listed_with_their_items_and_cleared_when_pending() {
     let (_tf, db) = setup();
     db.insert_inbox_items(&[item("org1", 1, 1), item("org1", 2, 2)])
         .unwrap();
-    let needing = db.inbox_items_needing_insight(10).unwrap();
+    let needing = db
+        .inbox_items_needing_insight(&PR_INSIGHT_KINDS, 10)
+        .unwrap();
     assert_eq!(needing.len(), 2);
 
     let ready = InboxInsight {
@@ -274,7 +276,10 @@ fn insights_are_listed_with_their_items_and_cleared_when_pending() {
         ..InboxInsight::default()
     };
     db.save_inbox_insight(needing[1].id, &pending).unwrap();
-    assert!(db.inbox_items_needing_insight(10).unwrap().is_empty());
+    assert!(db
+        .inbox_items_needing_insight(&PR_INSIGHT_KINDS, 10)
+        .unwrap()
+        .is_empty());
 
     let listed = db.list_inbox_items(None, InboxListState::Open, 10).unwrap();
     let with = listed.iter().find(|i| i.id == needing[0].id).unwrap();
@@ -282,5 +287,32 @@ fn insights_are_listed_with_their_items_and_cleared_when_pending() {
 
     // A pending row left by an exit is dropped so the next sync writes it again.
     assert_eq!(db.clear_pending_inbox_insights().unwrap(), 1);
-    assert_eq!(db.inbox_items_needing_insight(10).unwrap().len(), 1);
+    assert_eq!(
+        db.inbox_items_needing_insight(&PR_INSIGHT_KINDS, 10)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn insights_are_picked_only_for_the_requested_kinds() {
+    let (_tf, db) = setup();
+    let mention = NewInboxItem {
+        kind: "wi_mention".to_string(),
+        ..item("org1", 3, 3)
+    };
+    db.insert_inbox_items(&[item("org1", 1, 1), mention])
+        .unwrap();
+    // The work item sync has no PR threads, so it must leave PR items alone.
+    let wi = db
+        .inbox_items_needing_insight(&WI_INSIGHT_KINDS, 10)
+        .unwrap();
+    assert_eq!(wi.len(), 1);
+    assert_eq!(wi[0].kind, "wi_mention");
+    let pr = db
+        .inbox_items_needing_insight(&PR_INSIGHT_KINDS, 10)
+        .unwrap();
+    assert_eq!(pr.len(), 1);
+    assert_eq!(pr[0].kind, "pr_mention");
 }
