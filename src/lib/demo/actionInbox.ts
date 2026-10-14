@@ -25,6 +25,7 @@ function buildSeed(): InboxItem[] {
     doneAt: null,
     filePath: null,
     line: null,
+    insight: null,
   };
   const seed: InboxItem[] = [
     {
@@ -43,21 +44,35 @@ function buildSeed(): InboxItem[] {
       snippet: "@you ここの null 扱いを確認してください",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
       detectedAt: minsAgo(12),
-    },
-    {
-      ...base,
-      id: 6,
-      kind: "pr_returned",
-      subjectId: 210,
-      repositoryId: "web-app",
-      repositoryName: "web-app",
-      threadId: 0,
-      commentId: 0,
-      title: "Add autoscaling rules",
-      author: "Grace Kim",
-      snippet: null,
-      webUrl: "https://dev.azure.com/contoso/Platform/_git/web-app/pullrequest/210",
-      detectedAt: minsAgo(40),
+      // Matches the demo thread 1 shown for this PR (a request for a test).
+      insight: {
+        status: "ready",
+        verdict: "fix",
+        reason: "未指定 (undefined) の分岐はあるが、それを確かめるテストが無い。",
+        evidence: [
+          {
+            text: "refreshIntervalMs が未指定なら ?? で 30000 ms になる",
+            location: "src/app/dashboard.ts:7",
+            code: "const refreshIntervalMs = options.refreshIntervalMs ?? 30000;",
+            guess: false,
+          },
+          {
+            text: "dashboard.test.ts は値を渡すケースだけで、未指定のケースが無い",
+            location: "src/app/dashboard.test.ts:12",
+            code: "loadDashboard({ refreshIntervalMs: 5000 });",
+            guess: false,
+          },
+          {
+            text: "0 を渡すと既定値にならず 0 ms で回り続ける",
+            location: "src/app/dashboard.ts:7",
+            code: null,
+            guess: true,
+          },
+        ],
+        replyDraft:
+          "未指定のケース (30 秒の既定値になること) のテストを dashboard.test.ts に追加します。0 を渡したときも既定値に寄せるか、あわせて相談させてください。",
+        error: null,
+      },
     },
     {
       ...base,
@@ -73,6 +88,18 @@ function buildSeed(): InboxItem[] {
       snippet: "@you 影響範囲を教えてください",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
       detectedAt: minsAgo(25),
+      // Worked out from the thread alone: no clone to look into.
+      insight: {
+        status: "ready",
+        verdict: "reply",
+        reason: "スレッド上で既に出荷済み・ブロッカー無しとされており、影響範囲を答えれば済む。",
+        evidence: [
+          { text: "Alice が「先週出荷済み、ブロッカー無し」とコメントしている", location: null, code: null, guess: false },
+          { text: "変更はオンボーディングの PAT 入力画面に閉じているはず", location: null, code: null, guess: true },
+        ],
+        replyDraft: "影響はオンボーディングの PAT 入力画面だけです。Azure CLI 経由のサインインと同期処理は変えていません。",
+        error: null,
+      },
     },
     {
       ...base,
@@ -88,6 +115,8 @@ function buildSeed(): InboxItem[] {
       snippet: "修正しました。再確認をお願いします",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
       detectedAt: minsAgo(95),
+      // Still being written by Claude Code.
+      insight: { status: "pending", verdict: null, reason: null, evidence: [], replyDraft: null, error: null },
     },
     {
       ...base,
@@ -107,21 +136,14 @@ function buildSeed(): InboxItem[] {
       snippet: "@you 決済フローの再現手順を追記しました",
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
       detectedAt: minsAgo(300),
-    },
-    {
-      ...base,
-      id: 2,
-      kind: "wi_assigned",
-      subjectId: 118,
-      repositoryId: "",
-      repositoryName: "",
-      threadId: 0,
-      commentId: 0,
-      title: "Rate limiting middleware causes 429 cascade on retries",
-      author: "Grace Kim",
-      snippet: null,
-      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/118",
-      detectedAt: minsAgo(480),
+      insight: {
+        status: "failed",
+        verdict: null,
+        reason: null,
+        evidence: [],
+        replyDraft: null,
+        error: "claude did not finish within 5 minutes",
+      },
     },
   ];
   return seed;
@@ -146,7 +168,12 @@ export function demoListInboxItems(input?: ListInboxItemsInput): InboxItem[] {
   return all()
     .filter((item) => effectiveState(item, now) === state)
     .filter((item) => !input?.organizationId || item.organizationId === input.organizationId)
-    .sort((a, b) => b.id - a.id)
+    // Open items newest first, like the backend's `detected_at DESC`.
+    .sort((a, b) =>
+      state === "open"
+        ? Date.parse(b.detectedAt) - Date.parse(a.detectedAt) || b.id - a.id
+        : b.id - a.id,
+    )
     .slice(0, input?.limit ?? 200);
 }
 

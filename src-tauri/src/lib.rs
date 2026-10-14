@@ -8,6 +8,7 @@ mod db;
 mod diagnostics;
 mod error;
 mod github;
+mod inbox_insight;
 mod orgs;
 mod pipelines;
 mod pr_review;
@@ -114,6 +115,10 @@ pub fn run() {
             db.initialize().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (db.initialize): {e}");
             })?;
+            // A summary cut short by the last exit is written again.
+            if let Err(e) = db.clear_pending_inbox_insights() {
+                tracing::warn!(error = ?e, "could not reset pending inbox insights");
+            }
             let settings = db.get_app_settings().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (get_app_settings): {e}");
             })?;

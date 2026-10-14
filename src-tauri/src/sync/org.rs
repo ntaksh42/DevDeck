@@ -110,8 +110,6 @@ async fn sync_org_prs(
     }
     let should_collect = should_collect_pr_notifications(settings);
     let baseline_established = has_completed_sync(db, "prs", &org.id);
-    // Always snapshotted: the Inbox diffs it (vote resets) regardless of the
-    // notification settings.
     let previous_reviews = db.list_review_pull_requests(&org.id).unwrap_or_default();
     if let Err(e) = sync_prs_for_org(db, client, org, projects, budget, force_refresh).await {
         tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
@@ -139,12 +137,19 @@ async fn sync_org_prs(
         items.extend(crate::prs::pr_comment_notifications_from(db, org, &scanned));
     }
     let inbox_update = crate::prs::update_action_inbox(db, org, &scanned);
-    let state_update =
-        super::inbox::update_review_state_items(db, org, &previous_reviews, &current_reviews);
+    let state_update = super::inbox::retire_condition_items(db, org);
     if inbox_update.changed() || state_update.changed() {
         if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
             tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
         }
+    }
+    if settings.inbox_insight_enabled {
+        let threads = crate::inbox_insight::thread_texts(scanned.iter().flat_map(|pr| {
+            pr.threads
+                .iter()
+                .map(move |thread| (pr.pr.repository_id.as_str(), thread))
+        }));
+        crate::inbox_insight::start(db, settings, handle, threads);
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn
     // which PRs remain snoozed so their notifications can be suppressed.
@@ -209,8 +214,6 @@ async fn sync_org_work_items(
     }
     let should_collect = should_collect_work_item_notifications(settings);
     let baseline_established = has_completed_sync(db, "work_items", &org.id);
-    // Always snapshotted: the Inbox diffs it (new assignments) regardless of
-    // the notification settings.
     let previous_my_work_items = match db.list_my_work_items(&org.id) {
         Ok(items) => items,
         Err(e) => {
@@ -227,23 +230,15 @@ async fn sync_org_work_items(
     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
     match db.list_my_work_items(&org.id) {
         Ok(current_my_work_items) => {
-            let mut inbox_update = super::inbox::update_assigned_work_item_items(
-                db,
-                org,
-                &previous_my_work_items,
-                &current_my_work_items,
-                baseline_established,
-            );
-            let mention_update =
+            let inbox_update =
                 super::wi_mentions::update_work_item_mentions(db, client, org, projects, budget)
                     .await;
-            inbox_update.added += mention_update.added;
-            inbox_update.resolved += mention_update.resolved;
             if inbox_update.changed() {
                 if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
                     tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
                 }
             }
+            crate::inbox_insight::start(db, settings, handle, Default::default());
             // Revive snoozed work items past their deadline or with a newer
             // ChangedDate; remember which stay snoozed.
             let snoozed_ids = match snooze.reconcile_work_items(

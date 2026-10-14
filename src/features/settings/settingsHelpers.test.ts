@@ -28,6 +28,8 @@ function nonDefaultSettings(): AppSettings {
     claudeModelChoices: "claude-opus-4-1",
     codexModelChoices: "gpt-5.1, gpt-5.1-mini",
     agentWorkspacePath: "C:/src/workspace",
+    inboxInsightEnabled: true,
+    inboxInsightModel: "opus",
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
     notificationContentPreviewEnabled: false,

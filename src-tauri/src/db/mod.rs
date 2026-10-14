@@ -6,6 +6,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 
 mod action_inbox;
+mod inbox_insight;
 mod migrate;
 mod notifications;
 mod organizations;
@@ -38,6 +39,7 @@ mod tests_work_item_follows;
 mod tests_work_items;
 
 pub use action_inbox::*;
+pub use inbox_insight::{InboxInsight, InsightEvidence};
 pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;
@@ -49,7 +51,7 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 25;
+pub(crate) const SCHEMA_VERSION: i64 = 26;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

@@ -42,6 +42,10 @@ pub struct UpdateAppSettingsInput {
     pub codex_model_choices: Option<String>,
     #[serde(default)]
     pub agent_workspace_path: Option<String>,
+    #[serde(default)]
+    pub inbox_insight_enabled: Option<bool>,
+    #[serde(default)]
+    pub inbox_insight_model: Option<String>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
     pub notification_content_preview_enabled: Option<bool>,
@@ -230,6 +234,8 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .filter(|agent| agent == "codex")
             .map(|_| "codex".to_string()),
         agent_workspace_path: normalize_path(input.agent_workspace_path),
+        inbox_insight_enabled: input.inbox_insight_enabled.unwrap_or(false),
+        inbox_insight_model: normalize_path(input.inbox_insight_model),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
         notification_content_preview_enabled: input

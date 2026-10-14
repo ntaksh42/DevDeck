@@ -5,7 +5,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { gridRowStateClass } from "@/lib/gridRowState";
 import {
   formatSnoozeUntil,
-  inboxEntryKindLabel,
+  inboxKindLabel,
   inboxKindClass,
   inboxLocationLabel,
   inboxRowTitle,
@@ -58,7 +58,7 @@ export const InboxRow = forwardRef<
       className={`group flex cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected })}`}
     >
       <span className={`w-16 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
-        {inboxEntryKindLabel(item)}
+        {inboxKindLabel(item.kind)}
       </span>
       <span className="flex min-w-0 flex-1 items-baseline gap-2">
         <span className="shrink-0 whitespace-nowrap font-medium" title={item.title}>

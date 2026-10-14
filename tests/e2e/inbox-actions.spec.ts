@@ -50,34 +50,10 @@ test("Ctrl+Enter opens the browser from Inbox preview but submits in the reply e
   expect(await urls()).toHaveLength(1);
 });
 
-test("Ctrl+Enter opens the PR from an agent reply row", async ({ page }) => {
-  await page.addInitScript(() => {
-    const state = window as Window & { openedUrls: string[] };
-    state.openedUrls = [];
-    window.open = (url) => {
-      state.openedUrls.push(String(url));
-      return null;
-    };
-  });
-  await page.goto("/");
-  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
-  const list = page.getByRole("listbox", { name: "Inbox items" });
-  await list.getByRole("option", { name: /Agent.*!101/ }).click();
-  await expect(page.getByRole("button", { name: "Open in Azure DevOps (O / Ctrl+Enter)" })).toBeEnabled();
-  await list.focus();
-  await page.keyboard.press("Control+Enter");
-  await expect.poll(() => page.evaluate(() => (window as Window & { openedUrls: string[] }).openedUrls)).toEqual([
-    "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/101",
-  ]);
-});
-
 test("finishes, undoes and snoozes Inbox items with the keyboard alone", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
   const list = page.getByRole("listbox", { name: "Inbox items" });
-  // Pipeline approvals are fetched live and join the list later; wait for them
-  // so the rows (and the index-based selection) stay put during the flow.
-  await expect(list.getByRole("option").filter({ hasText: /^Approval/ }).first()).toBeVisible();
   const first = list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
   await first.click();
   const selected = list.getByRole("option", { selected: true });

@@ -32,7 +32,7 @@ const ISOLATED_AZ_DIR: &str = ".az-signed-out";
 /// the user's stored credentials still works for reading a clone.
 const BLOCKED_PUSH_PREFIXES: [&str; 3] = ["https://", "ssh://", "git@"];
 const BLOCKED_PUSH_URL: &str = "devdeck-push-blocked://";
-const AZURE_TOKEN_VARS: [&str; 3] = [
+pub(crate) const AZURE_TOKEN_VARS: [&str; 3] = [
     "AZURE_DEVOPS_EXT_PAT",
     "SYSTEM_ACCESSTOKEN",
     "AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY",
@@ -74,7 +74,7 @@ impl AgentKind {
 
 /// A model name is appended to a shell command, so only the characters model
 /// names use (`claude-opus-4-1`, `opus[1m]`, `gpt-5.1`, `org/model:tag`) pass.
-fn is_plain_model_name(name: &str) -> bool {
+pub(crate) fn is_plain_model_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 100
         && name
@@ -119,7 +119,7 @@ impl AgentLaunch<'_> {
 
 /// A repository name becomes a path segment, so it must not be able to leave
 /// the workspace (`..`, separators, drive prefixes).
-fn is_plain_folder_name(name: &str) -> bool {
+pub(crate) fn is_plain_folder_name(name: &str) -> bool {
     !name.is_empty()
         && name != "."
         && name != ".."
@@ -214,7 +214,7 @@ pub(crate) fn run_agent(
 /// makes cmd strip exactly that pair and keep the rest as written. The agent
 /// runs in the background, so cmd (and any pwsh it starts, which inherits the
 /// hidden console) gets no console window of its own.
-fn shell_command(command: &str) -> Command {
+pub(crate) fn shell_command(command: &str) -> Command {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

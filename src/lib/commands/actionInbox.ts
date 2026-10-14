@@ -9,6 +9,29 @@ export type InboxKind = (typeof INBOX_KINDS)[number];
 
 export type InboxListState = "open" | "snoozed" | "done";
 
+const inboxInsightSchema = z.object({
+  /** `pending` while Claude Code writes it, then `ready` or `failed`. */
+  status: z.string(),
+  /** `reply` (answer as is), `fix` (change the code first) or `none` (nothing to do). */
+  verdict: z.string().nullable(),
+  reason: z.string().nullable(),
+  evidence: z
+    .array(
+      z.object({
+        text: z.string(),
+        location: z.string().nullable(),
+        code: z.string().nullable(),
+        /** Not confirmed in the code or the thread. */
+        guess: z.boolean(),
+      }),
+    )
+    .default([]),
+  replyDraft: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+export type InboxInsight = z.infer<typeof inboxInsightSchema>;
+
 const inboxItemSchema = z.object({
   id: z.number(),
   organizationId: z.string(),
@@ -31,6 +54,8 @@ const inboxItemSchema = z.object({
   /** Where a PR comment thread sits in the code; null for PR-wide threads and other kinds. */
   filePath: z.string().nullable().default(null),
   line: z.number().nullable().default(null),
+  /** Claude Code's summary (Settings → Inbox summaries); null until written or when off. */
+  insight: inboxInsightSchema.nullable().default(null),
 });
 
 export type InboxItem = z.infer<typeof inboxItemSchema>;

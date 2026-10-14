@@ -150,12 +150,8 @@ function AppShell() {
   const badgeOrganizationId = useActiveOrganizationId();
   const { myReviewsBadge, myWorkItemsBadge, notificationsBadge } = useSidebarBadges(badgeOrganizationId);
 
-  // Everything the Inbox tab lists: stored items (kept current by
-  // `action-inbox:updated`), pending approvals and agent replies.
-  const inboxBadge = useInboxBadge({
-    organizationId: badgeOrganizationId,
-    pipelinesSupported: capabilities?.pipelines !== false,
-  });
+  // Open Inbox items, kept current by `action-inbox:updated`.
+  const inboxBadge = useInboxBadge();
 
   // Experimental: the cross-org summary only exists while its flag is on.
   // Falling back here (rather than only hiding the nav entry) keeps the app out

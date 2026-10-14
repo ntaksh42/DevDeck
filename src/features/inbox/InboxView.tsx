@@ -14,7 +14,6 @@ import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 import { useDockFilter } from "@/components/DockFilterBar";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
-import { PreviewEmptyState } from "@/components/StateDisplay";
 import { SnoozeMenu } from "@/components/SnoozeMenu";
 import { usePublishAgentListScope } from "@/components/agent/agentListScope";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
@@ -24,31 +23,25 @@ import { InboxListPane } from "./InboxListPane";
 import { INBOX_ROW_HEIGHT } from "./InboxRow";
 import { InboxPreview } from "./InboxPreview";
 import { InboxPreviewToolbar } from "./InboxPreviewToolbar";
+import type { ReplySeed } from "./InboxPreviewPanels";
 import {
   agentRequestOf,
   inboxAgentSubject,
-  isDerivedEntry,
   isThreadItem,
-  isVoteItem,
   type InboxEntry,
   type InboxLink,
   type InboxTab,
 } from "./inboxPresentation";
 import { openInboxEntryInApp, openInboxEntryInBrowser, openInboxLink } from "./inboxNavigation";
-import { useInboxDetail, type VoteValue } from "./useInboxDetail";
+import { useInboxDetail } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
 import { useInboxListFocus } from "./useInboxListFocus";
 import { useInboxStateChanges } from "./useInboxStateChanges";
 
 const OVERSCAN = 8;
 const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
-const VOTE_KEYS: Record<string, VoteValue> = { a: 10, s: 5, w: -5, x: -10, "0": 0 };
 
-export function InboxView({
-  onOpenView,
-}: {
-  onOpenView?: (view: "pipelines") => void;
-}) {
+export function InboxView() {
   const [tab, setTab] = useState<InboxTab>("open");
   const [organizationId, setOrganizationId] = useState("");
   const [filterText, setFilterText] = useState("");
@@ -57,6 +50,8 @@ export function InboxView({
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number }>();
   // D: the description / work item body in the preview's Context, collapsed per item.
   const [contextExpanded, setContextExpanded] = useState(false);
+  // Shift+R: Claude's reply draft put into the reply box, per item.
+  const [draft, setDraft] = useState<ReplySeed>();
   const listRef = useRef<HTMLDivElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
@@ -77,7 +72,7 @@ export function InboxView({
   });
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
 
-  const { entries: fetchedEntries, derivedCount, isLoading, error, refetch } = useInboxEntries({
+  const { entries: fetchedEntries, isLoading, error, refetch } = useInboxEntries({
     tab,
     organizationId,
     filterText,
@@ -95,7 +90,7 @@ export function InboxView({
   });
   const counts = countsQuery.data ?? { open: 0, snoozed: 0, done: 0 };
   const tabCounts: Record<InboxTab, number> = {
-    open: counts.open + derivedCount,
+    open: counts.open,
     snoozed: counts.snoozed,
     done: counts.done,
   };
@@ -111,9 +106,6 @@ export function InboxView({
   usePublishAgentSubject(selected ? inboxAgentSubject(selected) : null);
   usePublishAgentListScope(inboxAgentList(entries, tab, filterText));
 
-  // A reply from the agent has no conversation of its own to show.
-  const agentOnly = selected?.kind === "agent_reply";
-
   /** Brings a dock panel to the front of its group (a no-op when it is already visible). */
   function activatePanel(id: "conversation") {
     setActivateRequest((current) => ({ id, key: (current?.key ?? 0) + 1 }));
@@ -121,7 +113,8 @@ export function InboxView({
   useEffect(() => {
     if (selected) activatePanel("conversation");
     setContextExpanded(false);
-  }, [selected?.id, agentOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+    setDraft(undefined);
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mentionSearch = useCallback(
     (query: string): Promise<MentionCandidate[]> =>
@@ -163,7 +156,13 @@ export function InboxView({
     preview.scrollBy({ top: direction * Math.max(preview.clientHeight * 0.9, 40) });
   }
 
-  const openInApp = (entry: InboxEntry) => openInboxEntryInApp(entry, () => onOpenView?.("pipelines"));
+  const openInApp = openInboxEntryInApp;
+
+  function applyReplyDraft(text: string) {
+    if (readOnly || !text) return;
+    activatePanel("conversation");
+    setDraft((current) => ({ text, key: (current?.key ?? 0) + 1 }));
+  }
   const openInBrowser = openInboxEntryInBrowser;
   const openLink = (link: InboxLink) => selected && openInboxLink(link, selected.organizationId);
 
@@ -172,6 +171,21 @@ export function InboxView({
     const entry = selected;
     await detail.reply(content);
     changeState(entry, "done");
+  }
+
+  /** Ctrl+Shift+Enter in the reply box: one step for "answered, and the thread is settled". */
+  async function replyResolveAndFinish(content: string) {
+    if (!selected) return;
+    const entry = selected;
+    await detail.reply(content);
+    try {
+      await detail.setResolved(true);
+    } catch {
+      // The reply is posted, so the draft must clear; the item stays open and
+      // the preview shows why the thread could not be resolved.
+      return;
+    }
+    changeState(entry, "done", undefined, true);
   }
 
   async function toggleThreadStatus() {
@@ -183,13 +197,6 @@ export function InboxView({
     if (resolving) changeState(entry, "done", undefined, true);
   }
 
-  async function vote(value: VoteValue) {
-    if (!selected || readOnly) return;
-    const entry = selected;
-    await detail.vote(value);
-    changeState(entry, "done");
-  }
-
   async function commentAndFinish(markdown: string) {
     if (!selected) return;
     const entry = selected;
@@ -197,13 +204,8 @@ export function InboxView({
     changeState(entry, "done");
   }
 
-  function decideApproval(status: "approved" | "rejected", comment?: string) {
-    if (readOnly) return;
-    void detail.decideApproval(status, comment).then(focusList);
-  }
-
   function openSnoozeMenu() {
-    if (!selected || tab !== "open" || isDerivedEntry(selected)) return;
+    if (!selected || tab !== "open") return;
     const row = rowRefs.current[index];
     const anchor = row?.isConnected ? row : listRef.current;
     if (anchor) setSnoozeAnchor(anchor.getBoundingClientRect());
@@ -287,6 +289,11 @@ export function InboxView({
       event.preventDefault();
       if (tab === "snoozed") changeState(selected, "open");
       else openSnoozeMenu();
+    } else if (lower === "r" && event.shiftKey) {
+      if (selected.insight?.replyDraft) {
+        event.preventDefault();
+        applyReplyDraft(selected.insight.replyDraft);
+      }
     } else if (lower === "r") {
       event.preventDefault();
       activatePanel("conversation");
@@ -305,14 +312,6 @@ export function InboxView({
     } else if (lower === "c") {
       event.preventDefault();
       if (selected.webUrl) void navigator.clipboard?.writeText(selected.webUrl);
-    } else if (lower in VOTE_KEYS || key === "0") {
-      if (isVoteItem(selected)) {
-        event.preventDefault();
-        void vote(VOTE_KEYS[lower]);
-      } else if (selected.kind === "pipeline_approval" && (lower === "a" || lower === "x")) {
-        event.preventDefault();
-        decideApproval(lower === "a" ? "approved" : "rejected");
-      }
     } else if (/^[1-9]$/.test(key)) {
       const link = detail.links[Number(key) - 1];
       if (link) {
@@ -408,13 +407,8 @@ export function InboxView({
       ),
       content: (
         <div className="flex h-full min-h-0 flex-col bg-card" onKeyDown={returnToList}>
-          {agentOnly ? (
-            <div ref={previewRef} data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
-              <PreviewEmptyState message="This is the agent's reply. Press Q to read and answer it in the Agent panel." />
-            </div>
-          ) : (
-            <InboxPreview
-              item={selected}
+          <InboxPreview
+            item={selected}
               tab={tab}
               zoom={zoom}
               detail={detail}
@@ -423,10 +417,9 @@ export function InboxView({
               mentionSearch={mentionSearch}
               resolveImageSource={resolveImageSource}
               onReply={replyAndFinish}
+              onReplyAndResolve={replyResolveAndFinish}
               onToggleStatus={() => void toggleThreadStatus()}
-              onVote={(value) => void vote(value)}
               onComment={commentAndFinish}
-              onDecideApproval={decideApproval}
               onResolveAndDone={() => void toggleThreadStatus()}
               onDone={() => selected && changeState(selected, "done")}
               onReopen={() => selected && changeState(selected, "open")}
@@ -435,8 +428,9 @@ export function InboxView({
               onOpenLink={openLink}
               contextExpanded={contextExpanded}
               onToggleContext={() => setContextExpanded((value) => !value)}
+              draft={draft}
+              onUseDraft={applyReplyDraft}
             />
-          )}
         </div>
       ),
     },

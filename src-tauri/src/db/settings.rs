@@ -61,6 +61,12 @@ pub struct AppSettings {
     /// agent runs in the clone of the pull request's repository when it exists,
     /// else here; unset, it runs in the result folder.
     pub agent_workspace_path: Option<String>,
+    /// After each PR / work item sync, Claude Code writes a summary, a
+    /// recommended action and (when needed) a read-only investigation for new
+    /// Inbox items. Off by default: it sends comment text to the model.
+    pub inbox_insight_enabled: bool,
+    /// Model for those summaries; unset means `sonnet`.
+    pub inbox_insight_model: Option<String>,
     pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
@@ -112,6 +118,8 @@ impl Default for AppSettings {
             claude_model_choices: None,
             codex_model_choices: None,
             agent_workspace_path: None,
+            inbox_insight_enabled: false,
+            inbox_insight_model: None,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
@@ -173,6 +181,8 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         claude_model_choices: get_setting(conn, "claude_model_choices")?,
         codex_model_choices: get_setting(conn, "codex_model_choices")?,
         agent_workspace_path: get_setting(conn, "agent_workspace_path")?,
+        inbox_insight_enabled: get_bool_setting(conn, "inbox_insight_enabled", false)?,
+        inbox_insight_model: get_setting(conn, "inbox_insight_model")?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
             "read_only_validation_mode_enabled",
@@ -290,6 +300,7 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         ("codex_model", &settings.codex_model),
         ("claude_model_choices", &settings.claude_model_choices),
         ("codex_model_choices", &settings.codex_model_choices),
+        ("inbox_insight_model", &settings.inbox_insight_model),
     ] {
         set_setting(conn, key, value.as_deref())?;
     }
@@ -297,6 +308,11 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         conn,
         "agent_workspace_path",
         settings.agent_workspace_path.as_deref(),
+    )?;
+    set_bool_setting(
+        conn,
+        "inbox_insight_enabled",
+        settings.inbox_insight_enabled,
     )?;
     set_bool_setting(
         conn,

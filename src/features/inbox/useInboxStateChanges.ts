@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { commandErrorMessage, setActionInboxItemState } from "@/lib/azdoCommands";
 import { pushToast } from "@/lib/toast";
-import { isDerivedEntry, type InboxEntry, type InboxTab } from "./inboxPresentation";
+import type { InboxEntry, InboxTab } from "./inboxPresentation";
 
 /** How long the last state change can be undone with `U`. */
 export const INBOX_UNDO_WINDOW_MS = 10_000;
@@ -83,14 +83,13 @@ export function useInboxStateChanges({
       .finally(() => hide(id, false));
   }
 
-  /** Moves a stored item to `state`; derived entries have no state and are skipped. */
+  /** Moves an item to `state`. */
   function changeState(
     entry: InboxEntry,
     state: InboxTab,
     snoozedUntil?: string,
     options: { resolved?: boolean } = {},
   ) {
-    if (isDerivedEntry(entry)) return;
     const record: InboxUndo = {
       id: entry.id,
       previous: tab,

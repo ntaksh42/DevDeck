@@ -63,6 +63,8 @@ pub struct InboxItem {
     pub done_at: Option<String>,
     pub file_path: Option<String>,
     pub line: Option<i64>,
+    /// Claude Code's summary of the item, when Settings turns it on.
+    pub insight: Option<super::InboxInsight>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -105,7 +107,9 @@ impl AppDatabase {
         limit: u32,
     ) -> Result<Vec<InboxItem>> {
         let conn = self.open()?;
-        list_inbox_items(&conn, organization_id, state, limit, Utc::now())
+        let mut items = list_inbox_items(&conn, organization_id, state, limit, Utc::now())?;
+        super::inbox_insight::attach_insights(&conn, &mut items)?;
+        Ok(items)
     }
 
     pub fn inbox_counts(&self, organization_id: Option<&str>) -> Result<InboxCounts> {
@@ -372,7 +376,7 @@ fn set_inbox_item_state(
     Ok(conn.execute(&sql, params_from_iter(values))?)
 }
 
-fn map_inbox_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<InboxItem> {
+pub(super) fn map_inbox_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<InboxItem> {
     Ok(InboxItem {
         id: row.get(0)?,
         organization_id: row.get(1)?,
@@ -394,6 +398,7 @@ fn map_inbox_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<InboxItem> {
         done_at: row.get(17)?,
         file_path: row.get(18)?,
         line: row.get(19)?,
+        insight: None,
     })
 }
 

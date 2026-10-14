@@ -21,6 +21,8 @@ export function settingsInput(
     claudeModelChoices: settings?.claudeModelChoices ?? null,
     codexModelChoices: settings?.codexModelChoices ?? null,
     agentWorkspacePath: settings?.agentWorkspacePath ?? null,
+    inboxInsightEnabled: settings?.inboxInsightEnabled ?? false,
+    inboxInsightModel: settings?.inboxInsightModel ?? null,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,

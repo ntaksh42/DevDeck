@@ -674,5 +674,10 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 25;")?;
     }
+    if current < 26 {
+        // Inbox: Claude Code's summary / recommendation per item.
+        super::inbox_insight::migrate_v26(conn)?;
+        conn.execute_batch("PRAGMA user_version = 26;")?;
+    }
     Ok(())
 }

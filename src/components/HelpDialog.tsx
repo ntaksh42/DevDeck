@@ -206,9 +206,10 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Snooze / Unsnooze (presets: 1-5 in the menu)</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Undo the last Done / Snooze / Reopen</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Scroll the preview from the list</span><kbd className={kbd}>Space / Shift+Space</kbd></div>
-          <div className={row}><span>Expand / collapse the description in Context</span><kbd className={kbd}>D</kbd></div>
+          <div className={row}><span>Expand / collapse the description</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Reply</span><kbd className={kbd}>R</kbd></div>
-          <div className={row}><span>Vote (review items) / approve, reject</span><kbd className={kbd}>A S W X 0 · A X</kbd></div>
+          <div className={row}><span>Reply with Claude's draft (edit, then send)</span><kbd className={kbd}>Shift+R</kbd></div>
+          <div className={row}><span>Post the reply / post and resolve the thread (in the reply box)</span><kbd className={kbd}>Ctrl+Enter · Ctrl+Shift+Enter</kbd></div>
           <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>
           <div className={row}><span>Open the nth link</span><kbd className={kbd}>1-9</kbd></div>
           <div className={row}><span>Filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>

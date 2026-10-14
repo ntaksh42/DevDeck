@@ -74,6 +74,8 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   claudeModelChoices: null,
   codexModelChoices: null,
   agentWorkspacePath: null,
+  inboxInsightEnabled: false,
+  inboxInsightModel: null,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
@@ -165,6 +167,14 @@ export function applyDemoSettingsUpdate(
       input && "agentWorkspacePath" in input
         ? input.agentWorkspacePath?.trim() || null
         : current.agentWorkspacePath,
+    inboxInsightEnabled:
+      input && "inboxInsightEnabled" in input
+        ? input.inboxInsightEnabled === true
+        : current.inboxInsightEnabled,
+    inboxInsightModel:
+      input && "inboxInsightModel" in input
+        ? input.inboxInsightModel?.trim() || null
+        : current.inboxInsightModel,
     readOnlyValidationModeEnabled:
       input && "readOnlyValidationModeEnabled" in input
         ? Boolean(input.readOnlyValidationModeEnabled)

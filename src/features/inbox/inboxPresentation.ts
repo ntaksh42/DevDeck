@@ -1,44 +1,21 @@
-import type { AgentNoteTarget, InboxItem } from "@/lib/azdoCommands";
+import type { InboxItem } from "@/lib/azdoCommands";
 import type { AgentSubject, OpenAgentPanelDetail } from "@/components/agent/agentSubject";
 
 export type InboxTab = "open" | "snoozed" | "done";
 
-/**
- * A row of the Inbox. Stored items come from the backend as they are;
- * entries the view derives from live data (pipeline approvals) carry what they
- * need in `extra` and have no local state to change.
- */
-export type InboxEntry = InboxItem & {
-  extra?: {
-    approvalId?: string;
-    agentTarget?: AgentNoteTarget;
-    /** What a pipeline approval is for (derived entries only). */
-    approval?: {
-      pipelineName: string | null;
-      runName: string | null;
-      assignedApprovers: string[];
-      minRequiredApprovers: number;
-    };
-  };
-};
+/** A row of the Inbox: a comment addressed to the user, stored by the sync. */
+export type InboxEntry = InboxItem;
 
-/**
- * How Q opens the Agent panel for an entry: on its pull request / work item,
- * or, for an agent reply, on the conversation waiting for an answer.
- */
+/** How Q opens the Agent panel for an entry: on its pull request (with the thread) or work item. */
 export function agentRequestOf(entry: InboxEntry): OpenAgentPanelDetail {
-  const target = entry.extra?.agentTarget;
-  const reply = target !== undefined;
-  if (target === "ask") return { subject: null, askId: entry.subjectId, reply };
   const base = {
     id: entry.subjectId,
-    // Unresolved agent summaries have only a label, not the subject's title.
-    title: reply && !entry.webUrl ? "" : entry.title,
+    title: entry.title,
     organizationId: entry.organizationId,
     projectId: entry.projectId,
     webUrl: entry.webUrl,
   };
-  if (target === "pull-request" || (!target && entry.kind.startsWith("pr_"))) {
+  if (isPullRequestItem(entry)) {
     return {
       subject: {
         kind: "pull-request",
@@ -46,31 +23,21 @@ export function agentRequestOf(entry: InboxEntry): OpenAgentPanelDetail {
         repositoryId: entry.repositoryId,
         repositoryName: entry.repositoryName,
         // A mention / reply is about its thread; the material puts it first.
-        ...(!target && isThreadItem(entry) && entry.threadId > 0 ? { threadId: entry.threadId } : {}),
+        ...(isThreadItem(entry) && entry.threadId > 0 ? { threadId: entry.threadId } : {}),
       },
-      reply,
     };
   }
-  if (target === "work-item" || (!target && entry.kind.startsWith("wi_"))) {
-    return { subject: { kind: "work-item", ...base }, reply };
-  }
+  if (isWorkItemItem(entry)) return { subject: { kind: "work-item", ...base } };
   return { subject: null };
 }
 
-/**
- * What the Agent panel follows while this entry is selected: its pull request
- * (with the target thread) or work item. Pipeline approvals carry no run id
- * and an agent request has no item, so those have none.
- */
+/** What the Agent panel follows while this entry is selected: its pull request (with the thread) or work item. */
 export function inboxAgentSubject(entry: InboxEntry): AgentSubject | null {
   return agentRequestOf(entry).subject ?? null;
 }
 
-/** Derived entries cannot be finished or snoozed; acting on them removes them. */
-export function isDerivedEntry(item: InboxEntry): boolean {
-  return item.extra !== undefined;
-}
-
+// Review / Returned / Assigned are no longer created, but their finished rows
+// stay in the Done list for up to 30 days.
 const KIND_LABELS: Record<string, string> = {
   pr_mention: "Mention",
   pr_reply: "Reply",
@@ -78,8 +45,6 @@ const KIND_LABELS: Record<string, string> = {
   pr_returned: "Returned",
   wi_mention: "WI mention",
   wi_assigned: "Assigned",
-  pipeline_approval: "Approval",
-  agent_reply: "Agent",
 };
 
 const KIND_CLASSES: Record<string, string> = {
@@ -89,28 +54,10 @@ const KIND_CLASSES: Record<string, string> = {
   pr_returned: "text-violet-700 dark:text-violet-300",
   wi_mention: "text-emerald-700 dark:text-emerald-300",
   wi_assigned: "text-emerald-700 dark:text-emerald-300",
-  pipeline_approval: "text-red-700 dark:text-red-300",
-  agent_reply: "text-violet-700 dark:text-violet-300",
 };
 
 export function inboxKindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
-}
-
-const AGENT_TARGET_LABELS: Record<AgentNoteTarget, string> = {
-  "pull-request": "PR",
-  "work-item": "WI",
-  ask: "Ask",
-};
-
-/**
- * The label of a row's first column. An agent row says what it is about
- * (PR / WI / Ask); "Agent" would add nothing, since its comment already reads
- * "agent: N notes waiting for your answer".
- */
-export function inboxEntryKindLabel(entry: InboxEntry): string {
-  const target = entry.extra?.agentTarget;
-  return target ? AGENT_TARGET_LABELS[target] : inboxKindLabel(entry.kind);
 }
 
 export function inboxKindClass(kind: string): string {
@@ -127,19 +74,12 @@ export function isThreadItem(item: Pick<InboxItem, "kind">): boolean {
   return item.kind === "pr_mention" || item.kind === "pr_reply";
 }
 
-/** A pull request that waits for the user's vote. */
-export function isVoteItem(item: Pick<InboxItem, "kind">): boolean {
-  return item.kind === "pr_review_request" || item.kind === "pr_returned";
-}
-
 export function isWorkItemItem(item: Pick<InboxItem, "kind">): boolean {
   return item.kind.startsWith("wi_");
 }
 
 /** `!42 api-gateway` / `#3120 Platform` — what the item is about, in one token. */
 export function inboxSubjectLabel(item: InboxEntry): string {
-  if (item.extra?.agentTarget === "pull-request") return `!${item.subjectId} ${item.repositoryName}`.trim();
-  if (item.extra?.agentTarget === "work-item") return `#${item.subjectId} ${item.projectName}`.trim();
   if (isPullRequestItem(item)) return `!${item.subjectId} ${item.repositoryName}`;
   if (isWorkItemItem(item)) return `#${item.subjectId} ${item.projectName}`;
   return item.projectName ? `${item.projectName}` : item.title;

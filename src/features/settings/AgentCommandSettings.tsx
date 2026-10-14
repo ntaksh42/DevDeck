@@ -38,6 +38,8 @@ export function AgentCommandSettings() {
   const [codexCommand, setCodexCommand] = useState("");
   const [defaultAgent, setDefaultAgent] = useState<AgentKind>("claude");
   const [workspace, setWorkspace] = useState("");
+  const [insightEnabled, setInsightEnabled] = useState(false);
+  const [insightModel, setInsightModel] = useState("");
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
     claudeModelChoices: "",
@@ -57,6 +59,10 @@ export function AgentCommandSettings() {
   useEffect(() => {
     setWorkspace(settingsQuery.data?.agentWorkspacePath ?? "");
   }, [settingsQuery.data?.agentWorkspacePath]);
+  useEffect(() => {
+    setInsightEnabled(settingsQuery.data?.inboxInsightEnabled ?? false);
+    setInsightModel(settingsQuery.data?.inboxInsightModel ?? "");
+  }, [settingsQuery.data?.inboxInsightEnabled, settingsQuery.data?.inboxInsightModel]);
   useEffect(() => {
     const data = settingsQuery.data;
     setModels({
@@ -80,6 +86,8 @@ export function AgentCommandSettings() {
         codexCommand,
         defaultAgent: defaultAgent === "codex" ? "codex" : null,
         agentWorkspacePath: workspace,
+        inboxInsightEnabled: insightEnabled,
+        inboxInsightModel: insightModel,
         ...models,
       }),
     );
@@ -183,6 +191,35 @@ export function AgentCommandSettings() {
             folder.
           </span>
         </label>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={insightEnabled}
+              onChange={(event) => setInsightEnabled(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Write decision notes for new Inbox items with Claude Code
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Inbox notes model</span>
+            <input
+              value={insightModel}
+              onChange={(event) => setInsightModel(event.target.value)}
+              placeholder="sonnet"
+              className={`${INPUT_CLASS} w-60`}
+            />
+          </label>
+          <span className="text-xs text-muted-foreground">
+            After each sync, <code>claude -p</code> reads up to 3 new mentions / replies and writes
+            notes at the top of the Inbox preview: a verdict (reply / fix first / no action) with
+            its reason, the evidence, and a reply draft (Shift+R puts it in the reply box). With a
+            clone of the PR's repository in the workspace folder, it checks the code read-only and
+            cites file:line. The comment thread is sent to the model. Nothing is replied or
+            resolved for you.
+          </span>
+        </div>
 
         {settingsQuery.isError ? (
           <p role="alert" className="text-sm text-destructive">

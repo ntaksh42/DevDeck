@@ -5,11 +5,9 @@ import { PreviewBand } from "@/components/PreviewBand";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import {
   inboxKindClass,
-  inboxEntryKindLabel,
-  isDerivedEntry,
+  inboxKindLabel,
   isPullRequestItem,
   isThreadItem,
-  isVoteItem,
   isWorkItemItem,
   shortRefName,
   type InboxEntry,
@@ -18,19 +16,17 @@ import {
 } from "./inboxPresentation";
 import {
   ACTION_BUTTON,
-  ApprovalPanel,
+  type ReplySeed,
   Kbd,
   ThreadPanel,
-  VotePanel,
   WorkItemPanel,
 } from "./InboxPreviewPanels";
-import type { InboxDetail, VoteValue } from "./useInboxDetail";
-import { InboxContext } from "./InboxContext";
+import type { InboxDetail } from "./useInboxDetail";
+import { InboxInsightPanel } from "./InboxInsightPanel";
+import { InboxContextCode, InboxContextDescription, InboxContextSummary } from "./InboxContext";
 
 function bandTitle(item: InboxEntry): string {
   if (isThreadItem(item)) return "Thread";
-  if (isVoteItem(item)) return "Vote";
-  if (item.kind === "pipeline_approval") return "Approval";
   if (isWorkItemItem(item)) return item.kind === "wi_mention" ? "Discussion" : "Work item";
   return "Details";
 }
@@ -45,10 +41,9 @@ export function InboxPreview({
   mentionSearch,
   resolveImageSource,
   onReply,
+  onReplyAndResolve,
   onToggleStatus,
-  onVote,
   onComment,
-  onDecideApproval,
   onResolveAndDone,
   onDone,
   onReopen,
@@ -57,6 +52,8 @@ export function InboxPreview({
   onOpenLink,
   contextExpanded,
   onToggleContext,
+  draft,
+  onUseDraft,
 }: {
   item: InboxEntry | null;
   tab: InboxTab;
@@ -67,10 +64,9 @@ export function InboxPreview({
   mentionSearch: (query: string) => Promise<MentionCandidate[]>;
   resolveImageSource: (url: string) => Promise<string | null>;
   onReply: (content: string) => Promise<void>;
+  onReplyAndResolve: (content: string) => Promise<void>;
   onToggleStatus: () => void;
-  onVote: (value: VoteValue) => void;
   onComment: (markdown: string) => Promise<void>;
-  onDecideApproval: (status: "approved" | "rejected", comment?: string) => void;
   onResolveAndDone: () => void;
   onDone: () => void;
   onReopen: () => void;
@@ -79,6 +75,9 @@ export function InboxPreview({
   onOpenLink: (link: InboxLink) => void;
   contextExpanded: boolean;
   onToggleContext: () => void;
+  /** Claude's reply draft, once the user asked to use it. */
+  draft?: ReplySeed;
+  onUseDraft: (text: string) => void;
 }) {
   if (!item) {
     return (
@@ -97,11 +96,9 @@ export function InboxPreview({
   const branches = review
     ? `${shortRefName(review.sourceRefName)} → ${shortRefName(review.targetRefName)}`
     : null;
-  const derived = isDerivedEntry(item);
-  const editable = !readOnly && !detail.isLoading && (
-    (isThreadItem(item) && !!thread) || (isWorkItemItem(item) && !!workItem) ||
-    (isVoteItem(item) && !!review) || item.kind === "pipeline_approval"
-  );
+  const contextProps = { item, review, thread, workItem };
+  const editable =
+    !readOnly && !detail.isLoading && ((isThreadItem(item) && !!thread) || (isWorkItemItem(item) && !!workItem));
 
   return (
     <div
@@ -115,7 +112,7 @@ export function InboxPreview({
     >
       <h2 className="line-clamp-2 text-sm font-semibold leading-snug">{heading}</h2>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-        <span className={`font-semibold ${inboxKindClass(item.kind)}`}>{inboxEntryKindLabel(item)}</span>
+        <span className={`font-semibold ${inboxKindClass(item.kind)}`}>{inboxKindLabel(item.kind)}</span>
         <span>
           {item.projectName}
           {item.repositoryName ? ` / ${item.repositoryName}` : ""}
@@ -127,17 +124,45 @@ export function InboxPreview({
         </span>
       </div>
 
-      {!detail.isLoading && !detail.error ? (
-        <InboxContext
-          item={item}
-          review={review}
-          thread={thread}
-          workItem={workItem}
-          expanded={contextExpanded}
-          onToggleExpanded={onToggleContext}
-          resolveImageSource={resolveImageSource}
-        />
-      ) : null}
+      {!detail.isLoading && !detail.error ? <InboxContextSummary {...contextProps} /> : null}
+      <InboxInsightPanel insight={item.insight} onUseDraft={onUseDraft} />
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {tab === "open" ? (
+          <>
+            {isThreadItem(item) && thread && !thread.isResolved && !readOnly ? (
+              <button
+                type="button"
+                className={ACTION_BUTTON}
+                disabled={detail.busy}
+                onClick={onResolveAndDone}
+              >
+                Resolve + Done <Kbd>Shift+E</Kbd>
+              </button>
+            ) : null}
+            <button type="button" className={ACTION_BUTTON} onClick={onDone}>
+              Done <Kbd>E</Kbd>
+            </button>
+            <button
+              type="button"
+              className={ACTION_BUTTON}
+              onClick={(event) => onSnooze(event.currentTarget.getBoundingClientRect())}
+            >
+              Snooze <Kbd>Z</Kbd>
+            </button>
+          </>
+        ) : null}
+        {tab === "snoozed" ? (
+          <button type="button" className={ACTION_BUTTON} onClick={onWake}>
+            Unsnooze <Kbd>Z</Kbd>
+          </button>
+        ) : null}
+        {tab === "done" ? (
+          <button type="button" className={ACTION_BUTTON} onClick={onReopen}>
+            Reopen <Kbd>E</Kbd>
+          </button>
+        ) : null}
+      </div>
 
       <div className="-mx-2 mt-1">
         <PreviewBand>{bandTitle(item)}</PreviewBand>
@@ -158,11 +183,11 @@ export function InboxPreview({
           mentionSearch={mentionSearch}
           resolveImageSource={resolveImageSource}
           onReply={onReply}
+          onReplyAndResolve={onReplyAndResolve}
           onToggleStatus={onToggleStatus}
+          beforeComposer={!detail.error ? <InboxContextCode {...contextProps} /> : null}
+          draft={draft}
         />
-      ) : null}
-      {isVoteItem(item) ? (
-        <VotePanel review={review} busy={detail.busy} readOnly={readOnly} onVote={onVote} />
       ) : null}
       {isWorkItemItem(item) && !detail.isLoading ? (
         <WorkItemPanel
@@ -174,49 +199,18 @@ export function InboxPreview({
           mentionSearch={mentionSearch}
           resolveImageSource={resolveImageSource}
           onComment={onComment}
+          draft={draft}
         />
       ) : null}
-      {item.kind === "pipeline_approval" ? (
-        <ApprovalPanel item={item} busy={detail.busy} readOnly={readOnly} onDecide={onDecideApproval} />
-      ) : null}
 
-      {!derived ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {tab === "open" ? (
-            <>
-              {isThreadItem(item) && thread && !thread.isResolved && !readOnly ? (
-                <button
-                  type="button"
-                  className={ACTION_BUTTON}
-                  disabled={detail.busy}
-                  onClick={onResolveAndDone}
-                >
-                  Resolve + Done <Kbd>Shift+E</Kbd>
-                </button>
-              ) : null}
-              <button type="button" className={ACTION_BUTTON} onClick={onDone}>
-                Done <Kbd>E</Kbd>
-              </button>
-              <button
-                type="button"
-                className={ACTION_BUTTON}
-                onClick={(event) => onSnooze(event.currentTarget.getBoundingClientRect())}
-              >
-                Snooze <Kbd>Z</Kbd>
-              </button>
-            </>
-          ) : null}
-          {tab === "snoozed" ? (
-            <button type="button" className={ACTION_BUTTON} onClick={onWake}>
-              Unsnooze <Kbd>Z</Kbd>
-            </button>
-          ) : null}
-          {tab === "done" ? (
-            <button type="button" className={ACTION_BUTTON} onClick={onReopen}>
-              Reopen <Kbd>E</Kbd>
-            </button>
-          ) : null}
-        </div>
+      {!isThreadItem(item) && !detail.isLoading && !detail.error ? <InboxContextCode {...contextProps} /> : null}
+      {!detail.isLoading && !detail.error ? (
+        <InboxContextDescription
+          {...contextProps}
+          expanded={contextExpanded}
+          onToggleExpanded={onToggleContext}
+          resolveImageSource={resolveImageSource}
+        />
       ) : null}
 
       {links.length > 0 ? (

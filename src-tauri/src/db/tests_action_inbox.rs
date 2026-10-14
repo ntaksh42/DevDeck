@@ -247,3 +247,40 @@ fn comment_cursor_only_moves_forward() {
         Some(60)
     );
 }
+
+#[test]
+fn insights_are_listed_with_their_items_and_cleared_when_pending() {
+    let (_tf, db) = setup();
+    db.insert_inbox_items(&[item("org1", 1, 1), item("org1", 2, 2)])
+        .unwrap();
+    let needing = db.inbox_items_needing_insight(10).unwrap();
+    assert_eq!(needing.len(), 2);
+
+    let ready = InboxInsight {
+        status: "ready".into(),
+        verdict: Some("reply".into()),
+        reason: Some("確認依頼".into()),
+        evidence: vec![InsightEvidence {
+            text: "既定値になる".into(),
+            location: Some("a.ts:7".into()),
+            ..InsightEvidence::default()
+        }],
+        reply_draft: Some("返信".into()),
+        ..InboxInsight::default()
+    };
+    db.save_inbox_insight(needing[0].id, &ready).unwrap();
+    let pending = InboxInsight {
+        status: "pending".into(),
+        ..InboxInsight::default()
+    };
+    db.save_inbox_insight(needing[1].id, &pending).unwrap();
+    assert!(db.inbox_items_needing_insight(10).unwrap().is_empty());
+
+    let listed = db.list_inbox_items(None, InboxListState::Open, 10).unwrap();
+    let with = listed.iter().find(|i| i.id == needing[0].id).unwrap();
+    assert_eq!(with.insight.as_ref(), Some(&ready));
+
+    // A pending row left by an exit is dropped so the next sync writes it again.
+    assert_eq!(db.clear_pending_inbox_insights().unwrap(), 1);
+    assert_eq!(db.inbox_items_needing_insight(10).unwrap().len(), 1);
+}

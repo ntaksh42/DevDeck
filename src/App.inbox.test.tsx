@@ -118,7 +118,7 @@ describe("App — Inbox", () => {
     expect(await main.findByText("src/retry.rs:12")).toBeTruthy();
   });
 
-  it("counts pending approvals and agent replies in the sidebar badge", async () => {
+  it("counts only stored items in the sidebar badge, not approvals or agent replies", async () => {
     const baseline = baseInvoke;
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "get_provider_capabilities") {
@@ -166,8 +166,8 @@ describe("App — Inbox", () => {
 
     renderApp();
     const nav = within(await screen.findByRole("navigation", { name: "Primary navigation" }));
-    // 2 stored items + 1 pending approval + 1 agent reply.
-    expect(await nav.findByRole("button", { name: "Inbox, 4" })).toBeTruthy();
+    // Approvals and agent replies live in Pipelines and the Agent panel.
+    expect(await nav.findByRole("button", { name: "Inbox, 2" })).toBeTruthy();
   });
 
   it("navigates to the Inbox with the g i key chain", async () => {

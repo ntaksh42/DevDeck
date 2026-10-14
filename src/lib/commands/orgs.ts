@@ -49,6 +49,8 @@ export const appSettingsSchema = z.object({
   claudeModelChoices: z.string().nullable().default(null),
   codexModelChoices: z.string().nullable().default(null),
   agentWorkspacePath: z.string().nullable().default(null),
+  inboxInsightEnabled: z.boolean().default(false),
+  inboxInsightModel: z.string().nullable().default(null),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
   notificationContentPreviewEnabled: z.boolean().default(true),
@@ -204,6 +206,8 @@ export type UpdateAppSettingsInput = {
   claudeModelChoices?: string | null;
   codexModelChoices?: string | null;
   agentWorkspacePath?: string | null;
+  inboxInsightEnabled?: boolean;
+  inboxInsightModel?: string | null;
   readOnlyValidationModeEnabled?: boolean;
   desktopNotificationsEnabled?: boolean;
   notificationContentPreviewEnabled?: boolean;

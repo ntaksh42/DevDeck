@@ -2,8 +2,8 @@ import { navigateToPullRequest, navigateToWorkItem } from "@/lib/crossLinks";
 import { openExternalUrl } from "@/lib/openExternal";
 import { isPullRequestItem, isWorkItemItem, type InboxEntry, type InboxLink } from "./inboxPresentation";
 
-/** Shift+Enter: the entry's pull request / work item inside DevDeck (approvals open Pipelines). */
-export function openInboxEntryInApp(entry: InboxEntry, onOpenPipelines?: () => void) {
+/** Shift+Enter: the entry's pull request / work item inside DevDeck. */
+export function openInboxEntryInApp(entry: InboxEntry) {
   if (isPullRequestItem(entry)) {
     navigateToPullRequest({
       organizationId: entry.organizationId,
@@ -11,12 +11,6 @@ export function openInboxEntryInApp(entry: InboxEntry, onOpenPipelines?: () => v
       pullRequestId: entry.subjectId,
     });
   } else if (isWorkItemItem(entry)) {
-    navigateToWorkItem({ workItemId: entry.subjectId, organizationId: entry.organizationId });
-  } else if (entry.kind === "pipeline_approval") {
-    onOpenPipelines?.();
-  } else if (entry.extra?.agentTarget === "pull-request") {
-    navigateToPullRequest({ pullRequestId: entry.subjectId });
-  } else if (entry.extra?.agentTarget === "work-item") {
     navigateToWorkItem({ workItemId: entry.subjectId, organizationId: entry.organizationId });
   }
 }

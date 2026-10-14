@@ -1,5 +1,5 @@
 import { listMarkdown, type AgentListScope } from "@/components/agent/agentListScope";
-import { inboxEntryKindLabel, inboxSubjectLabel, type InboxEntry, type InboxTab } from "./inboxPresentation";
+import { inboxKindLabel, inboxSubjectLabel, type InboxEntry, type InboxTab } from "./inboxPresentation";
 
 /** The Inbox rows on screen, as the Agent panel's optional "This list" context. */
 export function inboxAgentList(
@@ -17,7 +17,7 @@ export function inboxAgentList(
         notes: [filterText.trim() && `Text filter: ${filterText.trim()}`],
         headers: ["Kind", "About", "Title", "Author", "Comment", "Detected"],
         rows: entries.map((entry) => [
-          inboxEntryKindLabel(entry),
+          inboxKindLabel(entry.kind),
           inboxSubjectLabel(entry),
           entry.title,
           entry.author,

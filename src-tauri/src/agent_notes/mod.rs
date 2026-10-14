@@ -26,7 +26,7 @@ mod asks;
 mod create;
 mod format;
 mod guide;
-mod launch;
+pub(crate) mod launch;
 mod migrate;
 mod ops;
 mod replies;

@@ -8,8 +8,6 @@ import {
   postPullRequestComment,
   prLocator,
   setPullRequestThreadStatus,
-  submitPullRequestVote,
-  updatePipelineApproval,
   type PrThread,
   type PullRequestReview,
   type WorkItemPreview,
@@ -22,8 +20,6 @@ import {
   type InboxLink,
 } from "./inboxPresentation";
 
-export type VoteValue = -10 | -5 | 0 | 5 | 10;
-
 export type InboxDetail = {
   review: PullRequestReview | null;
   thread: PrThread | null;
@@ -34,9 +30,7 @@ export type InboxDetail = {
   busy: boolean;
   reply: (content: string) => Promise<void>;
   setResolved: (resolved: boolean) => Promise<void>;
-  vote: (value: VoteValue) => Promise<void>;
   commentOnWorkItem: (markdown: string) => Promise<void>;
-  decideApproval: (status: "approved" | "rejected", comment?: string) => Promise<void>;
 };
 
 /**
@@ -109,7 +103,6 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
     mutationFn: setPullRequestThreadStatus,
     onSuccess: invalidateReview,
   });
-  const voteMutation = useMutation({ mutationFn: submitPullRequestVote, onSuccess: invalidateReview });
   const commentMutation = useMutation({
     mutationFn: addWorkItemComment,
     onSuccess: () => {
@@ -119,20 +112,10 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
       });
     },
   });
-  const approvalMutation = useMutation({
-    mutationFn: updatePipelineApproval,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["inboxApprovals"] });
-      void queryClient.invalidateQueries({ queryKey: ["pipelineApprovals"] });
-    },
-  });
-
   const mutationError =
     replyMutation.error ??
     statusMutation.error ??
-    voteMutation.error ??
-    commentMutation.error ??
-    approvalMutation.error;
+    commentMutation.error;
   const loadError = isPr
     ? reviewQuery.isError
       ? reviewQuery.error
@@ -155,9 +138,7 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
     busy:
       replyMutation.isPending ||
       statusMutation.isPending ||
-      voteMutation.isPending ||
-      commentMutation.isPending ||
-      approvalMutation.isPending,
+      commentMutation.isPending,
     async reply(content) {
       if (!item || !locator) return;
       await replyMutation.mutateAsync({ ...locator, threadId: item.threadId, content });
@@ -170,10 +151,6 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
         status: resolved ? "closed" : "active",
       });
     },
-    async vote(value) {
-      if (!item || !locator) return;
-      await voteMutation.mutateAsync({ ...locator, vote: value });
-    },
     async commentOnWorkItem(markdown) {
       if (!item) return;
       await commentMutation.mutateAsync({
@@ -181,16 +158,6 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
         projectId: item.projectId,
         workItemId: item.subjectId,
         markdown,
-      });
-    },
-    async decideApproval(status, comment) {
-      if (!item?.extra?.approvalId) return;
-      await approvalMutation.mutateAsync({
-        organizationId: item.organizationId,
-        projectId: item.projectId,
-        approvalId: item.extra.approvalId,
-        status,
-        comment: comment?.trim() || undefined,
       });
     },
   };

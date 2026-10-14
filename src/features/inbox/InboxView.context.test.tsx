@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { resetAgentPanelState } from "@/components/agent/agentPanelStore";
 import { resetDemoInbox } from "@/lib/demo/actionInbox";
 import { snippetLines } from "./InboxCodeSnippet";
-import { approvalRows, openList, renderView, rowFor } from "./inboxViewTestUtils";
+import { openList, renderView, rowFor } from "./inboxViewTestUtils";
 
 vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn() }));
 
@@ -49,32 +49,62 @@ describe("InboxView context", () => {
     expect(within(context).getByText(/open conversations? in the PR/)).toBeTruthy();
   });
 
-  it("lists what was pushed to a returned pull request", async () => {
-    renderView();
-    const list = await openList();
-    fireEvent.click(rowFor(list, "!210"));
-    const context = await screen.findByRole("region", { name: "Context" });
-    expect(await within(context).findByText("Make the refresh interval configurable")).toBeTruthy();
-    expect(within(context).getByText(/changed files? in the PR/)).toBeTruthy();
-  });
-
   it("shows a work item's parent and expands its description with d", async () => {
     renderView();
     const list = await openList();
     fireEvent.click(rowFor(list, "#123"));
-    const context = await screen.findByRole("region", { name: "Context" });
-    expect(await within(context).findByText(/Parent: #90/)).toBeTruthy();
-    const toggle = within(context).getByRole("button", { name: /More/ });
+    expect(await screen.findByText(/Parent: #90/)).toBeTruthy();
+    const description = await screen.findByRole("region", { name: "Description" });
+    const toggle = within(description).getByRole("button", { name: /Description/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.keyDown(list, { key: "d" });
-    await waitFor(() => expect(within(context).getByRole("button", { name: /Less/ }).getAttribute("aria-expanded")).toBe("true"));
+    await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
   });
 
-  it("names the pipeline run an approval waits on", async () => {
+  it("shows Claude's verdict, evidence and reply draft above the conversation", async () => {
     renderView();
     const list = await openList();
-    const [approval] = await approvalRows(list);
-    fireEvent.click(approval);
-    expect(await screen.findByText("web-deploy · 20260527.3")).toBeTruthy();
+    fireEvent.click(rowFor(list, "!42"));
+    const notes = await screen.findByRole("region", { name: "Notes by Claude" });
+    expect(within(notes).getByText("Fix first")).toBeTruthy();
+    expect(within(notes).getAllByText("src/app/dashboard.ts:7").length).toBeGreaterThan(0);
+    expect(within(notes).getByText("unverified")).toBeTruthy();
+    const thread = await screen.findByText("Could you add a test for the empty case?");
+    expect(notes.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Shift+R puts the draft into the reply box, focused, without sending it.
+    fireEvent.keyDown(list, { key: "R", shiftKey: true });
+    const reply = (await screen.findByPlaceholderText("Reply…")) as HTMLTextAreaElement;
+    await waitFor(() => expect(reply.value).toContain("dashboard.test.ts"));
+    await waitFor(() => expect(document.activeElement).toBe(reply));
   });
+
+  it("keeps the same frame while the notes are written or when they failed", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!103"));
+    expect(within(await screen.findByRole("region", { name: "Notes by Claude" })).getByText(/Looking into/)).toBeTruthy();
+    fireEvent.click(rowFor(list, "!189"));
+    await waitFor(() =>
+      expect(screen.getByRole("region", { name: "Notes by Claude" }).textContent).toContain("did not finish"),
+    );
+  });
+
+  it("puts the conversation above the code and folds the PR description as markdown", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    const context = await screen.findByRole("region", { name: "Context" });
+    const reply = await screen.findByPlaceholderText("Reply…");
+    const thread = await screen.findByText("Could you add a test for the empty case?");
+    // Comment → code → reply box, so the comment is the first thing to read.
+    expect(thread.compareDocumentPosition(context) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(context.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const description = screen.getByRole("region", { name: "Description" });
+    expect(description.textContent).not.toContain("## Summary");
+    fireEvent.keyDown(list, { key: "d" });
+    const heading = await within(description).findByRole("heading", { name: "Summary" });
+    expect(heading).toBeTruthy();
+  });
+
 });

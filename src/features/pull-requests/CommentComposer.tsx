@@ -29,6 +29,8 @@ export function CommentComposer({
   autoFocus = false,
   busy = false,
   onSubmit,
+  onAltSubmit,
+  altSubmitHint,
   onCancel,
   onSubmitted,
   mentionSearch,
@@ -43,6 +45,10 @@ export function CommentComposer({
   autoFocus?: boolean;
   busy?: boolean;
   onSubmit: (content: string) => Promise<void>;
+  /** A second way to post, on Ctrl+Shift+Enter (e.g. reply and resolve). */
+  onAltSubmit?: (content: string) => Promise<void>;
+  /** Hint for `onAltSubmit`, appended to the shortcut line. */
+  altSubmitHint?: string;
   onCancel?: () => void;
   onSubmitted?: () => void;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
@@ -66,13 +72,13 @@ export function CommentComposer({
   // real (notifying) mention instead of leaving inert text.
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>(initialMentions);
 
-  async function submit() {
+  async function submit(handler = onSubmit) {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
     const content = renderAzureMentionMarkdown(trimmed, selectedMentions);
     setSubmitting(true);
     try {
-      await onSubmit(content);
+      await handler(content);
       setText("");
       setMention(null);
       setSelectedMentions([]);
@@ -183,7 +189,7 @@ export function CommentComposer({
     }
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
-      void submit();
+      void submit(event.shiftKey && onAltSubmit ? onAltSubmit : onSubmit);
       return;
     }
     if (event.key === "Escape" && onCancel) {
@@ -244,7 +250,7 @@ export function CommentComposer({
         rows={3}
         placeholder={placeholder}
         aria-label={placeholder}
-        hint={`Ctrl+Enter to ${submitLabel === "Save" ? "save" : "post"} · Esc to cancel`}
+        hint={`Ctrl+Enter to ${submitLabel === "Save" ? "save" : "post"}${altSubmitHint ? ` · ${altSubmitHint}` : ""} · Esc to cancel`}
         overlay={
           showMentions ? (
             <ul className="absolute left-2 top-full z-20 max-h-40 w-64 overflow-auto rounded-md border border-border bg-popover shadow-lg">

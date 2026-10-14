@@ -37,7 +37,7 @@ describe("InboxView keyboard flow", () => {
     await waitFor(() => {
       expect(within(list).getByRole("option", { selected: true }).textContent).toBe(firstText);
     });
-    expect(storedRows(list)).toHaveLength(6);
+    expect(storedRows(list)).toHaveLength(4);
     expect(screen.queryByText("Marked done")).toBeNull();
     expect(await screen.findByRole("button", { name: "Done 0" })).toBeTruthy();
   });

@@ -8,7 +8,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { NAVIGATE_PULL_REQUEST_EVENT } from "@/lib/crossLinks";
 import { resetDemoInbox } from "@/lib/demo/actionInbox";
 import { InboxView } from "./InboxView";
-import { approvalRows, isAgentRow, isDerived, openList, renderView, rowFor, storedRows } from "./inboxViewTestUtils";
+import { openList, renderView, rowFor, storedRows } from "./inboxViewTestUtils";
 
 vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn() }));
 
@@ -38,23 +38,16 @@ describe("InboxView", () => {
     expect(rows[0].textContent).toContain("Add pull request search dashboard");
     expect(rows[1].textContent).toContain("WI mention");
     expect(rows[1].textContent).toContain("#123 Platform");
-    expect(rows[2].textContent).toContain("Returned");
-    expect(rows[2].textContent).toContain("!210 web-app");
-    expect(rows[3].textContent).toContain("Reply");
-    expect(rows[3].textContent).toContain("!103 api-gateway");
-    expect(rows[4].textContent).toContain("!189 android-app");
-    expect(rows[5].textContent).toContain("Assigned");
-    expect(rows[5].textContent).toContain("#118 Platform");
+    expect(rows[2].textContent).toContain("Reply");
+    expect(rows[2].textContent).toContain("!103 api-gateway");
+    expect(rows[3].textContent).toContain("!189 android-app");
   });
 
-  it("shows the item count and Done / Snoozed buttons in the status bar, and includes the derived approvals", async () => {
+  it("shows the item count and Done / Snoozed buttons in the status bar", async () => {
     renderView();
-    const list = await openList();
-    await approvalRows(list);
-    const derived = within(list).getAllByRole("option").filter(isDerived);
-
+    await openList();
     await waitFor(() => {
-      expect(screen.getByText(`${6 + derived.length} items`)).toBeTruthy();
+      expect(screen.getByText("4 items")).toBeTruthy();
     });
     expect(screen.getByRole("button", { name: "Snoozed 0" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Done 0" })).toBeTruthy();
@@ -77,7 +70,7 @@ describe("InboxView", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Back to open list/ }));
     await waitFor(() => {
-      expect(storedRows(screen.getByRole("listbox", { name: "Inbox items" }))).toHaveLength(5);
+      expect(storedRows(screen.getByRole("listbox", { name: "Inbox items" }))).toHaveLength(3);
     });
     expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
 
@@ -88,7 +81,7 @@ describe("InboxView", () => {
     });
     fireEvent.keyDown(again, { key: "Escape" });
     await waitFor(() => {
-      expect(storedRows(screen.getByRole("listbox", { name: "Inbox items" }))).toHaveLength(5);
+      expect(storedRows(screen.getByRole("listbox", { name: "Inbox items" }))).toHaveLength(3);
     });
   });
 
@@ -117,7 +110,7 @@ describe("InboxView", () => {
     fireEvent.keyDown(list, { key: "e" });
 
     await waitFor(() => {
-      expect(storedRows(list)).toHaveLength(5);
+      expect(storedRows(list)).toHaveLength(3);
     });
     expect(storedRows(list).some((row) => row.textContent?.includes("!42"))).toBe(false);
 
@@ -136,7 +129,7 @@ describe("InboxView", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Done \d+$/ }));
     const reopened = await screen.findByRole("listbox", { name: "Inbox items" });
     await waitFor(() => {
-      expect(storedRows(reopened)).toHaveLength(6);
+      expect(storedRows(reopened)).toHaveLength(4);
     });
   });
 
@@ -149,7 +142,7 @@ describe("InboxView", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: /In 3 days/ }));
 
     await waitFor(() => {
-      expect(storedRows(list)).toHaveLength(5);
+      expect(storedRows(list)).toHaveLength(3);
     });
     fireEvent.click(await screen.findByRole("button", { name: "Snoozed 1" }));
     const snoozed = await screen.findByRole("listbox", { name: "Inbox items" });
@@ -194,20 +187,6 @@ describe("InboxView", () => {
     window.removeEventListener(NAVIGATE_PULL_REQUEST_EVENT, listener);
   });
 
-  it("opens an agent reply's PR in the browser after resolving its metadata", async () => {
-    renderView();
-    const list = await openList();
-    const agentRow = await within(list).findByRole("option", { name: /PR.*!101.*agent:/ });
-    fireEvent.click(agentRow);
-    await waitFor(() => expect((screen.getByRole("button", {
-      name: "Open in Azure DevOps (O / Ctrl+Enter)",
-    }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.keyDown(list, { key: "Enter", ctrlKey: true });
-    expect(openExternalUrl).toHaveBeenCalledWith(
-      "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/101",
-    );
-  });
-
   it("opens the browser from the preview and toolbar with Ctrl+Enter", async () => {
     renderView();
     const list = await openList();
@@ -237,6 +216,22 @@ describe("InboxView", () => {
     expect(await screen.findByRole("button", { name: "Done 1" })).toBeTruthy();
   });
 
+  it("replies, resolves and finishes the item with Ctrl+Shift+Enter", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!189"));
+    const input = await screen.findByPlaceholderText("Reply…");
+    expect(screen.getByText(/Ctrl\+Shift\+Enter to post & resolve/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: "Added the test." } });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      expect(storedRows(list).some((row) => row.textContent?.includes("!189"))).toBe(false);
+    });
+    expect(await screen.findByText("Resolved + done")).toBeTruthy();
+    // Wait for the stored state so it does not land after the next test resets the demo.
+    expect(await screen.findByRole("button", { name: "Done 1" })).toBeTruthy();
+  });
+
   it("clears the reply draft when selecting another inbox thread", async () => {
     renderView();
     const list = await openList();
@@ -257,24 +252,6 @@ describe("InboxView", () => {
     });
     expect(openExternalUrl).not.toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: "Done 1" })).toBeTruthy();
-  });
-
-  it("votes on a review request with a and finishes the item", async () => {
-    renderView();
-    const list = await openList();
-    fireEvent.click(rowFor(list, "!210"));
-    expect(await screen.findByRole("button", { name: /^Approve\s*A$/ })).toBeTruthy();
-
-    fireEvent.keyDown(list, { key: "a" });
-
-    await waitFor(() => {
-      expect(storedRows(list).some((row) => row.textContent?.includes("!210"))).toBe(false);
-    });
-    fireEvent.click(await screen.findByRole("button", { name: "Done 1" }));
-    const done = await screen.findByRole("listbox", { name: "Inbox items" });
-    await waitFor(() => {
-      expect(within(done).getAllByRole("option")[0].textContent).toContain("!210");
-    });
   });
 
   it("shows a mentioned work item and finishes it by commenting", async () => {
@@ -322,46 +299,9 @@ describe("InboxView", () => {
     window.removeEventListener(OPEN_AGENT_PANEL_EVENT, listener);
     expect(opened).toHaveLength(1);
     expect(opened[0].subject).toMatchObject({ kind: "pull-request", id: 42 });
-    expect(opened[0].reply).toBe(false);
     // The shared panel docks into the Inbox workspace as its own tab.
     expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
     act(() => closeAgentPanel());
-  });
-
-  it("opens the waiting agent conversation with q from an agent reply row", async () => {
-    renderView();
-    const list = await openList();
-    await waitFor(() => {
-      expect(within(list).queryAllByRole("option").some(isAgentRow)).toBe(true);
-    });
-    const agentRow = within(list).getAllByRole("option").find(isAgentRow) as HTMLElement;
-    // Labelled by what it is about, not "Agent".
-    expect(agentRow.textContent).toMatch(/^(PR|WI|Ask)/);
-    fireEvent.click(agentRow);
-
-    // The row only exists to carry the agent's reply; the conversation points to Q.
-    expect(await screen.findByText(/answer it in the Agent panel/)).toBeTruthy();
-    const opened: OpenAgentPanelDetail[] = [];
-    const listener = (event: Event) => opened.push((event as CustomEvent<OpenAgentPanelDetail>).detail);
-    window.addEventListener(OPEN_AGENT_PANEL_EVENT, listener);
-    fireEvent.keyDown(list, { key: "q" });
-    window.removeEventListener(OPEN_AGENT_PANEL_EVENT, listener);
-    expect(opened[0]?.reply).toBe(true);
-  });
-
-  it("does not offer Done or Snooze for a derived approval entry", async () => {
-    renderView();
-    const list = await openList();
-    const [approval] = await approvalRows(list);
-    fireEvent.click(approval);
-
-    expect(await screen.findByRole("button", { name: /^Approve\s*A$/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Done\s*E$/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Snooze\s*Z$/ })).toBeNull();
-    // e does nothing to a derived entry.
-    const before = within(list).getAllByRole("option").length;
-    fireEvent.keyDown(list, { key: "e" });
-    expect(within(list).getAllByRole("option")).toHaveLength(before);
   });
 
   it("filters the list by text", async () => {
@@ -412,16 +352,6 @@ describe("InboxView Agent context", () => {
 
     fireEvent.click(rowFor(list, "#123"));
     await waitFor(() => expect(JSON.parse(published())).toMatchObject({ kind: "work-item", id: 123 }));
-  });
-
-  it("leaves a pipeline approval without a subject", async () => {
-    renderWithProbe();
-    const list = await openList();
-    fireEvent.click(rowFor(list, "!42"));
-    await waitFor(() => expect(published()).not.toBe(""));
-    const [approval] = await approvalRows(list);
-    fireEvent.click(approval);
-    await waitFor(() => expect(published()).toBe(""));
   });
 
   it("offers the visible entries as the Inbox list, following the text filter", async () => {
