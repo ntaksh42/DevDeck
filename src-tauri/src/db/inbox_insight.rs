@@ -101,9 +101,11 @@ pub(super) fn attach_insights(conn: &Connection, items: &mut [InboxItem]) -> Res
 }
 
 impl AppDatabase {
-    /// Open items of `kinds` without an insight yet, newest first.
+    /// Open items of `org_id` and `kinds` without an insight yet, newest first.
+    /// Scoped to the organization whose sync has the comment threads at hand.
     pub fn inbox_items_needing_insight(
         &self,
+        org_id: &str,
         kinds: &[&str],
         limit: u32,
     ) -> Result<Vec<InboxItem>> {
@@ -118,12 +120,12 @@ impl AppDatabase {
                     repository_name, thread_id, comment_id, title, author, snippet, web_url, \
                     state, snoozed_until, detected_at, done_at, file_path, line \
              FROM action_inbox_items i \
-             WHERE state = 'open' AND kind IN ({kinds}) \
+             WHERE org_id = ?1 AND state = 'open' AND kind IN ({kinds}) \
                AND NOT EXISTS (SELECT 1 FROM action_inbox_insights s WHERE s.item_id = i.id) \
-             ORDER BY detected_at DESC, id DESC LIMIT ?1"
+             ORDER BY detected_at DESC, id DESC LIMIT ?2"
         );
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![limit], super::action_inbox::map_inbox_item)?;
+        let rows = stmt.query_map(params![org_id, limit], super::action_inbox::map_inbox_item)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
