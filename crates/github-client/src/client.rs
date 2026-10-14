@@ -118,6 +118,33 @@ impl GitHubClient {
         self
     }
 
+    /// Every page of a list endpoint (`per_page=100`), stopping at the first
+    /// short page. GitHub returns one page by default, which silently cut
+    /// lists (files, reviews, comments) at 100 items.
+    pub(crate) async fn get_json_all_pages<T: DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<Vec<T>> {
+        const PER_PAGE: usize = 100;
+        // GitHub stops listing PR files at 3000; the same bound keeps any
+        // other list from paging forever.
+        const MAX_PAGES: usize = 30;
+        let per_page = PER_PAGE.to_string();
+        let mut all = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let page = page.to_string();
+            let batch: Vec<T> = self
+                .get_json(path, &[("per_page", &per_page), ("page", &page)])
+                .await?;
+            let last = batch.len() < PER_PAGE;
+            all.extend(batch);
+            if last {
+                break;
+            }
+        }
+        Ok(all)
+    }
+
     pub(crate) async fn get_json<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -159,7 +186,9 @@ impl GitHubClient {
 
                     if is_rate_limited(status, resp.headers()) {
                         return Err(GitHubError::RateLimited(
-                            retry_after.unwrap_or(Duration::from_secs(60)),
+                            retry_after
+                                .or_else(|| rate_limit_reset(resp.headers()))
+                                .unwrap_or(Duration::from_secs(60)),
                         ));
                     }
 
@@ -213,7 +242,9 @@ impl GitHubClient {
         if is_rate_limited(status, resp.headers()) {
             let retry_after = parse_retry_after(resp.headers());
             return Err(GitHubError::RateLimited(
-                retry_after.unwrap_or(Duration::from_secs(60)),
+                retry_after
+                    .or_else(|| rate_limit_reset(resp.headers()))
+                    .unwrap_or(Duration::from_secs(60)),
             ));
         }
         let body = resp.text().await.unwrap_or_default();
@@ -320,20 +351,33 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
         .map(Duration::from_secs)
 }
 
-/// GitHub returns 403 (primary) or 429 (secondary) for rate limits. A 403 is a
-/// rate limit only when the remaining quota header is zero, otherwise it is a
-/// genuine permission error.
+/// GitHub returns 403 or 429 for rate limits. A 403 is a rate limit when the
+/// remaining quota header is zero (primary limit) or it carries `Retry-After`
+/// (secondary limit); otherwise it is a genuine permission error.
 fn is_rate_limited(status: StatusCode, headers: &HeaderMap) -> bool {
     if status == StatusCode::TOO_MANY_REQUESTS {
         return true;
     }
     if status == StatusCode::FORBIDDEN {
-        return headers
+        let exhausted = headers
             .get("X-RateLimit-Remaining")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.trim().parse::<u64>().ok())
-            .map(|remaining| remaining == 0)
-            .unwrap_or(false);
+            .is_some_and(|remaining| remaining == 0);
+        return exhausted || headers.contains_key("Retry-After");
     }
     false
+}
+
+/// Time until the primary quota resets (`X-RateLimit-Reset`, epoch seconds).
+fn rate_limit_reset(headers: &HeaderMap) -> Option<Duration> {
+    let reset = headers
+        .get("X-RateLimit-Reset")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(Duration::from_secs(reset.saturating_sub(now).max(1)))
 }

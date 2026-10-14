@@ -15,3 +15,7 @@ pub use models::{
     IssueSearchItem, IssueSearchResponse, Label, ParentRef, PrCommitItem, PrFileItem,
     PullRequestDetail, PullRequestMarker, RepoRef, ReviewComment, ReviewItem, UserRef,
 };
+pub use pull_requests::FileContent;
+
+#[cfg(test)]
+mod tests_paging;

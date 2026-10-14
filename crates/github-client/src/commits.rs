@@ -15,6 +15,33 @@ impl GitHubClient {
             .await
     }
 
+    /// The merge base of `base` and `head`, from
+    /// `GET /repos/{owner}/{repo}/compare/{base}...{head}`. A pull request's
+    /// changed files are relative to it, not to the base branch's tip.
+    pub async fn merge_base(
+        &self,
+        owner: &str,
+        repo: &str,
+        base: &str,
+        head: &str,
+    ) -> Result<String> {
+        #[derive(serde::Deserialize)]
+        struct Compare {
+            merge_base_commit: Sha,
+        }
+        #[derive(serde::Deserialize)]
+        struct Sha {
+            sha: String,
+        }
+        let compare: Compare = self
+            .get_json(
+                &format!("repos/{owner}/{repo}/compare/{base}...{head}"),
+                &[("per_page", "1")],
+            )
+            .await?;
+        Ok(compare.merge_base_commit.sha)
+    }
+
     /// `GET /repos/{owner}/{repo}/commits/{sha}/pulls` — pull requests that
     /// contain the given commit.
     pub async fn list_commit_pulls(

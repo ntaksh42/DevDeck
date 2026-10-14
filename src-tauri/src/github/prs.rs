@@ -28,6 +28,26 @@ pub struct PrSearchQualifiers {
     date_field: &'static str,
     from_date: Option<String>,
     to_date: Option<String>,
+    /// Narrows closed PRs to the requested statuses (`is:merged` for
+    /// completed, `is:unmerged` for abandoned); empty when open ones are asked
+    /// for too, since search cannot OR them, and the caller filters instead.
+    closed_status: &'static str,
+}
+
+/// `is:` qualifiers for the requested statuses when none of them is `active`.
+fn closed_status_qualifier(statuses: Option<&[String]>) -> &'static str {
+    let has = |wanted: &str| {
+        statuses
+            .unwrap_or_default()
+            .iter()
+            .any(|status| status.trim().eq_ignore_ascii_case(wanted))
+    };
+    match (has("active"), has("completed"), has("abandoned")) {
+        (false, true, false) => " is:merged",
+        (false, false, true) => " is:closed is:unmerged",
+        (false, true, true) => " is:closed",
+        _ => "",
+    }
 }
 
 impl PrSearchQualifiers {
@@ -61,6 +81,7 @@ impl PrSearchQualifiers {
             },
             from_date: parse_search_date(input.from_date.as_deref())?,
             to_date: parse_search_date(input.to_date.as_deref())?,
+            closed_status: closed_status_qualifier(input.statuses.as_deref()),
         })
     }
 
@@ -91,6 +112,7 @@ impl PrSearchQualifiers {
             (None, Some(to)) => q.push_str(&format!(" {}:<={to}", self.date_field)),
             (None, None) => {}
         }
+        q.push_str(self.closed_status);
     }
 }
 
@@ -363,5 +385,18 @@ mod tests {
         let mut i = input();
         i.from_date = Some("01/02/2026".into());
         assert!(PrSearchQualifiers::from_input(&i).is_err());
+    }
+
+    #[test]
+    fn narrows_closed_statuses_in_the_query() {
+        let with = |statuses: &[&str]| {
+            let mut i = input();
+            i.statuses = Some(statuses.iter().map(|s| s.to_string()).collect());
+            query_for(&i)
+        };
+        assert!(with(&["completed"]).ends_with(" is:merged"));
+        assert!(with(&["abandoned"]).ends_with(" is:closed is:unmerged"));
+        assert!(with(&["completed", "abandoned"]).ends_with(" is:closed"));
+        assert!(!with(&["active", "completed"]).contains(" is:"));
     }
 }
