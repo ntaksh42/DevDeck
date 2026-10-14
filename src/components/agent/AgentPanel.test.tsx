@@ -326,4 +326,16 @@ describe("Agent panel with the Result panel", () => {
       ),
     );
   });
+  it("drops a failed start once the selection moves to another subject", async () => {
+    renderHost();
+    act(() => publishAgentSubject(pr));
+    const panel = await openPanel("Check the retry logic");
+    runAgent.mockRejectedValueOnce({ message: "An agent is already running in C:/repos/TestRepos" });
+    fireEvent.change(within(panel).getByPlaceholderText(/Ask about/), { target: { value: "Review this" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
+    expect(await within(panel).findByText(/already running/)).toBeTruthy();
+
+    act(() => publishAgentSubject({ kind: "pull-request", id: 69, repositoryName: "TestRepos", title: "Other PR", projectId: "p", repositoryId: "r", webUrl: null }));
+    await waitFor(() => expect(within(panel).queryByText(/already running/)).toBeNull());
+  });
 });
