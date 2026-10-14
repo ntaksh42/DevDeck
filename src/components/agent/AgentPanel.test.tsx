@@ -191,6 +191,33 @@ describe("Agent panel", () => {
     expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
   });
 
+  it("Ctrl+J closing a panel whose opener has gone lands on the view's grid", async () => {
+    resetAgentPanelState();
+    const { rerender } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <div data-primary-grid="true">
+          <div role="row" aria-selected="true" tabIndex={0} data-testid="row" />
+        </div>
+        <button type="button">Ask agent</button>
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+    // Opened from a dialog button that closes as the panel opens.
+    screen.getByRole("button", { name: "Ask agent" }).focus();
+    act(() => openAgentPanel({}));
+    await screen.findByRole("complementary", { name: "Agent" });
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <div data-primary-grid="true">
+          <div role="row" aria-selected="true" tabIndex={0} data-testid="row" />
+        </div>
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+    act(() => toggleAgentPanel());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("row")));
+  });
+
   it("Esc on a header closes a panel opened from <body> and lands on the view's grid", async () => {
     resetAgentPanelState();
     render(

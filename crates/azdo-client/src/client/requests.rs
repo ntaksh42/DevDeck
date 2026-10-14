@@ -184,8 +184,12 @@ impl AdoClient {
             match response {
                 Ok(resp) => {
                     let status = resp.status();
+                    // The shared gate honours the server's full wait (it caps
+                    // the cooldown itself), so retries and other callers do not
+                    // land inside the throttle window; only this request's own
+                    // retry delay is capped.
                     if let Some(delay) = parse_rate_limit_delay(resp.headers()) {
-                        gate.pause_for(self.retry_policy.capped_retry_after(delay));
+                        gate.pause_for(delay);
                     }
                     if status.is_success() {
                         return on_success(resp).await;
@@ -204,9 +208,7 @@ impl AdoClient {
                     let retry_after = parse_retry_after(resp.headers());
                     if status == StatusCode::TOO_MANY_REQUESTS {
                         // Hold back every caller, not just this request.
-                        gate.pause_for(self.retry_policy.capped_retry_after(
-                            retry_after.unwrap_or(self.retry_policy.base_delay),
-                        ));
+                        gate.pause_for(retry_after.unwrap_or(self.retry_policy.base_delay));
                     }
                     if self.should_retry_status(status, attempt, idempotent) {
                         drop(permit);

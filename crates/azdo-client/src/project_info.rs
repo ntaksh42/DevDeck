@@ -76,12 +76,36 @@ struct ValueList<T> {
 }
 
 impl AdoClient {
+    /// Every item of a `$top`/`$skip` list; a short page is the last one.
+    async fn list_all_skip_pages<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<Vec<T>> {
+        const PAGE: usize = 100;
+        // Bound against a service that keeps returning full pages.
+        const MAX_PAGES: usize = 50;
+        let top = PAGE.to_string();
+        let mut all = Vec::new();
+        for page in 0..MAX_PAGES {
+            let skip = (page * PAGE).to_string();
+            let list: ValueList<T> = self
+                .get_json(
+                    path,
+                    &[("api-version", "7.1"), ("$top", &top), ("$skip", &skip)],
+                )
+                .await?;
+            let last = list.value.len() < PAGE;
+            all.extend(list.value);
+            if last {
+                break;
+            }
+        }
+        Ok(all)
+    }
+
     pub async fn list_project_teams(&self, project_id: &str) -> Result<Vec<ProjectTeam>> {
-        let path = format!("_apis/projects/{project_id}/teams");
-        let list: ValueList<ProjectTeam> = self
-            .get_json(&path, &[("api-version", "7.1"), ("$top", "100")])
-            .await?;
-        Ok(list.value)
+        self.list_all_skip_pages(&format!("_apis/projects/{project_id}/teams"))
+            .await
     }
 
     pub async fn list_team_members(
@@ -89,11 +113,10 @@ impl AdoClient {
         project_id: &str,
         team_id: &str,
     ) -> Result<Vec<TeamMember>> {
-        let path = format!("_apis/projects/{project_id}/teams/{team_id}/members");
-        let list: ValueList<TeamMember> = self
-            .get_json(&path, &[("api-version", "7.1"), ("$top", "100")])
-            .await?;
-        Ok(list.value)
+        self.list_all_skip_pages(&format!(
+            "_apis/projects/{project_id}/teams/{team_id}/members"
+        ))
+        .await
     }
 
     pub async fn list_service_endpoints(&self, project_id: &str) -> Result<Vec<ServiceEndpoint>> {
@@ -129,6 +152,35 @@ mod tests {
         AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
             .unwrap()
             .with_base_url(base_url)
+    }
+
+    #[tokio::test]
+    async fn pages_through_more_than_a_hundred_teams() {
+        let server = MockServer::start().await;
+        let page = |range: std::ops::Range<u32>| {
+            serde_json::json!({
+                "value": range.map(|i| serde_json::json!({ "id": format!("t-{i}"), "name": format!("Team {i}") })).collect::<Vec<_>>()
+            })
+        };
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects/p-1/teams"))
+            .and(query_param("$skip", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(page(0..100)))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects/p-1/teams"))
+            .and(query_param("$skip", "100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(page(100..130)))
+            .mount(&server)
+            .await;
+
+        let teams = client(&server)
+            .await
+            .list_project_teams("p-1")
+            .await
+            .unwrap();
+        assert_eq!(teams.len(), 130);
     }
 
     #[tokio::test]
