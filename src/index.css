@@ -117,11 +117,16 @@
 }
 
 /* Paint above opaque pane contents; nested panes highlight only the focus owner. */
-[data-focus-pane] {
+[data-focus-pane],
+[data-focus-frame] {
   position: relative;
 }
 
-[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within))::after {
+/* A pane that scrolls itself would carry an absolutely positioned frame away
+   with its content, so it sits directly inside a non-scrolling
+   [data-focus-frame] wrapper that paints the frame instead. */
+[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within)):not([data-focus-frame] > *)::after,
+[data-focus-frame]:has(> [data-focus-pane]:focus-within):not(:has(> [data-focus-pane] [data-focus-pane]:focus-within))::after {
   content: "";
   position: absolute;
   inset: 0;

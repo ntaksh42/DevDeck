@@ -387,29 +387,33 @@ export function WorkItemPreviewDetails({
       {sideBySide ? (
         <div className="flex min-h-0 flex-1" style={{ zoom }}>
           <div className="flex min-w-0 flex-1 flex-col">
-            {details}
+            <div data-focus-frame className="flex min-h-0 flex-1 flex-col">
+              {details}
+            </div>
             {commentsInSide ? null : composer}
           </div>
           <div className="flex w-[42%] min-w-48 max-w-xl shrink-0 flex-col border-l border-border bg-card text-xs">
-            <div
-              data-focus-pane="work-item-side"
-              data-pane-editable={commentsInSide && composer ? "true" : undefined}
-              data-pane-focus-target="true"
-              tabIndex={-1}
-              className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-                sections.dragging ? "[&_iframe]:pointer-events-none" : ""
-              }`}
-              {...sections.columnDropProps("side")}
-            >
-              {sections.renderColumn("side", renderSection)}
-              {sections.appendIndicator("side")}
-              {commentsInSide && !hasComments ? (
-                <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
-              ) : sections.visibleIn("side").length === 0 ? (
-                <p className="rounded border border-dashed border-border px-2 py-3 text-center text-[11px] text-muted-foreground">
-                  Drag a section header here (or focus it and press Alt+→).
-                </p>
-              ) : null}
+            <div data-focus-frame className="flex min-h-0 flex-1 flex-col">
+              <div
+                data-focus-pane="work-item-side"
+                data-pane-editable={commentsInSide && composer ? "true" : undefined}
+                data-pane-focus-target="true"
+                tabIndex={-1}
+                className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+                  sections.dragging ? "[&_iframe]:pointer-events-none" : ""
+                }`}
+                {...sections.columnDropProps("side")}
+              >
+                {sections.renderColumn("side", renderSection)}
+                {sections.appendIndicator("side")}
+                {commentsInSide && !hasComments ? (
+                  <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
+                ) : sections.visibleIn("side").length === 0 ? (
+                  <p className="rounded border border-dashed border-border px-2 py-3 text-center text-[11px] text-muted-foreground">
+                    Drag a section header here (or focus it and press Alt+→).
+                  </p>
+                ) : null}
+              </div>
             </div>
             {commentsInSide ? composer : null}
           </div>
