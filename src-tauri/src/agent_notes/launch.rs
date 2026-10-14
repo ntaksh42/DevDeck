@@ -211,13 +211,18 @@ pub(crate) fn run_agent(
 /// `cmd` verbatim: `Command::arg` would re-escape its `"` as `\"`, which
 /// cmd.exe does not understand, so a quoted argument such as
 /// `claude -p "handle {id}"` would be split apart. `/S` plus the outer quotes
-/// makes cmd strip exactly that pair and keep the rest as written.
+/// makes cmd strip exactly that pair and keep the rest as written. The agent
+/// runs in the background, so cmd (and any pwsh it starts, which inherits the
+/// hidden console) gets no console window of its own.
 fn shell_command(command: &str) -> Command {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let mut cmd = Command::new("cmd");
-        cmd.args(["/S", "/C"]).raw_arg(format!("\"{command}\""));
+        cmd.args(["/S", "/C"])
+            .raw_arg(format!("\"{command}\""))
+            .creation_flags(CREATE_NO_WINDOW);
         cmd
     }
     #[cfg(not(windows))]
