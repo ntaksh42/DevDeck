@@ -24,6 +24,16 @@ fn encode_path(path: &str) -> String {
     out
 }
 
+/// A file's content at a ref, as `get_file_content` finds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileContent {
+    Text(String),
+    /// The path does not exist at that ref (an added or deleted file's other side).
+    Missing,
+    /// Over the contents API's 1 MB limit: GitHub sends no content for it.
+    TooLarge,
+}
+
 #[derive(Debug, Deserialize)]
 struct ContentResponse {
     #[serde(default)]
@@ -49,11 +59,8 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<ReviewItem>> {
-        self.get_json(
-            &format!("repos/{owner}/{repo}/pulls/{number}/reviews"),
-            &[("per_page", "100")],
-        )
-        .await
+        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/reviews"))
+            .await
     }
 
     pub async fn list_issue_comments(
@@ -62,11 +69,8 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<IssueComment>> {
-        self.get_json(
-            &format!("repos/{owner}/{repo}/issues/{number}/comments"),
-            &[("per_page", "100")],
-        )
-        .await
+        self.get_json_all_pages(&format!("repos/{owner}/{repo}/issues/{number}/comments"))
+            .await
     }
 
     pub async fn list_review_comments(
@@ -75,11 +79,8 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<ReviewComment>> {
-        self.get_json(
-            &format!("repos/{owner}/{repo}/pulls/{number}/comments"),
-            &[("per_page", "100")],
-        )
-        .await
+        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/comments"))
+            .await
     }
 
     pub async fn list_pull_request_files(
@@ -88,11 +89,8 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<PrFileItem>> {
-        self.get_json(
-            &format!("repos/{owner}/{repo}/pulls/{number}/files"),
-            &[("per_page", "100")],
-        )
-        .await
+        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/files"))
+            .await
     }
 
     pub async fn list_pull_request_commits(
@@ -101,23 +99,20 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<PrCommitItem>> {
-        self.get_json(
-            &format!("repos/{owner}/{repo}/pulls/{number}/commits"),
-            &[("per_page", "100")],
-        )
-        .await
+        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/commits"))
+            .await
     }
 
-    /// Fetches and base64-decodes a file's content at a given ref. Returns
-    /// `Ok(None)` when the path does not exist at that ref (e.g. an added or
-    /// deleted file's missing side), so diff callers can render one-sided diffs.
+    /// Fetches and base64-decodes a file's content at a given ref. A path that
+    /// does not exist at that ref is `Missing`, so diff callers can render
+    /// one-sided diffs; a file over 1 MB is `TooLarge` rather than empty.
     pub async fn get_file_content(
         &self,
         owner: &str,
         repo: &str,
         path: &str,
         git_ref: &str,
-    ) -> Result<Option<String>> {
+    ) -> Result<FileContent> {
         let encoded = encode_path(path);
         let result: Result<ContentResponse> = self
             .get_json(
@@ -134,12 +129,15 @@ impl GitHubClient {
                         let bytes = BASE64
                             .decode(cleaned.as_bytes())
                             .map_err(|e| GitHubError::Auth(format!("base64 decode: {e}")))?;
-                        return Ok(Some(String::from_utf8_lossy(&bytes).into_owned()));
+                        return Ok(FileContent::Text(
+                            String::from_utf8_lossy(&bytes).into_owned(),
+                        ));
                     }
                 }
-                Ok(None)
+                // Large files come back with `encoding: "none"` and no content.
+                Ok(FileContent::TooLarge)
             }
-            Err(GitHubError::Api { status: 404, .. }) => Ok(None),
+            Err(GitHubError::Api { status: 404, .. }) => Ok(FileContent::Missing),
             Err(e) => Err(e),
         }
     }

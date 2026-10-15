@@ -49,11 +49,11 @@ export function KeyboardShortcutSettings() {
       setCapturingId(null);
       return;
     }
-    // Escape cancels capture without changing the binding.
+    // Escape cancels capture without changing the binding; focus stays on the
+    // shortcut's button so Tab continues from this row.
     if (event.key === "Escape") {
       event.preventDefault();
       setCapturingId(null);
-      (event.target as HTMLButtonElement).blur();
       return;
     }
     const combo = comboFromEvent(event);

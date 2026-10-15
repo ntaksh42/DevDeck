@@ -12,7 +12,23 @@ use crate::error::Result;
 pub(super) fn find_review_result_file(
     folder: &Path,
     pull_request_id: i64,
+    repository_name: Option<&str>,
 ) -> Result<Option<PathBuf>> {
+    // A file naming the repository too (e.g. `api-PR42.html`) belongs to this
+    // PR for sure; another repository's PR 42 cannot claim it.
+    if let Some(repository) = repository_name
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_ascii_lowercase)
+    {
+        let named = find_result_file(folder, |name| {
+            file_name_matches_pr(name, pull_request_id)
+                && name.to_ascii_lowercase().contains(&repository)
+        })?;
+        if named.is_some() {
+            return Ok(named);
+        }
+    }
     find_result_file(folder, |name| file_name_matches_pr(name, pull_request_id))
 }
 
@@ -182,7 +198,9 @@ mod tests {
                 .unwrap();
         }
 
-        let found = find_review_result_file(temp.path(), 42).unwrap().unwrap();
+        let found = find_review_result_file(temp.path(), 42, None)
+            .unwrap()
+            .unwrap();
         assert_eq!(found.file_name().unwrap(), "a-PR42.htm");
     }
 
@@ -249,5 +267,21 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(found.file_name().unwrap(), "1234-v2.html");
+    }
+
+    #[test]
+    fn prefers_the_result_file_that_names_the_repository() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("web-PR42.html"), "<html>web</html>").unwrap();
+        fs::write(temp.path().join("api-PR42.html"), "<html>api</html>").unwrap();
+        let found = |repo| {
+            find_review_result_file(temp.path(), 42, repo)
+                .unwrap()
+                .and_then(|path| path.file_name().map(|n| n.to_string_lossy().into_owned()))
+        };
+        assert_eq!(found(Some("API")).as_deref(), Some("api-PR42.html"));
+        assert_eq!(found(Some("web")).as_deref(), Some("web-PR42.html"));
+        // No file names the repository: any file of that PR number, as before.
+        assert!(found(Some("mobile")).is_some());
     }
 }

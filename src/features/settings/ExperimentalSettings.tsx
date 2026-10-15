@@ -83,7 +83,15 @@ export function ExperimentalSettings() {
       experimentalAutoUpdateCheck:
         settings?.experimentalAutoUpdateCheck ?? false,
     });
-  }, [settingsQuery.data]);
+    // Only this section's own fields, so another section saving keeps unsaved edits here.
+  }, [
+    settingsQuery.data?.experimentalFeaturesEnabled,
+    settingsQuery.data?.experimentalUsageStats,
+    settingsQuery.data?.experimentalRetryToasts,
+    settingsQuery.data?.experimentalDiagnosticsExport,
+    settingsQuery.data?.experimentalCrossOrgSummary,
+    settingsQuery.data?.experimentalAutoUpdateCheck,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutation = useMutation({
     mutationFn: updateAppSettings,
@@ -179,7 +187,7 @@ export function ExperimentalSettings() {
         <div>
           <button
             type="submit"
-            disabled={settingsQuery.isLoading || mutation.isPending}
+            disabled={!settingsQuery.data || mutation.isPending}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {mutation.isPending ? (

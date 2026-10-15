@@ -46,6 +46,10 @@ export function useInboxStateChanges({
   const [undo, setUndo] = useState<InboxUndo | null>(null);
   const [reselectId, setReselectId] = useState<number | null>(null);
   const undoTimer = useRef<number | null>(null);
+  // The last write queued per item. Writes for one item run one after another:
+  // an undo pressed while the change it undoes is still being saved must not
+  // race it, or the older write (and its refetch) could land last.
+  const pendingWrites = useRef(new Map<number, Promise<unknown>>());
 
   useEffect(() => () => {
     if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
@@ -73,14 +77,20 @@ export function useInboxStateChanges({
   // fire for the latest call, and E pressed on several rows in a row must
   // unhide each one once its own refetch lands.
   function send(id: number, state: InboxTab, snoozedUntil: string | undefined, onFailure: () => void) {
-    void setActionInboxItemState({ ids: [id], state, snoozedUntil })
+    const previous = pendingWrites.current.get(id) ?? Promise.resolve();
+    const write = previous
+      .then(() => setActionInboxItemState({ ids: [id], state, snoozedUntil }))
       .catch((error: unknown) => {
         onFailure();
         pushToast(`Could not update the Inbox item: ${commandErrorMessage(error)}`);
       })
       .then(() => queryClient.invalidateQueries({ queryKey: ["actionInbox"] }))
       // The refetched list no longer has it (or has it back); stop hiding.
-      .finally(() => hide(id, false));
+      .finally(() => {
+        hide(id, false);
+        if (pendingWrites.current.get(id) === write) pendingWrites.current.delete(id);
+      });
+    pendingWrites.current.set(id, write);
   }
 
   /** Moves an item to `state`. */
@@ -114,7 +124,10 @@ export function useInboxStateChanges({
     const record = undo;
     if (!record) return false;
     clearUndo();
-    hide(record.id, false);
+    // Stays hidden until the restoring write's refetch brings it back; showing
+    // it from the current list would let a refetch for the change being undone
+    // remove it again (and move the selection) a moment later.
+    hide(record.id, true);
     setReselectId(record.id);
     send(record.id, record.previous, record.previousSnoozedUntil ?? undefined, () => setReselectId(null));
     return true;

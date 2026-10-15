@@ -83,7 +83,7 @@ export function ValidationModeSettings() {
         <div>
           <button
             type="submit"
-            disabled={settingsQuery.isLoading || mutation.isPending}
+            disabled={!settingsQuery.data || mutation.isPending}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {mutation.isPending ? (

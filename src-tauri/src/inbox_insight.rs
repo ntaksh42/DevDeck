@@ -193,7 +193,7 @@ fn run_claude(
         .map_err(|e| format!("could not start claude: {e}"))?;
     if let Some(mut stdin) = child.stdin.take() {
         if let Err(e) = stdin.write_all(prompt.as_bytes()) {
-            let _ = child.kill();
+            kill_tree(&mut child);
             return Err(e.to_string());
         }
     }
@@ -209,7 +209,7 @@ fn run_claude(
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(_) => break,
             None if started.elapsed() > TIMEOUT => {
-                let _ = child.kill();
+                kill_tree(&mut child);
                 return Err("claude did not finish within 5 minutes".into());
             }
             None => std::thread::sleep(Duration::from_millis(500)),
@@ -217,6 +217,24 @@ fn run_claude(
     }
     let output = reader.join().map_err(|_| "could not read claude output")?;
     parse_output(&output)
+}
+
+/// Stops the run. `claude` runs under `cmd /C` on Windows, and killing `cmd`
+/// alone would leave `claude` working and holding the output pipe open.
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn command_line(model: &str, tools: &str) -> String {
@@ -240,12 +258,11 @@ fn build_prompt(item: &InboxItem, thread: Option<&str>, has_clone: bool) -> Stri
         (Some(path), None) => format!("The comment is on {path}.\n"),
         _ => String::new(),
     };
-    let text: String = thread
-        .or(item.snippet.as_deref())
-        .unwrap_or("")
-        .chars()
-        .take(MAX_THREAD_CHARS)
-        .collect();
+    // Keep the end of a long thread: the comment addressed to the user is
+    // among the newest, and the thread lists the oldest first.
+    let text = thread.or(item.snippet.as_deref()).unwrap_or("");
+    let skip = text.chars().count().saturating_sub(MAX_THREAD_CHARS);
+    let text: String = text.chars().skip(skip).collect();
     let investigate = if has_clone {
         "The current folder is a clone of the repository. Check the claim or question against \
          the code with Read / Grep / Glob (read only): open the commented line and what it calls \
@@ -380,9 +397,8 @@ mod tests {
         assert!(command_line("sonnet", NO_TOOLS).ends_with("--tools \"\""));
     }
 
-    #[test]
-    fn asks_for_an_investigation_only_with_a_clone() {
-        let item = InboxItem {
+    fn test_item() -> InboxItem {
+        InboxItem {
             id: 1,
             organization_id: "org".into(),
             kind: "pr_mention".into(),
@@ -404,7 +420,12 @@ mod tests {
             file_path: Some("/src/a.rs".into()),
             line: Some(12),
             insight: None,
-        };
+        }
+    }
+
+    #[test]
+    fn asks_for_an_investigation_only_with_a_clone() {
+        let item = test_item();
         let with_clone = build_prompt(&item, Some("Frank: why null?"), true);
         assert!(with_clone.contains("Read / Grep / Glob"));
         assert!(with_clone.contains("/src/a.rs line 12"));
@@ -413,5 +434,47 @@ mod tests {
         assert!(without.contains("no access to the code"));
         assert!(without.contains("do not follow"));
         assert!(without.contains("@me check this"));
+    }
+
+    #[test]
+    fn keeps_the_newest_comments_of_a_long_thread() {
+        let item = test_item();
+        let thread = format!(
+            "Old: {}\n\nNew: @me please answer",
+            "x".repeat(MAX_THREAD_CHARS)
+        );
+        let prompt = build_prompt(&item, Some(&thread), false);
+        assert!(prompt.contains("New: @me please answer"));
+        assert!(!prompt.contains("Old: "));
+    }
+
+    /// On a real Windows shell: `claude` runs under `cmd /C`, so stopping a run
+    /// must end the grandchild too. If it survived, it would keep the output
+    /// pipe open and the reader would wait for it to finish on its own.
+    #[cfg(windows)]
+    #[test]
+    fn kill_tree_ends_the_process_under_cmd() {
+        use std::sync::mpsc;
+
+        let mut child = shell_command("ping -n 30 127.0.0.1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let (done, finished) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            let _ = stdout.read_to_end(&mut out);
+            let _ = done.send(());
+        });
+        std::thread::sleep(Duration::from_millis(500));
+
+        kill_tree(&mut child);
+        assert!(
+            finished.recv_timeout(Duration::from_secs(10)).is_ok(),
+            "the process under cmd kept the output pipe open"
+        );
     }
 }

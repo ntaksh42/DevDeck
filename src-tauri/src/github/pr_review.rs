@@ -4,8 +4,8 @@
 //! comments form review threads whose resolved state lives only in GraphQL.
 
 use github_client::{
-    GitHubClient, IssueComment, PrCommitItem, PrFileItem, PullRequestDetail, ReviewComment,
-    ReviewItem,
+    FileContent, GitHubClient, GitHubError, IssueComment, PrCommitItem, PrFileItem,
+    PullRequestDetail, ReviewComment, ReviewItem,
 };
 use serde_json::json;
 
@@ -43,6 +43,12 @@ fn login_for(organization: &Organization) -> String {
         .map(str::to_string)
         .or_else(|| organization.display_name.clone())
         .unwrap_or_default()
+}
+
+/// Whether `login` is the authenticated user. GitHub logins are
+/// case-insensitive, and the connection id stores the login lowercased.
+fn is_me(login: Option<&str>, me: &str) -> bool {
+    login.is_some_and(|login| !me.is_empty() && login.eq_ignore_ascii_case(me))
 }
 
 fn client(organization: &Organization, secrets: &SecretStore) -> Result<GitHubClient> {
@@ -122,8 +128,15 @@ fn build_reviewers(
         let entry = latest
             .entry(login)
             .or_insert((state.clone(), review.submitted_at.clone()));
-        // Keep the most recent submission.
-        if review.submitted_at >= entry.1 {
+        // A plain comment does not change a reviewer's approval or change
+        // request (GitHub keeps counting it), so it only stands when there is
+        // nothing else. Otherwise keep the most recent submission.
+        let replaces = if state == "COMMENTED" {
+            entry.0 == "COMMENTED" && review.submitted_at >= entry.1
+        } else {
+            entry.0 == "COMMENTED" || review.submitted_at >= entry.1
+        };
+        if replaces {
             *entry = (state, review.submitted_at.clone());
         }
     }
@@ -137,7 +150,7 @@ fn build_reviewers(
             vote,
             vote_label: label.to_string(),
             is_required: false,
-            is_me: login == me,
+            is_me: is_me(Some(login), me),
         });
     }
     // Requested (pending) reviewers who have not yet submitted a review.
@@ -149,7 +162,7 @@ fn build_reviewers(
                 vote: 0,
                 vote_label: String::new(),
                 is_required: false,
-                is_me: requested.login == me,
+                is_me: is_me(Some(&requested.login), me),
             });
         }
     }
@@ -159,7 +172,7 @@ fn build_reviewers(
 
 fn issue_comment_thread(comment: IssueComment, me: &str) -> PrThread {
     let author = comment.user.map(|u| u.login);
-    let is_mine = author.as_deref() == Some(me);
+    let is_mine = is_me(author.as_deref(), me);
     PrThread {
         id: comment.id as i64,
         status: None,
@@ -179,6 +192,61 @@ fn issue_comment_thread(comment: IssueComment, me: &str) -> PrThread {
     }
 }
 
+/// Every review thread node of a PR, `fields` selecting what each holds.
+/// GitHub returns at most 100 per request, so later threads are read page by
+/// page; otherwise they could not be shown, replied to or resolved.
+pub(super) async fn review_thread_nodes(
+    client: &GitHubClient,
+    owner: &str,
+    repo: &str,
+    number: i64,
+    fields: &str,
+) -> Result<Vec<serde_json::Value>> {
+    let query = format!(
+        r#"query($owner:String!,$repo:String!,$number:Int!,$after:String){{
+          repository(owner:$owner,name:$repo){{
+            pullRequest(number:$number){{
+              reviewThreads(first:100,after:$after){{
+                pageInfo{{ hasNextPage endCursor }}
+                nodes{{ {fields} }}
+              }}
+            }}
+          }}
+        }}"#
+    );
+    let mut nodes = Vec::new();
+    let mut after: Option<String> = None;
+    // A bound in case the service keeps reporting more pages.
+    for _ in 0..30 {
+        let value = client
+            .graphql(
+                &query,
+                json!({ "owner": owner, "repo": repo, "number": number, "after": after }),
+            )
+            .await?;
+        let threads = value.pointer("/data/repository/pullRequest/reviewThreads");
+        nodes.extend(
+            threads
+                .and_then(|t| t.get("nodes"))
+                .and_then(|n| n.as_array())
+                .cloned()
+                .unwrap_or_default(),
+        );
+        let next = threads
+            .and_then(|t| t.pointer("/pageInfo/hasNextPage"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        after = threads
+            .and_then(|t| t.pointer("/pageInfo/endCursor"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        if !next || after.is_none() {
+            break;
+        }
+    }
+    Ok(nodes)
+}
+
 /// Fetches inline review threads via GraphQL so resolution state is available.
 async fn fetch_review_threads(
     client: &GitHubClient,
@@ -187,32 +255,14 @@ async fn fetch_review_threads(
     number: i64,
     me: &str,
 ) -> Result<Vec<PrThread>> {
-    const QUERY: &str = r#"
-    query($owner:String!,$repo:String!,$number:Int!){
-      repository(owner:$owner,name:$repo){
-        pullRequest(number:$number){
-          reviewThreads(first:100){
-            nodes{
-              isResolved
-              comments(first:100){
-                nodes{ databaseId author{login} body createdAt path line originalLine }
-              }
-            }
-          }
-        }
-      }
-    }"#;
-    let value = client
-        .graphql(
-            QUERY,
-            json!({ "owner": owner, "repo": repo, "number": number }),
-        )
-        .await?;
-    let nodes = value
-        .pointer("/data/repository/pullRequest/reviewThreads/nodes")
-        .and_then(|n| n.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let nodes = review_thread_nodes(
+        client,
+        owner,
+        repo,
+        number,
+        "isResolved diffSide comments(first:100){ nodes{ databaseId author{login} body createdAt path line originalLine } }",
+    )
+    .await?;
 
     let mut threads = Vec::new();
     for node in nodes {
@@ -237,7 +287,12 @@ async fn fetch_review_threads(
             .get("path")
             .and_then(|v| v.as_str())
             .map(str::to_string);
-        let right_line = first.get("line").and_then(|v| v.as_i64());
+        let line = first.get("line").and_then(|v| v.as_i64());
+        // A comment on a deleted line sits on the base (left) side.
+        let (left_line, right_line) = match node.get("diffSide").and_then(|v| v.as_str()) {
+            Some("LEFT") => (line, None),
+            _ => (None, line),
+        };
         let comments = comment_nodes
             .iter()
             .map(|c| {
@@ -245,7 +300,7 @@ async fn fetch_review_threads(
                     .pointer("/author/login")
                     .and_then(|v| v.as_str())
                     .map(str::to_string);
-                let is_mine = author.as_deref() == Some(me);
+                let is_mine = is_me(author.as_deref(), me);
                 PrComment {
                     id: c.get("databaseId").and_then(|v| v.as_i64()).unwrap_or(0),
                     parent_comment_id: None,
@@ -266,7 +321,7 @@ async fn fetch_review_threads(
             is_resolved,
             file_path,
             right_line,
-            left_line: None,
+            left_line,
             comments,
         });
     }
@@ -287,7 +342,15 @@ pub async fn list_changes(
         .list_pull_request_files(&owner, &repo, pr.pull_request_id)
         .await?;
     Ok(PullRequestChanges {
-        base_commit_id: Some(detail.base.sha),
+        // The files are relative to the merge base; the base branch tip may
+        // have moved on, and diffing against it would show those newer base
+        // changes as reverted in the PR. The tip stays the fallback.
+        base_commit_id: Some(
+            client
+                .merge_base(&owner, &repo, &detail.base.sha, &detail.head.sha)
+                .await
+                .unwrap_or(detail.base.sha),
+        ),
         target_commit_id: Some(detail.head.sha),
         files: files.into_iter().map(file_to_changed).collect(),
     })
@@ -309,6 +372,15 @@ fn file_to_changed(file: PrFileItem) -> PrChangedFile {
     }
 }
 
+/// One side of a diff and why it has no text, as the Azure DevOps path reports it.
+fn file_side(content: FileContent) -> (Option<String>, Option<String>) {
+    match content {
+        FileContent::Text(text) => (Some(text), None),
+        FileContent::Missing => (None, None),
+        FileContent::TooLarge => (None, Some("tooLarge".to_string())),
+    }
+}
+
 pub async fn get_file_diff(
     organization: &Organization,
     secrets: &SecretStore,
@@ -326,9 +398,11 @@ pub async fn get_file_diff(
     if input.change_type != "add" {
         match &input.base_commit_id {
             Some(sha) => {
-                base_content = client
-                    .get_file_content(&owner, &repo, base_path, sha)
-                    .await?
+                (base_content, base_unavailable_reason) = file_side(
+                    client
+                        .get_file_content(&owner, &repo, base_path, sha)
+                        .await?,
+                )
             }
             None => base_unavailable_reason = Some("base commit unavailable".to_string()),
         }
@@ -336,9 +410,11 @@ pub async fn get_file_diff(
     if input.change_type != "delete" {
         match &input.target_commit_id {
             Some(sha) => {
-                target_content = client
-                    .get_file_content(&owner, &repo, &input.file_path, sha)
-                    .await?
+                (target_content, target_unavailable_reason) = file_side(
+                    client
+                        .get_file_content(&owner, &repo, &input.file_path, sha)
+                        .await?,
+                )
             }
             None => target_unavailable_reason = Some("target commit unavailable".to_string()),
         }
@@ -379,6 +455,8 @@ fn commit_to_pr_commit(item: PrCommitItem) -> PrCommit {
 }
 
 mod mutations;
+#[cfg(test)]
+mod tests;
 pub use mutations::{
     add_reviewer, delete_comment, edit_comment, post_comment, remove_reviewer,
     set_reviewer_required, set_thread_status, submit_vote, update_pull_request,

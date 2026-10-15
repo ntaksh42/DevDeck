@@ -131,11 +131,14 @@ async fn set_pull_request_reviewer_required_puts_is_required() {
         .and(path(
             "/project-1/_apis/git/repositories/repo-1/pullRequests/42/reviewers/user-42",
         ))
-        .and(body_partial_json(serde_json::json!({ "isRequired": true })))
+        // Your own vote is sent along so the PUT does not reset it.
+        .and(body_partial_json(
+            serde_json::json!({ "isRequired": true, "vote": 10 }),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "id": "user-42",
             "displayName": "Me",
-            "vote": 0,
+            "vote": 10,
             "isRequired": true
         })))
         .mount(&server)
@@ -143,7 +146,7 @@ async fn set_pull_request_reviewer_required_puts_is_required() {
 
     let reviewer = test_client(&server)
         .await
-        .set_pull_request_reviewer_required("project-1", "repo-1", 42, "user-42", true)
+        .set_pull_request_reviewer_required("project-1", "repo-1", 42, "user-42", true, Some(10))
         .await
         .unwrap();
     assert!(reviewer.is_required);

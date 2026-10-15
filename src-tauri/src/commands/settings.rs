@@ -25,7 +25,20 @@ pub fn update_app_settings(
     app: AppHandle,
 ) -> Result<AppSettings> {
     let settings = normalize_app_settings(input);
-    configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
+    let hotkey = settings.show_window_hotkey.as_deref();
+    let unchanged = state
+        .settings
+        .get()
+        .is_ok_and(|current| current.show_window_hotkey.as_deref() == hotkey);
+    match configure_show_window_hotkey(&app, hotkey) {
+        Ok(()) => {}
+        // Saving another section must not fail because the stored hotkey has
+        // since been taken by another app; only a newly entered one is rejected.
+        Err(error) if unchanged => {
+            tracing::warn!(%error, "could not re-register the show window hotkey");
+        }
+        Err(error) => return Err(error),
+    }
     state.settings.update_normalized(settings)
 }
 

@@ -224,14 +224,16 @@ async fn rate_limited_429() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/_apis/connectionData"))
-        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "30"))
+        // Short: the shared gate (per host, and wiremock reuses servers) now
+        // holds every request for the server's full Retry-After.
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "2"))
         .mount(&server)
         .await;
 
     let client = test_client(&server).await;
     let err = client.connection_data().await.unwrap_err();
     match err {
-        AdoError::RateLimited(d) => assert_eq!(d, Duration::from_secs(30)),
+        AdoError::RateLimited(d) => assert_eq!(d, Duration::from_secs(2)),
         other => panic!("expected RateLimited, got {other:?}"),
     }
 }
@@ -354,7 +356,8 @@ async fn retries_post_after_rate_limit() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/project-1/_apis/wit/wiql"))
-        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "30"))
+        // Short: the shared gate now waits the server's full Retry-After.
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "1"))
         .up_to_n_times(1)
         .with_priority(1)
         .mount(&server)

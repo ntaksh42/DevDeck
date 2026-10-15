@@ -61,6 +61,19 @@ export function WorkItemBoard({
   // `columns` has been rebuilt from the optimistic override.
   const movedCardKeyRef = useRef<string | null>(null);
 
+  // Keys whose move is still being saved; their override must survive a refetch
+  // that lands before the save does.
+  const pendingMovesRef = useRef<Set<string>>(new Set());
+  // Fresh results are the truth (including changes made in the preview or by
+  // someone else), so overrides for settled moves are dropped.
+  useEffect(() => {
+    setOverrides((current) => {
+      if (current.size === 0) return current;
+      const next = new Map([...current].filter(([key]) => pendingMovesRef.current.has(key)));
+      return next.size === current.size ? current : next;
+    });
+  }, [results]);
+
   const effectiveResults = useMemo(
     () =>
       results.map((item) => {
@@ -218,6 +231,7 @@ export function WorkItemBoard({
       return next;
     });
     focusKeyRef.current = key;
+    pendingMovesRef.current.add(key);
     try {
       const [result] = await setWorkItemsState({
         organizationId: item.organizationId,
@@ -237,6 +251,8 @@ export function WorkItemBoard({
       });
       setToast(`Move failed: ${commandErrorMessage(error)}`);
       window.setTimeout(() => setToast(null), 3000);
+    } finally {
+      pendingMovesRef.current.delete(key);
     }
   }
 

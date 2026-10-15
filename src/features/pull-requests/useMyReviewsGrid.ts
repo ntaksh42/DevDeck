@@ -114,8 +114,12 @@ export function useMyReviewsGrid({
   const experimental = useExperimentalFlags();
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['myReviews', organizationId] });
+      // The preview reads "Your vote" from the PR's review, cached separately.
+      void queryClient.invalidateQueries({
+        queryKey: ['prReview', variables.organizationId, variables.repositoryId, variables.pullRequestId],
+      });
     },
   });
   const snoozeMutation = useMutation({

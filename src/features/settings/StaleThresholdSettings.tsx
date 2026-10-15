@@ -60,7 +60,7 @@ export function ReviewStaleThresholdSettings() {
           <select
             value={value}
             onChange={onChange}
-            disabled={settingsQuery.isLoading || mutation.isPending}
+            disabled={!settingsQuery.data || mutation.isPending}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {REVIEW_STALE_THRESHOLD_DAY_OPTIONS.map((days) => (
@@ -141,7 +141,7 @@ export function WorkItemStaleThresholdSettings() {
           <select
             value={value}
             onChange={onChange}
-            disabled={settingsQuery.isLoading || mutation.isPending}
+            disabled={!settingsQuery.data || mutation.isPending}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.map((days) => (

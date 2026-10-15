@@ -24,7 +24,7 @@ import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/n
 import { isEditableTarget } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { NavButton, NavSection, NavSubGroup, NavSubItem } from "@/components/Nav";
-import { viewCountBaseline, type WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
+import { viewCountBaseline, viewCountKey, type WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
 import type { View, NavSectionId } from "./types";
 import { DEFAULT_SIDEBAR_WIDTH } from "./types";
 
@@ -35,6 +35,8 @@ export interface AppSidebarHandle {
 export interface AppSidebarProps {
   activeView: View;
   organizationsLength: number;
+  /** Active connection, whose stored view counts the pinned views show. */
+  activeOrganizationId: string;
   /// Capabilities of the active connection's provider. When a feature is not
   /// supported, its nav entry is hidden so the UI never offers it. `null` while
   /// loading shows everything.
@@ -59,6 +61,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
   {
     activeView,
     organizationsLength,
+    activeOrganizationId,
     capabilities,
     sidebarCollapsed,
     sidebarWidth,
@@ -343,7 +346,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
               active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
               disabled={organizationsLength === 0}
               label={item.name}
-              badge={viewCountBaseline(item.id)}
+              badge={viewCountBaseline(viewCountKey(activeOrganizationId, item.id))}
               onClick={() => {
                 onSetActiveWorkItemViewId(item.id);
                 onSetSelectedWorkItemViewRequestId(item.id);

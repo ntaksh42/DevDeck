@@ -180,13 +180,19 @@ pub(crate) fn update_action_inbox(
                 }
             })
             .collect();
-        match db.insert_inbox_items(&new_items) {
-            Ok(count) => update.added += count,
-            Err(e) => {
-                tracing::warn!(org = %org.name, pr = pr.pull_request_id, error = ?e, "inbox: failed to store items")
+        // The cursor moves past the new comments only once they are stored;
+        // otherwise the next sync would skip them for good.
+        let stored = match db.insert_inbox_items(&new_items) {
+            Ok(count) => {
+                update.added += count;
+                true
             }
-        }
-        if let Some(max_id) = max_id {
+            Err(e) => {
+                tracing::warn!(org = %org.name, pr = pr.pull_request_id, error = ?e, "inbox: failed to store items");
+                false
+            }
+        };
+        if let Some(max_id) = max_id.filter(|_| stored) {
             if let Err(e) =
                 db.set_inbox_comment_cursor(&org.id, &pr.repository_id, pr.pull_request_id, max_id)
             {

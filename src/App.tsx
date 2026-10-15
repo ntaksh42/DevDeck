@@ -411,6 +411,7 @@ function AppShell() {
         ref={sidebarRef}
         activeView={activeView}
         organizationsLength={organizations.length}
+        activeOrganizationId={badgeOrganizationId}
         capabilities={capabilities}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}

@@ -100,6 +100,12 @@ impl Provider for GithubProvider {
             PR_RESULT_LIMIT,
         )
         .await?;
+        // The search hit its result cap, so more matches exist upstream.
+        let truncated = results.len() >= PR_RESULT_LIMIT as usize;
+        // Statuses the search query could not express (e.g. open + merged).
+        if let Some(statuses) = input.statuses.as_deref().filter(|s| !s.is_empty()) {
+            results.retain(|pr| statuses.iter().any(|s| s.eq_ignore_ascii_case(&pr.status)));
+        }
         if input.exclude_drafts.unwrap_or(false) {
             results.retain(|pr| !pr.is_draft);
         }
@@ -113,7 +119,7 @@ impl Provider for GithubProvider {
         Ok(PullRequestSearchResult {
             pull_requests: results,
             total,
-            truncated: false,
+            truncated,
             warnings: Vec::new(),
         })
     }

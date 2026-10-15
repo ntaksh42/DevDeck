@@ -40,7 +40,20 @@ export function DesktopNotificationSettings() {
     setQuietHoursEnabled(settings?.quietHoursEnabled ?? false);
     setQuietHoursStart(settings?.quietHoursStart ?? "22:00");
     setQuietHoursEnd(settings?.quietHoursEnd ?? "08:00");
-  }, [settingsQuery.data]);
+    // Only this section's own fields: another section saving replaces the
+    // settings object, which must not wipe unsaved edits here.
+  }, [
+    settingsQuery.data?.desktopNotificationsEnabled,
+    settingsQuery.data?.notificationContentPreviewEnabled,
+    settingsQuery.data?.notifyWorkItemAssignments,
+    settingsQuery.data?.notifyWorkItemStateChanges,
+    settingsQuery.data?.notifyPrReviewRequests,
+    settingsQuery.data?.notifyPrVoteResets,
+    settingsQuery.data?.notifyPrCommentReplies,
+    settingsQuery.data?.quietHoursEnabled,
+    settingsQuery.data?.quietHoursStart,
+    settingsQuery.data?.quietHoursEnd,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutation = useMutation({
     mutationFn: updateAppSettings,
@@ -229,7 +242,7 @@ export function DesktopNotificationSettings() {
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
-            disabled={settingsQuery.isLoading || mutation.isPending}
+            disabled={!settingsQuery.data || mutation.isPending}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {mutation.isPending ? (

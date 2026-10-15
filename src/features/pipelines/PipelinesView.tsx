@@ -110,6 +110,10 @@ export function PipelinesView() {
       });
     },
   });
+  // A failed approval belongs to the project it was made in.
+  useEffect(() => {
+    approvalMutation.reset();
+  }, [selectedOrganizationId, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
   const pendingApprovalId = approvalMutation.isPending
     ? (approvalMutation.variables?.approvalId ?? null)
     : null;

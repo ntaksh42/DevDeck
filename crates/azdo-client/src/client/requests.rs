@@ -184,8 +184,12 @@ impl AdoClient {
             match response {
                 Ok(resp) => {
                     let status = resp.status();
+                    // The shared gate honours the server's full wait (it caps
+                    // the cooldown itself), so retries and other callers do not
+                    // land inside the throttle window; only this request's own
+                    // retry delay is capped.
                     if let Some(delay) = parse_rate_limit_delay(resp.headers()) {
-                        gate.pause_for(self.retry_policy.capped_retry_after(delay));
+                        gate.pause_for(delay);
                     }
                     if status.is_success() {
                         return on_success(resp).await;
@@ -204,9 +208,7 @@ impl AdoClient {
                     let retry_after = parse_retry_after(resp.headers());
                     if status == StatusCode::TOO_MANY_REQUESTS {
                         // Hold back every caller, not just this request.
-                        gate.pause_for(self.retry_policy.capped_retry_after(
-                            retry_after.unwrap_or(self.retry_policy.base_delay),
-                        ));
+                        gate.pause_for(retry_after.unwrap_or(self.retry_policy.base_delay));
                     }
                     if self.should_retry_status(status, attempt, idempotent) {
                         drop(permit);
@@ -396,12 +398,38 @@ impl AdoClient {
         content_type: &str,
         body: &B,
     ) -> Result<T> {
+        self.patch_json_with(path, query, content_type, body, true)
+            .await
+    }
+
+    /// PATCH whose body is not safe to apply twice (a JSON Patch that appends
+    /// to or removes from a list by index), so an ambiguous 5xx or timeout is
+    /// not retried: the first attempt may already have been applied.
+    pub(crate) async fn patch_json_once<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+    ) -> Result<T> {
+        self.patch_json_with(path, query, content_type, body, false)
+            .await
+    }
+
+    async fn patch_json_with<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+        idempotent: bool,
+    ) -> Result<T> {
         let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "PATCH",
             path,
-            true,
+            idempotent,
             || {
                 self.http
                     .patch(url.clone())

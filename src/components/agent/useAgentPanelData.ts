@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createAgentNote,
@@ -18,7 +18,7 @@ import {
 } from "@/lib/azdoCommands";
 import { agentNoteSummariesKey } from "@/components/agent-notes/useAgentNoteSummaries";
 import type { AgentListScope } from "./agentListScope";
-import { contextIsAbout, contextLine, noteItemOf, type AgentQuote, type AgentSubject } from "./agentSubject";
+import { contextIsAbout, contextLine, noteItemOf, subjectKey, type AgentQuote, type AgentSubject } from "./agentSubject";
 import { buildContextDocument } from "./contextDocument";
 import { modelChoices, settingsModel } from "./agentModels";
 
@@ -190,6 +190,12 @@ export function useAgentPanelData(
         model,
       }),
   });
+
+  // A failure belongs to the subject it happened on, not the next one selected.
+  const key = subjectKey(subject);
+  useEffect(() => {
+    for (const mutation of [setStatus, remove, undoDelete, submitDrafts, send, runNow]) mutation.reset();
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     conversations,

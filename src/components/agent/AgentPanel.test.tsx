@@ -191,6 +191,33 @@ describe("Agent panel", () => {
     expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
   });
 
+  it("Ctrl+J closing a panel whose opener has gone lands on the view's grid", async () => {
+    resetAgentPanelState();
+    const { rerender } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <div data-primary-grid="true">
+          <div role="row" aria-selected="true" tabIndex={0} data-testid="row" />
+        </div>
+        <button type="button">Ask agent</button>
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+    // Opened from a dialog button that closes as the panel opens.
+    screen.getByRole("button", { name: "Ask agent" }).focus();
+    act(() => openAgentPanel({}));
+    await screen.findByRole("complementary", { name: "Agent" });
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <div data-primary-grid="true">
+          <div role="row" aria-selected="true" tabIndex={0} data-testid="row" />
+        </div>
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+    act(() => toggleAgentPanel());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("row")));
+  });
+
   it("Esc on a header closes a panel opened from <body> and lands on the view's grid", async () => {
     resetAgentPanelState();
     render(
@@ -325,5 +352,17 @@ describe("Agent panel with the Result panel", () => {
         expect.objectContaining({ target: "ask", itemId: 20261011090000, noteId: "a.md", status: "done" }),
       ),
     );
+  });
+  it("drops a failed start once the selection moves to another subject", async () => {
+    renderHost();
+    act(() => publishAgentSubject(pr));
+    const panel = await openPanel("Check the retry logic");
+    runAgent.mockRejectedValueOnce({ message: "An agent is already running in C:/repos/TestRepos" });
+    fireEvent.change(within(panel).getByPlaceholderText(/Ask about/), { target: { value: "Review this" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
+    expect(await within(panel).findByText(/already running/)).toBeTruthy();
+
+    act(() => publishAgentSubject({ kind: "pull-request", id: 69, repositoryName: "TestRepos", title: "Other PR", projectId: "p", repositoryId: "r", webUrl: null }));
+    await waitFor(() => expect(within(panel).queryByText(/already running/)).toBeNull());
   });
 });

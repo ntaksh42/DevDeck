@@ -60,12 +60,28 @@ pub(crate) async fn member_group_ids(
         }
         Err(e) => {
             tracing::warn!(org = %org.name, error = %e, "sync: failed to list group memberships");
-            (
-                HashSet::new(),
-                Some(format!(
-                    "Reviews requested from your groups/teams are not included: {e}."
-                )),
-            )
+            // Keep using the last known groups: dropping them for one pass would
+            // remove the group reviews and announce them again as new requests
+            // on the next one.
+            let last_known = entries()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .get(&key)
+                .map(|(_, ids)| ids.clone());
+            match last_known {
+                Some(ids) => (
+                    ids.into_iter().collect(),
+                    Some(format!(
+                        "Your groups/teams could not be refreshed; using the last known ones: {e}."
+                    )),
+                ),
+                None => (
+                    HashSet::new(),
+                    Some(format!(
+                        "Reviews requested from your groups/teams are not included: {e}."
+                    )),
+                ),
+            }
         }
     }
 }
@@ -212,5 +228,60 @@ mod tests {
         let active = vec![active_pr("r", 1, "a")];
         let reviewers = vec![reviewer("r", 1, "team", true)];
         assert!(group_review_prs(&active, &reviewers, &groups(&[]), &[], "me").is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_failed_lookup_keeps_the_last_known_groups() {
+        use std::sync::Arc;
+
+        use azdo_client::PatProvider;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        use crate::db::OrganizationDraft;
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/identities"))
+            .respond_with(ResponseTemplate::new(400))
+            .mount(&server)
+            .await;
+        let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(url::Url::parse(&format!("{}/", server.uri())).unwrap());
+        let tf = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db
+            .upsert_organization(OrganizationDraft {
+                id: "contoso".into(),
+                name: "contoso".into(),
+                display_name: None,
+                base_url: "https://dev.azure.com/contoso".into(),
+                auth_provider: "pat".into(),
+                credential_key: "azdodeck:org:contoso:pat".into(),
+                authenticated_user_id: Some("me".into()),
+                authenticated_user_display_name: None,
+                authenticated_user_unique_name: None,
+                provider_kind: "azdo".into(),
+            })
+            .unwrap();
+
+        // Nothing known yet: the lookup failure leaves group reviews out.
+        let (ids, warning) = member_group_ids(&db, &client, &org, "me").await;
+        assert!(ids.is_empty());
+        assert!(warning.unwrap().contains("not included"));
+
+        // Groups read an hour ago and now expired.
+        let expired = Instant::now()
+            .checked_sub(GROUP_TTL * 2)
+            .unwrap_or_else(Instant::now);
+        entries().lock().unwrap().insert(
+            (db.cache_key(), org.id.clone(), "me".into()),
+            (expired, vec!["team".into()]),
+        );
+        let (ids, warning) = member_group_ids(&db, &client, &org, "me").await;
+        assert_eq!(ids, groups(&["team"]));
+        assert!(warning.unwrap().contains("last known"));
     }
 }

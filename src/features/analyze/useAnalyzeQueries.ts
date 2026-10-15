@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import {
   countWorkItemQueryHistory,
@@ -28,11 +28,27 @@ export type QuerySeries = {
   error: unknown;
 };
 
+/**
+ * The current time in steps of the open point's stale time. The buckets and
+ * the trailing sample instant follow it, so a view left open keeps sampling
+ * "now" (and rolls over to the next day) instead of the moment it was opened.
+ */
+function useSampleClock(): number {
+  const step = () => Math.floor(Date.now() / OPEN_POINT_STALE_TIME);
+  const [tick, setTick] = useState(step);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick(step()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return tick;
+}
+
 export function useAnalyzeBuckets(group: AnalyzeGroup | null): AnalyzeBucket[] {
+  const tick = useSampleClock();
   return useMemo(() => {
     if (!group) return [];
     return analyzeBuckets(group.granularity, group.rangeCount);
-  }, [group?.granularity, group?.rangeCount, group?.id]);
+  }, [group?.granularity, group?.rangeCount, group?.id, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**

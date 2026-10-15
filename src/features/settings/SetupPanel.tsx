@@ -22,7 +22,9 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
     setOrganization("");
     setPat("");
     setValidationError(null);
-    void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+    // The new connection becomes the active one, so everything shown so far
+    // (active org, provider capabilities, its data) is stale, as after a switch.
+    void queryClient.invalidateQueries();
   }
 
   const patMutation = useMutation({

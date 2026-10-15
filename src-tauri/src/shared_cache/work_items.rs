@@ -59,8 +59,11 @@ pub fn write_work_items(
         params![organization, project],
     )?;
     {
+        // `OR REPLACE`: an item moved here from another project still has that
+        // project's row (the key is per organization), which would otherwise
+        // fail the whole write.
         let mut statement = tx.prepare(
-            "INSERT INTO work_items
+            "INSERT OR REPLACE INTO work_items
              (organization, project, id, title, work_item_type, state, assigned_to,
               assigned_to_unique_name, changed_date, web_url, tags)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -223,5 +226,15 @@ mod tests {
             read_work_items(&conn, "org", "proj-b").unwrap(),
             vec![sample(2)]
         );
+    }
+
+    #[test]
+    fn write_takes_over_an_item_moved_from_another_project() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        schema(&conn);
+        write_work_items(&mut conn, "org", "proj-a", &[sample(1)]).unwrap();
+        write_work_items(&mut conn, "org", "proj-b", &[sample(1), sample(2)]).unwrap();
+        assert!(read_work_items(&conn, "org", "proj-a").unwrap().is_empty());
+        assert_eq!(read_work_items(&conn, "org", "proj-b").unwrap().len(), 2);
     }
 }

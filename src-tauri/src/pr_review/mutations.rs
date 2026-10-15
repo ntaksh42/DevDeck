@@ -1,6 +1,7 @@
-use azdo_client::NewThreadContext;
+use azdo_client::{AdoClient, NewThreadContext};
 
 use crate::auth::client_for_organization;
+use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::prs::vote_label;
 
@@ -8,6 +9,40 @@ use super::helpers::{
     map_threads, root_comment_id, validate_merge_strategy, validate_thread_status, validate_vote,
 };
 use super::types::*;
+
+/// The signed-in user's current vote when `reviewer_id` is the user. The
+/// reviewer PUT replaces the entry, so marking yourself required (or adding
+/// yourself again) would otherwise reset your own vote; another person's vote
+/// cannot be set on their behalf and is left out.
+async fn own_vote(
+    client: &AdoClient,
+    organization: &Organization,
+    pr: &PrLocator,
+    reviewer_id: &str,
+) -> Result<Option<i32>> {
+    let is_me = organization
+        .authenticated_user_id
+        .as_deref()
+        .is_some_and(|me| me.eq_ignore_ascii_case(reviewer_id));
+    if !is_me {
+        return Ok(None);
+    }
+    let detail = client
+        .get_pull_request_detail(&pr.project_id, &pr.repository_id, pr.pull_request_id)
+        .await?;
+    Ok(detail
+        .reviewers
+        .unwrap_or_default()
+        .into_iter()
+        .find(|reviewer| {
+            reviewer
+                .id
+                .as_deref()
+                .is_some_and(|id| id.eq_ignore_ascii_case(reviewer_id))
+        })
+        .map(|reviewer| reviewer.vote)
+        .filter(|vote| *vote != 0))
+}
 
 impl PrReviewService {
     pub async fn post_comment(&self, input: PostPullRequestCommentInput) -> Result<PrThread> {
@@ -222,6 +257,7 @@ impl PrReviewService {
                 input.pr.pull_request_id,
                 &input.reviewer_id,
                 input.is_required,
+                own_vote(&client, &organization, &input.pr, &input.reviewer_id).await?,
             )
             .await?;
         Ok(())
@@ -251,6 +287,7 @@ impl PrReviewService {
                 input.pr.pull_request_id,
                 &reviewer_id,
                 input.is_required,
+                own_vote(&client, &organization, &input.pr, &reviewer_id).await?,
             )
             .await?;
         Ok(())

@@ -81,8 +81,10 @@ pub fn write_pull_requests(
         params![organization, project],
     )?;
     {
+        // `OR REPLACE`: the key has no project, so a repository moved here
+        // from another project would otherwise fail the whole write.
         let mut statement = tx.prepare(
-            "INSERT INTO pull_requests
+            "INSERT OR REPLACE INTO pull_requests
              (organization, project, repository_id, repository_name, pull_request_id,
               title, status, created_by, created_by_id, creation_date, source_ref_name,
               target_ref_name, is_draft, web_url)

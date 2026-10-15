@@ -103,7 +103,7 @@ export function ShowWindowHotkeySettings() {
         <div>
           <button
             type="submit"
-            disabled={settingsQuery.isLoading || mutation.isPending}
+            disabled={!settingsQuery.data || mutation.isPending}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {mutation.isPending ? (
@@ -122,7 +122,7 @@ export function ShowWindowHotkeySettings() {
 function hotkeyFromKeyboardEvent(
   event: ReactKeyboardEvent<HTMLInputElement>,
 ): string | null {
-  const key = normalizeHotkeyKey(event.key);
+  const key = physicalKey(event.code) ?? normalizeHotkeyKey(event.key);
   if (!key || isModifierKey(key)) return null;
 
   const parts: string[] = [];
@@ -133,6 +133,16 @@ function hotkeyFromKeyboardEvent(
   if (parts.length === 0) return null;
   parts.push(key);
   return parts.join("+");
+}
+
+/**
+ * Letters and digits by their physical key: with Shift (or Alt) held,
+ * `event.key` is the shifted character (Ctrl+Shift+1 gives "!"), which the
+ * global-shortcut parser rejects, so the hotkey would save but never register.
+ */
+function physicalKey(code: string): string | null {
+  const match = /^(?:Key([A-Z])|Digit(\d))$/.exec(code);
+  return match ? (match[1] ?? match[2]) : null;
 }
 
 function normalizeHotkeyKey(key: string): string | null {
