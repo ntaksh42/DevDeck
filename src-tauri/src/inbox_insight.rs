@@ -447,4 +447,34 @@ mod tests {
         assert!(prompt.contains("New: @me please answer"));
         assert!(!prompt.contains("Old: "));
     }
+
+    /// On a real Windows shell: `claude` runs under `cmd /C`, so stopping a run
+    /// must end the grandchild too. If it survived, it would keep the output
+    /// pipe open and the reader would wait for it to finish on its own.
+    #[cfg(windows)]
+    #[test]
+    fn kill_tree_ends_the_process_under_cmd() {
+        use std::sync::mpsc;
+
+        let mut child = shell_command("ping -n 30 127.0.0.1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let (done, finished) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut out = Vec::new();
+            let _ = stdout.read_to_end(&mut out);
+            let _ = done.send(());
+        });
+        std::thread::sleep(Duration::from_millis(500));
+
+        kill_tree(&mut child);
+        assert!(
+            finished.recv_timeout(Duration::from_secs(10)).is_ok(),
+            "the process under cmd kept the output pipe open"
+        );
+    }
 }
