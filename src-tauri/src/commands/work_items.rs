@@ -44,7 +44,10 @@ pub async fn list_work_item_projects(
     input: ListWorkItemProjectsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemProjectOption>> {
-    state.provider().await?.list_work_item_projects(input).await
+    super::query_deadline::with_query_deadline(async {
+        state.provider().await?.list_work_item_projects(input).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -53,7 +56,7 @@ pub async fn run_work_item_query(
     input: RunWorkItemQueryInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.run_query(input).await
+    super::query_deadline::with_query_deadline(state.work_items.run_query(input)).await
 }
 
 #[tauri::command]
@@ -62,7 +65,7 @@ pub async fn count_work_item_query(
     input: RunWorkItemQueryInput,
     state: State<'_, AppState>,
 ) -> Result<usize> {
-    state.work_items.count_query(input).await
+    super::query_deadline::with_query_deadline(state.work_items.count_query(input)).await
 }
 
 #[tauri::command]

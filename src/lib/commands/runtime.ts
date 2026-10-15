@@ -5,7 +5,25 @@ import { demoInvoke } from "@/lib/azdoDemo";
 
 export async function invokeCommand(command: string, args?: unknown): Promise<unknown> {
   if (isTauriRuntime()) {
-    return invoke(command, args as Record<string, unknown> | undefined);
+    const request = invoke(command, args as Record<string, unknown> | undefined);
+    // Bound the IPC wait too: an unresponsive backend must not leave queries
+    // permanently fetching. Only read operations are safe to retry this way.
+    if (!["run_work_item_query", "count_work_item_query", "list_work_item_projects"].includes(command)) {
+      return request;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        request,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(
+            "Work item query timed out. Please retry.",
+          )), 125_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   return demoInvoke(command, args);

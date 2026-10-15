@@ -84,6 +84,7 @@ export function WorkItemViewsPanel({
     queryFn: () => listWorkItemProjects({ organizationId: selectedOrganizationId }),
     enabled: !!selectedOrganizationId,
     staleTime: 5 * 60_000,
+    retry: false,
   });
   const projectOptions = projectsQuery.data ?? [];
 
@@ -147,6 +148,7 @@ export function WorkItemViewsPanel({
       !!selectedViewProjectId &&
       !!selectedView.wiql.trim(),
     staleTime: 5 * 60_000,
+    retry: false,
     // Adding/removing an extra column changes the key; keep the same view's
     // rows on screen so the grid (and its focus) isn't swapped for a spinner.
     placeholderData: (previous, previousQuery) =>
@@ -155,6 +157,7 @@ export function WorkItemViewsPanel({
       ? selectedView.refreshIntervalSec * 1000
       : false,
   });
+  const failedQuery = projectsQuery.isError ? projectsQuery : selectedQuery;
   const selectedResults = selectedQuery?.data ?? [];
   const filteredResults = useMemo(() => {
     const parsed = parseSearchQuery(filter);
@@ -405,10 +408,10 @@ export function WorkItemViewsPanel({
 
       {selectedView && !draft.dialogOpen ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          {selectedQuery?.isError ? (
+          {failedQuery.isError ? (
             <ErrorState
-              message={commandErrorMessage(selectedQuery.error)}
-              onRetry={() => void selectedQuery.refetch()}
+              message={commandErrorMessage(failedQuery.error)}
+              onRetry={() => void failedQuery.refetch()}
             />
           ) : null}
 

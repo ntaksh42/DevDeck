@@ -42,6 +42,7 @@ export function useViewCountQueries({
         !!(view.projectId || projectOptions[0]?.projectId) &&
         !!view.wiql.trim(),
       staleTime: 5 * 60_000,
+      retry: false,
       refetchInterval: view.refreshIntervalSec ? view.refreshIntervalSec * 1000 : (false as const),
     })),
   });

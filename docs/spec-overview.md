@@ -280,6 +280,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `create_work_item` で作成する。作成後はローカルキャッシュへ即時反映し関連クエリを
   invalidate する。ダイアログはキーボード完結 (タイトルへ初期フォーカス、Ctrl+Enter 送信、
   Escape キャンセル、閉じたら呼び出し元へフォーカス復帰)。
+- **クエリ取得の待機上限**: 作業項目のプロジェクト一覧・ビュー実行・件数取得は、ロックや通信の待機を含めバックエンドで 120 秒で打ち切る。フロントエンドも IPC 応答を 125 秒でタイムアウトにし、読み込み状態を解除する。Views のプロジェクト一覧・ビュー実行・件数取得は自動リトライせず、ビュー実行のエラーから Retry で再実行できる。IPC 側のタイムアウトだけではバックエンド処理はキャンセルされない。
 - **ビュー編集ダイアログ (WIQL エディタ)**: Azure DevOps のクエリ URL 貼り付けによる自動補完
   (Org / Project / WIQL) に加え、WIQL 入力欄 (`WiqlEditor`) は次を備える。
   - **構文ハイライト**: `tokenizeWiql` の結果を色付き `<pre>` として textarea の背後に重ねる

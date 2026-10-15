@@ -13,3 +13,5 @@ pub mod snooze;
 pub mod sync;
 pub mod wiki;
 pub mod work_items;
+
+mod query_deadline;
