@@ -152,7 +152,7 @@ impl GitHubClient {
     ) -> Result<T> {
         let url = self
             .base_url
-            .join(path)
+            .join(&escape_path(path))
             .map_err(|e| GitHubError::Auth(e.to_string()))?;
 
         for attempt in 1..=self.retry_policy.attempts() {
@@ -225,7 +225,7 @@ impl GitHubClient {
     ) -> Result<reqwest::Response> {
         let url = self
             .base_url
-            .join(path)
+            .join(&escape_path(path))
             .map_err(|e| GitHubError::Auth(e.to_string()))?;
         let mut request = self.http.request(method, url);
         if let Some(body) = body {
@@ -343,6 +343,13 @@ impl GitHubClient {
 }
 
 /// Parses `Retry-After` (seconds) when present.
+/// Escapes the characters that would end the path of a URL: a branch or file
+/// name containing `#` or `?` (e.g. `fix#12`) would otherwise turn the rest
+/// into a fragment or query and hit another endpoint.
+fn escape_path(path: &str) -> String {
+    path.replace('#', "%23").replace('?', "%3F")
+}
+
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     headers
         .get("Retry-After")
