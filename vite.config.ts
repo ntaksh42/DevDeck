@@ -51,6 +51,10 @@ export default defineConfig(async () => ({
         "**/src-tauri/**",
         `${path.resolve(__dirname, ".claude").replace(/\\/g, "/")}/**`,
         `${path.resolve(__dirname, ".worktrees").replace(/\\/g, "/")}/**`,
+        // Playwright writes its report and per-test artifacts here while the
+        // suite runs; watching them made Vite reload every open page mid-test.
+        "**/playwright-report/**",
+        "**/test-results/**",
       ],
     },
   },

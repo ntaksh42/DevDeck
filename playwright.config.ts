@@ -7,7 +7,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   // Parallel workers share one dev server and the machine; 5 s was too tight
-  // for steps that re-render a whole view when other apps load the CPU.
+  // for steps that re-render a whole view while other apps load the CPU.
   expect: { timeout: 10_000 },
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
