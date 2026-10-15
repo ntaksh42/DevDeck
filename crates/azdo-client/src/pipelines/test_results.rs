@@ -25,13 +25,23 @@ pub struct TestRun {
     pub total_tests: i64,
     #[serde(default)]
     pub passed_tests: i64,
+    /// Failed results nobody has analyzed yet; for an automated build run that
+    /// is every failure.
+    #[serde(default)]
+    pub unanalyzed_tests: i64,
     /// Per-outcome counts; the failed count lives here, not on the run itself.
     #[serde(default)]
     pub run_statistics: Vec<TestRunStatistic>,
 }
 
 impl TestRun {
+    /// From the per-outcome statistics; a response shape without them (the
+    /// documented `includeRunDetails` example has none) falls back to the
+    /// unanalyzed count rather than reporting no failures.
     pub fn failed_tests(&self) -> i64 {
+        if self.run_statistics.is_empty() {
+            return self.unanalyzed_tests;
+        }
         self.run_statistics
             .iter()
             .filter(|stat| stat.outcome.as_deref() == Some("Failed"))
@@ -170,5 +180,21 @@ mod tests {
 
         assert_eq!(results[0].test_case_title.as_deref(), Some("adds"));
         assert_eq!(results[0].error_message.as_deref(), Some("expected 3"));
+    }
+
+    #[test]
+    fn failed_count_without_run_statistics_uses_the_unanalyzed_count() {
+        // The shape of the documented `includeRunDetails=true` example.
+        let run: super::TestRun = serde_json::from_value(serde_json::json!({
+            "id": 1, "totalTests": 10, "passedTests": 8, "unanalyzedTests": 2
+        }))
+        .unwrap();
+        assert_eq!(run.failed_tests(), 2);
+        let with_stats: super::TestRun = serde_json::from_value(serde_json::json!({
+            "id": 2, "unanalyzedTests": 9,
+            "runStatistics": [{ "outcome": "Failed", "count": 3 }, { "outcome": "Passed", "count": 7 }]
+        }))
+        .unwrap();
+        assert_eq!(with_stats.failed_tests(), 3);
     }
 }
