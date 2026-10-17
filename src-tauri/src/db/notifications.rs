@@ -86,7 +86,7 @@ impl AppDatabase {
     }
 }
 
-fn insert_notifications(conn: &Connection, records: &[NewNotification]) -> Result<()> {
+pub(super) fn insert_notifications(conn: &Connection, records: &[NewNotification]) -> Result<()> {
     let now = Utc::now().to_rfc3339();
     {
         let mut stmt = conn.prepare_cached(

@@ -269,6 +269,7 @@ fn item_to_summary(org_id: &str, item: IssueSearchItem) -> MyCreatedPullRequestS
         is_draft: item.draft,
         approvals: 0,
         reviewer_count: 0,
+        ready_to_merge: false,
     }
 }
 

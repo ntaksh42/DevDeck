@@ -56,6 +56,7 @@ pub struct MyCreatedPullRequestSummary {
     pub is_draft: bool,
     pub approvals: i64,
     pub reviewer_count: i64,
+    pub ready_to_merge: bool,
 }
 
 #[derive(Debug, Serialize, Default)]

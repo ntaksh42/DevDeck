@@ -31,6 +31,7 @@ export function resolveNotificationJump(record: NotificationRecord): Notificatio
   switch (parsed.kind) {
     case "prReviewRequested":
     case "prVoteReset":
+    case "prReadyToMerge":
     case "prCommentReply": {
       const pullRequestId = numberField(payload, "pullRequestId");
       if (pullRequestId != null) return { type: "pullRequest", pullRequestId, organizationId };

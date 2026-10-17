@@ -18,6 +18,7 @@ export const NOTIFICATION_RULE_TYPES = [
   { value: "reviewRequested", label: "PR review requested" },
   { value: "voteReset", label: "PR vote reset" },
   { value: "commentReply", label: "PR comment reply" },
+  { value: "readyToMerge", label: "PR ready to merge" },
   { value: "assigned", label: "Work item assigned" },
   { value: "stateChanged", label: "Work item state changed" },
 ] as const;

@@ -78,6 +78,7 @@ export const myCreatedPullRequestSummarySchema = z.object({
   // How many reviewers approved (vote === 10) out of the total assigned.
   approvals: z.number(),
   reviewerCount: z.number(),
+  readyToMerge: z.boolean().default(false),
 });
 
 export const myCreatedPullRequestSummariesSchema = z.array(myCreatedPullRequestSummarySchema);

@@ -6,6 +6,7 @@ test("PR result envelopes work in browser demo mode", async ({ page }) => {
   await navigation.getByRole("button", { name: "My Pull Requests", exact: true }).click();
   const grid = page.getByRole("grid", { name: "My pull requests" });
   await expect(grid.getByText("Add request tracing to the gateway")).toBeVisible();
+  await expect(grid.getByText("Ready to merge", { exact: true })).toBeVisible();
   await grid.getByRole("row").first().focus();
   await page.keyboard.press("ArrowDown");
 
