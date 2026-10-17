@@ -122,10 +122,15 @@ pub fn run() {
             let settings = db.get_app_settings().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (get_app_settings): {e}");
             })?;
-            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
-                .inspect_err(|e| {
-                    eprintln!("DevDeck setup failed (configure_show_window_hotkey): {e}");
-                })?;
+            // The hotkey is a convenience: registering it fails outside an
+            // interactive desktop session (os error 1459), and that must not
+            // stop the app from starting.
+            if let Err(e) =
+                configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
+            {
+                eprintln!("DevDeck: show window hotkey is unavailable: {e}");
+                tracing::warn!(error = ?e, "could not register the show window hotkey");
+            }
             // Move notes older versions kept in the result folders and refresh
             // the agent notes guide so existing result folders pick up format
             // changes without re-saving Settings.
@@ -270,7 +275,8 @@ pub fn run() {
             commands::notifications::record_notification,
             commands::action_inbox::list_action_inbox_items,
             commands::action_inbox::get_action_inbox_counts,
-            commands::action_inbox::set_action_inbox_item_state
+            commands::action_inbox::set_action_inbox_item_state,
+            commands::action_inbox::generate_action_inbox_insight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

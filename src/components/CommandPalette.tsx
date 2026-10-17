@@ -288,10 +288,12 @@ export function CommandPalette({
         </div>
         {search ? (
           <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-            Search work items, PRs, and wiki — filter with{" "}
+            Search work items, PRs, wiki, and Inbox — filter with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">wi:</kbd>{" "}
             <kbd className="rounded bg-muted px-1 font-mono">pr:</kbd>{" "}
-            <kbd className="rounded bg-muted px-1 font-mono">wiki:</kbd> · open in browser with{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">wiki:</kbd>{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">inbox:</kbd> · paste an Azure DevOps
+            link to open it · open in browser with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">Ctrl+Enter</kbd>
           </div>
         ) : null}
