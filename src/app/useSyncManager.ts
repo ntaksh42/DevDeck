@@ -68,9 +68,18 @@ export function useSyncManager(organizationsLength: number, activeView: View) {
       requestHotSync("focus");
     }
 
+    // Coming back online (VPN reconnect, wake from sleep) refreshes right away,
+    // bypassing the focus throttle that would otherwise delay it.
+    function onOnline() {
+      lastHotSyncRequestedAtRef.current = 0;
+      requestHotSync("startup");
+    }
+
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("online", onOnline);
     return () => {
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("focus", onWindowFocus);
     };

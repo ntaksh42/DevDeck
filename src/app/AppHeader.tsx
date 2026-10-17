@@ -1,5 +1,6 @@
-import { ChevronRight, PanelLeft, PanelLeftClose } from "lucide-react";
+import { ChevronRight, PanelLeft, PanelLeftClose, WifiOff } from "lucide-react";
 import type { KeybindingMap } from "@/lib/keybindings";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
 import type { View } from "./types";
 
@@ -68,6 +69,7 @@ export function AppHeader({
   onToggleSidebar,
   onSync,
 }: AppHeaderProps) {
+  const online = useOnlineStatus();
   const breadcrumb = VIEW_BREADCRUMBS[activeView];
   const segments: string[] = breadcrumb
     ? activeView === "workItemViews" && activeWorkItemViewName
@@ -126,6 +128,15 @@ export function AppHeader({
       </div>
       {organizationsLength > 0 && (
         <div className="flex items-center gap-2">
+          {!online && (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+            >
+              <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
+              Offline — showing cached data
+            </span>
+          )}
           <SyncStatusIndicator onSync={onSync} syncing={syncing} />
         </div>
       )}

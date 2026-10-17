@@ -384,6 +384,10 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   接続 (組織) を削除したときは、その組織の PR / レビュアー / Work Item / 同期状態の行も
   共有キャッシュから削除する (ベストエフォート。失敗しても接続の削除は成功扱い)。
 
+### オフライン検出
+
+`navigator.onLine` と `online` / `offline` イベント (`useOnlineStatus`) で接続状態を見る。オフラインの間はヘッダーの同期インジケータの隣に「Offline — showing cached data」を出し、各画面はキャッシュ表示のまま。`online` に戻ったらフォーカス用の間引きを無視して `hot` 同期を 1 回即時に走らせる。書き込み操作の無効化はしない (失敗は各操作のエラー表示に任せる)。ブラウザデモでも同じ。
+
 ### 同期ループ (`sync.rs`)
 
 - スコープ: `All` / `Hot` (MyReviews + MyWorkItems の高速更新) / `MyReviews` / `MyWorkItems`。コミットは同期しない (Commits ビューは API 負荷削減のため廃止)。
