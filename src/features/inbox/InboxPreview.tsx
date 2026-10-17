@@ -53,6 +53,7 @@ export function InboxPreview({
   onToggleContext,
   draft,
   onUseDraft,
+  onGenerateInsight,
 }: {
   item: InboxEntry | null;
   tab: InboxTab;
@@ -77,6 +78,8 @@ export function InboxPreview({
   /** Claude's reply draft, once the user asked to use it. */
   draft?: ReplySeed;
   onUseDraft: (text: string) => void;
+  /** Writes Claude's notes for this item now; unset when it cannot be asked. */
+  onGenerateInsight?: () => void;
 }) {
   if (!item) {
     return (
@@ -126,7 +129,7 @@ export function InboxPreview({
       </div>
 
       {!detail.isLoading && !detail.error ? <InboxContextSummary {...contextProps} /> : null}
-      <InboxInsightPanel insight={item.insight} onUseDraft={onUseDraft} />
+      <InboxInsightPanel insight={item.insight} onUseDraft={onUseDraft} onGenerate={onGenerateInsight} />
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {tab === "open" ? (
