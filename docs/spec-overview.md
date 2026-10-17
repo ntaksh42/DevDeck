@@ -108,6 +108,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   接頭辞 `wi:` / `pr:` で種別を限定。`Enter` でアプリ内、`Ctrl+Enter` でブラウザ。
   `pr:` 検索時は各 PR に「Approve / Reject」アクション行を追加し、パレットから直接レビュー投票
   (`submit_pull_request_vote`) できる。
+  接頭辞 `inbox:` は Inbox の Open 項目を一覧し (入力はタイトル/リポジトリ/作成者/本文の絞り込み、2 文字未満でも可)、
+  各項目に「Done」「Snooze until tomorrow」の行を出して `set_action_inbox_item_state` で状態を変える。
 - **コマンドパレット (`Ctrl+K`)**: コマンド実行 + 作業項目/アクティブ PR の横断検索。
   接頭辞 `wi:` / `pr:` で種別を限定。
   `wiki:` はアクティブな接続の Wiki ページ検索 (`search_wiki`、Search 拡張が必要) を実行し (失敗時は「Wiki Search is unavailable」の 1 行)、
