@@ -1,13 +1,19 @@
 import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { DatabaseBackup } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { getAppSettings, updateAppSettings } from "@/lib/azdoCommands";
 import { isTauriRuntime } from "@/lib/runtime";
+import { settingsInput } from "./settingsHelpers";
 import {
   BACKUP_GROUPS,
+  APP_SETTINGS_KEY,
   applyBackup,
   buildBackup,
   countEntries,
+  notificationBackupValue,
+  notificationPatch,
   parseBackup,
   type ImportMode,
   type SettingsBackup,
@@ -47,6 +53,11 @@ export function BackupSettings() {
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
 
   function report(text: string, isError = false) {
     setMessage(text);
@@ -55,7 +66,9 @@ export function BackupSettings() {
 
   async function exportSettings() {
     try {
-      report(await saveBackupFile(JSON.stringify(buildBackup(selected), null, 2)));
+      const settings = settingsQuery.data;
+      const extra: Record<string, string> = settings ? { [APP_SETTINGS_KEY]: notificationBackupValue(settings) } : {};
+      report(await saveBackupFile(JSON.stringify(buildBackup(selected, new Date(), extra), null, 2)));
     } catch (error) {
       report(error instanceof Error ? error.message : "Failed to export settings.", true);
     }
@@ -75,15 +88,28 @@ export function BackupSettings() {
     }
   }
 
-  function importSettings() {
+  async function importSettings() {
     if (!pending) return;
-    const written = applyBackup(pending, modes);
-    if (written === 0) {
-      report("Nothing was applied: every group is set to Skip.");
-      return;
+    try {
+      let written = applyBackup(pending, modes);
+      // Notification rules live in the app settings, so they go through the backend.
+      const mode = modes.notifications ?? "skip";
+      const raw = pending.groups.notifications?.[APP_SETTINGS_KEY];
+      if (raw && mode !== "skip" && settingsQuery.data) {
+        await updateAppSettings(
+          settingsInput(settingsQuery.data, notificationPatch(settingsQuery.data, raw, mode)),
+        );
+        written += 1;
+      }
+      if (written === 0) {
+        report("Nothing was applied: every group is set to Skip.");
+        return;
+      }
+      // Panels hold their settings in component state, so reload to pick them up.
+      window.location.reload();
+    } catch (error) {
+      report(error instanceof Error ? error.message : "Failed to apply the settings.", true);
     }
-    // Panels hold their settings in component state, so reload to pick them up.
-    window.location.reload();
   }
 
   return (
@@ -170,7 +196,7 @@ export function BackupSettings() {
               })}
               <button
                 type="button"
-                onClick={importSettings}
+                onClick={() => void importSettings()}
                 className="mt-1 rounded-md border border-border bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-accent"
               >
                 Apply and reload

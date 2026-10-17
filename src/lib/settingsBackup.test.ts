@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { AppSettings } from "./azdoCommands";
 import {
+  APP_SETTINGS_KEY,
   BACKUP_GROUPS,
   BACKUP_VERSION,
   applyBackup,
   buildBackup,
+  notificationBackupValue,
+  notificationPatch,
   parseBackup,
 } from "./settingsBackup";
 
@@ -84,5 +88,48 @@ describe("settings backup", () => {
       }),
     );
     expect(backup.groups.keybindings).toEqual({ "azdodeck:keybindings:v1": "{}" });
+  });
+
+  describe("notification group", () => {
+    const rule = (project: string) => ({ types: ["reviewRequested"], projects: [project], repositories: [], mute: true });
+    const settings = {
+      notificationRules: [rule("A")],
+      notificationContentPreviewEnabled: false,
+      notifyWorkItemAssignments: true,
+      notifyWorkItemStateChanges: true,
+      notifyPrReviewRequests: true,
+      notifyPrVoteResets: true,
+      notifyPrCommentReplies: true,
+      quietHoursEnabled: true,
+      quietHoursStart: "21:00",
+      quietHoursEnd: "07:00",
+      desktopNotificationsEnabled: true,
+      reviewResultFolderPath: "C:/secret/path",
+    } as unknown as AppSettings;
+
+    it("exports the rules and quiet hours but not machine-specific settings", () => {
+      const raw = notificationBackupValue(settings);
+      expect(raw).toContain("quietHoursStart");
+      expect(raw).not.toContain("C:/secret/path");
+      expect(raw).not.toContain("desktopNotificationsEnabled");
+      const backup = buildBackup(["notifications"], new Date(), { [APP_SETTINGS_KEY]: raw });
+      expect(backup.groups.notifications[APP_SETTINGS_KEY]).toBe(raw);
+    });
+
+    it("overwrite takes the file's values; merge only adds rules that are missing", () => {
+      const raw = JSON.stringify({ notificationRules: [rule("A"), rule("B")], quietHoursStart: "22:00" });
+      expect(notificationPatch(settings, raw, "overwrite")).toEqual({
+        notificationRules: [rule("A"), rule("B")],
+        quietHoursStart: "22:00",
+      });
+      expect(notificationPatch(settings, raw, "merge")).toEqual({
+        notificationRules: [rule("A"), rule("B")],
+      });
+    });
+
+    it("drops unknown fields from an imported file", () => {
+      const raw = JSON.stringify({ quietHoursEnd: "06:00", reviewResultFolderPath: "C:/x" });
+      expect(notificationPatch(settings, raw, "overwrite")).toEqual({ quietHoursEnd: "06:00" });
+    });
   });
 });

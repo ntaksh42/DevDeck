@@ -1,4 +1,22 @@
+import type { AppSettings, UpdateAppSettingsInput } from "./azdoCommands";
 import { readStoredString, writeStoredString } from "./storage";
+
+/** Storage key of the group whose value lives in the app settings (SQLite), not localStorage. */
+export const APP_SETTINGS_KEY = "appSettings:notifications";
+
+/** Notification settings carried in the backup. Desktop-notification permission is per machine, so it is left out. */
+const NOTIFICATION_FIELDS = [
+  "notificationRules",
+  "notificationContentPreviewEnabled",
+  "notifyWorkItemAssignments",
+  "notifyWorkItemStateChanges",
+  "notifyPrReviewRequests",
+  "notifyPrVoteResets",
+  "notifyPrCommentReplies",
+  "quietHoursEnabled",
+  "quietHoursStart",
+  "quietHoursEnd",
+] as const;
 
 /**
  * Personal settings kept in localStorage that can be moved to another PC.
@@ -28,6 +46,11 @@ export const BACKUP_GROUPS: readonly BackupGroup[] = [
       { key: "azdodeck:workItemTemplates", shape: "array" },
       { key: "azdodeck:workItems:fieldPresets", shape: "array" },
     ],
+  },
+  {
+    id: "notifications",
+    label: "Notification rules and quiet hours",
+    keys: [{ key: APP_SETTINGS_KEY, shape: "object" }],
   },
   {
     id: "display",
@@ -66,13 +89,43 @@ function isValidValue(raw: string, shape: BackupShape): boolean {
   }
 }
 
-export function buildBackup(groupIds: readonly string[], now = new Date()): SettingsBackup {
+/** The notification part of the app settings, as the raw JSON the backup stores. */
+export function notificationBackupValue(settings: AppSettings): string {
+  return JSON.stringify(Object.fromEntries(NOTIFICATION_FIELDS.map((field) => [field, settings[field]])));
+}
+
+/**
+ * The settings patch for an imported notification group. Overwrite takes the
+ * file's values; merge keeps the current rules and adds the file's rules that
+ * are not already there, leaving the other fields as they are.
+ */
+export function notificationPatch(
+  current: AppSettings,
+  raw: string,
+  mode: ImportMode,
+): Partial<UpdateAppSettingsInput> {
+  const incoming = JSON.parse(raw) as Partial<Pick<AppSettings, (typeof NOTIFICATION_FIELDS)[number]>>;
+  const known = new Set<string>(NOTIFICATION_FIELDS);
+  const patch = Object.fromEntries(Object.entries(incoming).filter(([key]) => known.has(key)));
+  if (mode === "merge") {
+    const have = new Set(current.notificationRules.map((rule) => JSON.stringify(rule)));
+    const added = (incoming.notificationRules ?? []).filter((rule) => !have.has(JSON.stringify(rule)));
+    return { notificationRules: [...current.notificationRules, ...added] };
+  }
+  return patch as Partial<UpdateAppSettingsInput>;
+}
+
+export function buildBackup(
+  groupIds: readonly string[],
+  now = new Date(),
+  extra: Record<string, string> = {},
+): SettingsBackup {
   const groups: SettingsBackup["groups"] = {};
   for (const group of BACKUP_GROUPS) {
     if (!groupIds.includes(group.id)) continue;
     const entries: Record<string, string> = {};
     for (const { key, shape } of group.keys) {
-      const raw = readStoredString(key);
+      const raw = key in extra ? extra[key] : readStoredString(key);
       if (raw !== null && isValidValue(raw, shape)) entries[key] = raw;
     }
     if (Object.keys(entries).length > 0) groups[group.id] = entries;
@@ -146,13 +199,15 @@ function mergeRaw(current: string | null, incoming: string): string {
   return incoming;
 }
 
-/** Writes the chosen groups; returns how many storage keys were written. */
+/** Writes the chosen localStorage groups; returns how many storage keys were written. */
 export function applyBackup(backup: SettingsBackup, modes: Record<string, ImportMode>): number {
   let written = 0;
   for (const [groupId, entries] of Object.entries(backup.groups)) {
     const mode = modes[groupId] ?? "skip";
     if (mode === "skip") continue;
     for (const [key, raw] of Object.entries(entries)) {
+      // The notification group is applied through the app settings by the caller.
+      if (key === APP_SETTINGS_KEY) continue;
       writeStoredString(key, mode === "merge" ? mergeRaw(readStoredString(key), raw) : raw);
       written += 1;
     }
