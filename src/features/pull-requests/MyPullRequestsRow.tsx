@@ -40,6 +40,14 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
           <span className="truncate font-medium text-foreground" title={pr.title}>
             {pr.title}
           </span>
+          {pr.mergeStatus === "conflicts" ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+              title="This pull request has merge conflicts"
+            >
+              Conflicts
+            </span>
+          ) : null}
         </div>
       );
     case "creationDate":
