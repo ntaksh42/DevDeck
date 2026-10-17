@@ -56,6 +56,8 @@ pub struct MyCreatedPullRequestSummary {
     pub is_draft: bool,
     pub approvals: i64,
     pub reviewer_count: i64,
+    /// Azure DevOps `mergeStatus` from the list response (e.g. `conflicts`).
+    pub merge_status: Option<String>,
 }
 
 #[derive(Debug, Serialize, Default)]

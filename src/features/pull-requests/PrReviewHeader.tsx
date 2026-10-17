@@ -1,3 +1,4 @@
+import { PrMergeRequirements } from "./PrMergeRequirements";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -318,6 +319,7 @@ export function PrReviewHeader({
             </div>
           </div>
         ) : null}
+        <PrMergeRequirements pr={selectedPr} />
         {onAddLabel && onRemoveLabel ? (
           <PrLabelsRow
             labels={review?.labels ?? []}

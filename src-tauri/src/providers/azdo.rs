@@ -17,12 +17,14 @@ use crate::pipelines::{
     QueuePipelineRunInput, RerunPipelineRunInput, RetryPipelineStageInput,
     UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewService, PrReviewer,
-    PrReviewerSuggestions, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestLabelInput, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator,
+    PrReviewService, PrReviewer, PrReviewerSuggestions, PrStatusResult, PrThread,
+    PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -247,6 +249,14 @@ impl Provider for AzdoProvider {
         input: PrLocator,
     ) -> Result<PrReviewerSuggestions> {
         self.pr_review.suggest_reviewers(input).await
+    }
+
+    async fn get_pull_request_health(&self, input: PrLocator) -> Result<PrHealth> {
+        self.pr_review.get_health(input).await
+    }
+
+    async fn list_pull_request_policies(&self, input: PrLocator) -> Result<Vec<PolicyRequirement>> {
+        self.pr_review.list_policy_requirements(input).await
     }
 
     async fn post_pull_request_comment(

@@ -232,6 +232,22 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         filesConsidered: 3,
         filesTotal: 3,
       };
+    case "get_pull_request_health": {
+      const input = (args as { input?: { pullRequestId?: number } } | undefined)?.input;
+      const id = input?.pullRequestId ?? 0;
+      return {
+        ciStatus: id % 2 === 0 ? "failed" : "succeeded",
+        ciContext: "build",
+        ciCheckCount: 2,
+        unresolvedThreads: id % 3,
+      };
+    }
+    case "list_pull_request_policies":
+      return [
+        { name: "Minimum number of reviewers", status: "rejected", isBlocking: true, detail: "2 approvers required" },
+        { name: "Build", status: "approved", isBlocking: true, detail: null },
+        { name: "Comment requirements", status: "approved", isBlocking: false, detail: null },
+      ];
     case "list_pull_request_work_items":
       // Two ids so the browser preview exercises the multi-item chooser.
       return [123, 118];

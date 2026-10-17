@@ -364,6 +364,7 @@ pub(crate) async fn fetch_created_prs_for_project(
             is_draft: pr.is_draft.unwrap_or(false),
             approvals,
             reviewer_count: reviewers.len() as i64,
+            merge_status: pr.merge_status.clone(),
         });
     }
     Ok(summaries)

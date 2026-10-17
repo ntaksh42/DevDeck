@@ -5,6 +5,7 @@ import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { sortLabels, type SortKey, type SortState } from "./myPullRequestsTypes";
 import { gridRowStateClass } from "@/lib/gridRowState";
+import { MyPrBadges } from "./MyPrBadges";
 
 export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): ReactNode {
   switch (key) {
@@ -40,6 +41,7 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
           <span className="truncate font-medium text-foreground" title={pr.title}>
             {pr.title}
           </span>
+          <MyPrBadges pr={pr} />
         </div>
       );
     case "creationDate":

@@ -18,14 +18,16 @@ use crate::pipelines::{
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
     UpdatePipelineDefinitionInput,
 };
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrReviewerSuggestions,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
-    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator,
+    PrReviewer, PrReviewerSuggestions, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
+    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
+    UpdatePullRequestInput,
 };
 use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
@@ -267,6 +269,24 @@ impl Provider for GithubProvider {
             files_considered: 0,
             files_total: 0,
         })
+    }
+
+    async fn get_pull_request_health(&self, _input: PrLocator) -> Result<PrHealth> {
+        // The GitHub rows come from the cached review summaries instead.
+        Ok(PrHealth {
+            ci_status: "none".to_string(),
+            ci_context: None,
+            ci_check_count: 0,
+            unresolved_threads: 0,
+        })
+    }
+
+    async fn list_pull_request_policies(
+        &self,
+        _input: PrLocator,
+    ) -> Result<Vec<PolicyRequirement>> {
+        // Branch policy evaluations are an Azure DevOps concept; no section is shown.
+        Ok(Vec::new())
     }
 
     async fn post_pull_request_comment(

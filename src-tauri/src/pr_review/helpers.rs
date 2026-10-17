@@ -6,6 +6,14 @@ use super::types::{PrComment, PrLocator, PrThread};
 
 pub(super) const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
 
+/// A short note for the policy settings worth showing next to a policy's name;
+/// other policy types have nothing useful to add.
+pub(super) fn policy_detail(settings: &serde_json::Value) -> Option<String> {
+    let approvers = settings.get("minimumApproverCount")?.as_i64()?;
+    let plural = if approvers == 1 { "" } else { "s" };
+    Some(format!("{approvers} approver{plural} required"))
+}
+
 /// Azure DevOps serializes `VersionControlChangeType` as comma-joined tokens
 /// (e.g. "edit, rename", "undelete"). Substring matching misreads "undelete" as
 /// a delete, so the tokens are parsed explicitly.

@@ -33,6 +33,18 @@ pub struct PrReviewerSuggestions {
     pub files_total: i64,
 }
 
+/// One policy evaluated against a pull request (a "merge requirement").
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyRequirement {
+    pub name: String,
+    /// `approved` | `rejected` | `running` | `queued` | `notApplicable` | `broken`.
+    pub status: String,
+    pub is_blocking: bool,
+    /// Short note derived from the policy settings, e.g. "2 approvers required".
+    pub detail: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPullRequestFileDiffInput {

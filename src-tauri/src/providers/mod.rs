@@ -28,14 +28,16 @@ use crate::pipelines::{
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
     UpdatePipelineDefinitionInput,
 };
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrReviewerSuggestions,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
-    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator,
+    PrReviewer, PrReviewerSuggestions, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
+    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
+    UpdatePullRequestInput,
 };
 use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
@@ -167,6 +169,10 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: PrLocator,
     ) -> Result<PrReviewerSuggestions>;
+    /// CI verdict and unresolved-comment count for one pull request.
+    async fn get_pull_request_health(&self, input: PrLocator) -> Result<PrHealth>;
+    /// Branch policies evaluated for the pull request (its merge requirements).
+    async fn list_pull_request_policies(&self, input: PrLocator) -> Result<Vec<PolicyRequirement>>;
     async fn post_pull_request_comment(
         &self,
         input: PostPullRequestCommentInput,
