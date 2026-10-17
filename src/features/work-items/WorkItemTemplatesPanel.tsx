@@ -22,6 +22,7 @@ import {
   emptyDraft,
   templateSummary,
 } from "./workItemTemplatesDraft";
+import { isImeComposing } from "@/lib/utils";
 
 type WorkItemTemplatesPanelProps = {
   /**
@@ -288,6 +289,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
             className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Escape") {
                 event.stopPropagation();
                 closeManager();

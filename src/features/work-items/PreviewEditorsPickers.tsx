@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import type { ClassificationNodeOption } from "@/lib/azdoCommands";
 import { useCloseOnOutsidePointer } from "./PreviewEditorsBase";
 import { workItemPriorityDotClass } from "./WorkItemBadges";
+import { isImeComposing } from "@/lib/utils";
 
 export function CustomFieldPicker({
   current,
@@ -118,6 +119,7 @@ export function CustomFieldPicker({
                     value={customValue}
                     onChange={(event) => setCustomValue(event.target.value)}
                     onKeyDown={(e) => {
+                      if (isImeComposing(e)) return;
                       if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
                     }}
                     placeholder="Custom value"

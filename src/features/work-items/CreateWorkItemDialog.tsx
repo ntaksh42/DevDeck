@@ -18,6 +18,7 @@ import {
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from "./queryKeys";
+import { isImeComposing } from "@/lib/utils";
 
 /**
  * Seed values for the create form. All fields are optional: the "New item"
@@ -168,6 +169,7 @@ export function CreateWorkItemDialog({
   // Contain keys so the grid underneath does not also react to typing/arrows.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       close();

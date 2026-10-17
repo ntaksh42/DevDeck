@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isImeComposing } from "@/lib/utils";
 
 // Per-column value filter dropdown shared by the grids that support filtering a
 // column by its discrete values (My Reviews, PR search). The active selection is
@@ -36,6 +37,7 @@ export function ColumnFilterDropdown({
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (isImeComposing(e)) return;
       if (e.key === "Escape") {
         e.stopPropagation();
         onClose();
@@ -78,6 +80,7 @@ export function ColumnFilterDropdown({
   // grid behind it (the editable branch of its onKeyDown moves the row
   // selection) while the popup is open.
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       e.stopPropagation();

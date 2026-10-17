@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { useCloseOnOutsidePointer } from './PreviewEditors';
 import { MAX_FIELD_PRESETS, type WorkItemFieldPreset } from './fieldPresetsStorage';
+import { isImeComposing } from '@/lib/utils';
 
 // Popover half of the "Field presets…" View options item: no trigger of its
 // own, the toolbar's menu opens it and gets focus back on `onClose`.
@@ -38,6 +39,7 @@ export function PresetMenu({
       ref={menuRef}
       className="relative"
       onKeyDown={(event) => {
+        if (isImeComposing(event)) return;
         if (event.key === "Escape" && open) {
           event.preventDefault();
           event.stopPropagation();
