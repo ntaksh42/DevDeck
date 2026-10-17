@@ -31,6 +31,7 @@ export function InboxListPane({
   virtual,
   entries,
   selectedIndex,
+  checkedIds,
   isLoading,
   error,
   onRetry,
@@ -51,6 +52,7 @@ export function InboxListPane({
   virtual: ReturnType<typeof useGridVirtualizer>;
   entries: InboxEntry[];
   selectedIndex: number;
+  checkedIds: ReadonlySet<number>;
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -65,7 +67,7 @@ export function InboxListPane({
 
   // Escape from the Done / Snoozed list (rows or status bar) returns to the open list.
   function handleSectionKeyDown(event: KeyboardEvent) {
-    if (event.key !== "Escape" || tab === "open" || isEditableTarget(event.target)) return;
+    if (event.key !== "Escape" || event.defaultPrevented || tab === "open" || isEditableTarget(event.target)) return;
     event.preventDefault();
     onTabChange("open");
     window.setTimeout(() => listRef.current?.focus(), 0);
@@ -116,6 +118,7 @@ export function InboxListPane({
                     tab={tab}
                     domId={`inbox-row-${entry.id}`}
                     selected={rowIndex === selectedIndex}
+                    checked={checkedIds.has(entry.id)}
                     onSelect={() => onSelect(rowIndex)}
                     onOpen={() => onOpen(entry)}
                   />
@@ -128,7 +131,7 @@ export function InboxListPane({
       )}
 
       <ListStatusBar
-        summary={[itemCount(entries.length)]}
+        summary={[itemCount(entries.length), checkedIds.size > 0 && `${checkedIds.size} marked (Esc clears)`]}
         done={{ count: tabCounts.done, active: tab === "done", onToggle: () => onTabChange(tab === "done" ? "open" : "done") }}
         snoozed={{
           count: tabCounts.snoozed,
