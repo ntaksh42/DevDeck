@@ -212,6 +212,38 @@ export async function listPullRequestWorkItems(
   return z.array(z.number()).parse(result);
 }
 
+const prHealthSchema = z.object({
+  // succeeded | failed | in_progress | none
+  ciStatus: z.string(),
+  ciContext: z.string().nullable(),
+  ciCheckCount: z.number(),
+  unresolvedThreads: z.number(),
+  // Azure DevOps' merge evaluation, e.g. "conflicts".
+  mergeStatus: z.string().nullable().default(null),
+});
+export type PrHealth = z.infer<typeof prHealthSchema>;
+
+/** CI verdict and open-comment count for one pull request (two requests). */
+export async function getPullRequestHealth(input: PrLocatorInput): Promise<PrHealth> {
+  const result = await invokeCommand("get_pull_request_health", { input });
+  return prHealthSchema.parse(result);
+}
+
+const policyRequirementSchema = z.object({
+  name: z.string(),
+  // approved | rejected | running | queued | notApplicable | broken
+  status: z.string(),
+  isBlocking: z.boolean(),
+  detail: z.string().nullable(),
+});
+export type PolicyRequirement = z.infer<typeof policyRequirementSchema>;
+
+/** Branch policies evaluated for the pull request (its merge requirements). */
+export async function listPullRequestPolicies(input: PrLocatorInput): Promise<PolicyRequirement[]> {
+  const result = await invokeCommand("list_pull_request_policies", { input });
+  return z.array(policyRequirementSchema).parse(result);
+}
+
 export async function getPullRequestFileDiff(
   input: GetPullRequestFileDiffInput,
 ): Promise<PrFileDiff> {

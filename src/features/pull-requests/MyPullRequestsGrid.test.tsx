@@ -31,6 +31,7 @@ const pr: MyCreatedPullRequestSummary = {
   isDraft: false,
   approvals: 0,
   reviewerCount: 0,
+  mergeStatus: null,
 };
 
 describe("MyPullRequestsGrid copy shortcuts", () => {
@@ -52,6 +53,23 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     expect(within(grid).getByText(pr.title)).toBeTruthy();
     fireEvent.keyDown(grid, { key: "l" });
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("!77")));
+  });
+
+  it("marks a PR with merge conflicts next to its title", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    client.setQueryData(["myCreatedPullRequests", "contoso"], {
+      pullRequests: [pr, { ...pr, pullRequestId: 78, title: "Conflicted", mergeStatus: "conflicts" }],
+      warnings: [],
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    expect(within(grid).getAllByText("Conflicts")).toHaveLength(1);
   });
 
   it("copies the selected PR as a Markdown link with L", async () => {

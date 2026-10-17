@@ -103,6 +103,8 @@ impl PullRequestService {
                     is_draft: pr.is_draft,
                     approvals: row.approvals,
                     reviewer_count: row.reviewer_count,
+                    // The active-PR cache does not keep Azure DevOps' merge status.
+                    merge_status: None,
                 }
             })
             .collect();

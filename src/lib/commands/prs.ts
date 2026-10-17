@@ -78,6 +78,8 @@ export const myCreatedPullRequestSummarySchema = z.object({
   // How many reviewers approved (vote === 10) out of the total assigned.
   approvals: z.number(),
   reviewerCount: z.number(),
+  // Azure DevOps `mergeStatus` from the list response ("conflicts" marks a PR that cannot merge).
+  mergeStatus: z.string().nullable().default(null),
 });
 
 export const myCreatedPullRequestSummariesSchema = z.array(myCreatedPullRequestSummarySchema);

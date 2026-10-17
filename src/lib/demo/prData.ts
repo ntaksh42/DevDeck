@@ -230,6 +230,7 @@ export function demoMyCreatedPullRequests(): MyCreatedPullRequestSummary[] {
       isDraft: false,
       approvals: 1,
       reviewerCount: 2,
+      mergeStatus: "conflicts",
     },
     {
       organizationId: "contoso",
@@ -246,6 +247,7 @@ export function demoMyCreatedPullRequests(): MyCreatedPullRequestSummary[] {
       isDraft: true,
       approvals: 0,
       reviewerCount: 1,
+      mergeStatus: null,
     },
   ];
 }
