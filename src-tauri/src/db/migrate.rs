@@ -679,5 +679,10 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         super::inbox_insight::migrate_v26(conn)?;
         conn.execute_batch("PRAGMA user_version = 26;")?;
     }
+    if current < 27 {
+        // Inbox: one row per PR thread / work item instead of per comment.
+        super::inbox_threads::migrate_v27(conn)?;
+        conn.execute_batch("PRAGMA user_version = 27;")?;
+    }
     Ok(())
 }

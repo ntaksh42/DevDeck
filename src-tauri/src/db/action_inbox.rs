@@ -63,6 +63,9 @@ pub struct InboxItem {
     pub done_at: Option<String>,
     pub file_path: Option<String>,
     pub line: Option<i64>,
+    /// Comments addressed to the user in this conversation since it was last
+    /// finished (one row per PR thread / work item).
+    pub hit_count: i64,
     /// Claude Code's summary of the item, when Settings turns it on.
     pub insight: Option<super::InboxInsight>,
 }
@@ -91,7 +94,8 @@ pub struct OpenInboxRef {
 }
 
 impl AppDatabase {
-    /// Inserts items that are not already present. Returns how many were new.
+    /// Adds new items, folding a newer comment into its conversation's row.
+    /// Returns how many rows were added or updated.
     pub fn insert_inbox_items(&self, items: &[NewInboxItem]) -> Result<usize> {
         if items.is_empty() {
             return Ok(0);
@@ -216,7 +220,7 @@ impl AppDatabase {
     }
 }
 
-fn format_time(value: DateTime<Utc>) -> String {
+pub(super) fn format_time(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
@@ -225,43 +229,13 @@ fn insert_inbox_items(
     items: &[NewInboxItem],
     now: DateTime<Utc>,
 ) -> Result<usize> {
-    let detected_at = format_time(now);
-    let mut inserted = 0;
-    {
-        let mut stmt = conn.prepare_cached(
-            "INSERT OR IGNORE INTO action_inbox_items( \
-                 org_id, kind, subject_id, project_id, project_name, repository_id, \
-                 repository_name, thread_id, comment_id, title, author, snippet, web_url, \
-                 state, detected_at, file_path, line) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'open', ?14, ?15, ?16)",
-        )?;
-        for item in items {
-            inserted += stmt.execute(params![
-                item.organization_id,
-                item.kind,
-                item.subject_id,
-                item.project_id,
-                item.project_name,
-                item.repository_id,
-                item.repository_name,
-                item.thread_id,
-                item.comment_id,
-                item.title,
-                item.author,
-                item.snippet,
-                item.web_url,
-                detected_at,
-                item.file_path,
-                item.line,
-            ])?;
-        }
-    }
+    let changed = super::inbox_threads::insert_inbox_items(conn, items, now)?;
     let cutoff = format_time(now - Duration::days(DONE_RETENTION_DAYS));
     conn.execute(
         "DELETE FROM action_inbox_items WHERE state = 'done' AND done_at < ?1",
         params![cutoff],
     )?;
-    Ok(inserted)
+    Ok(changed)
 }
 
 fn list_inbox_items(
@@ -281,7 +255,7 @@ fn list_inbox_items(
     let mut sql = format!(
         "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id, \
                 repository_name, thread_id, comment_id, title, author, snippet, web_url, \
-                state, snoozed_until, detected_at, done_at, file_path, line \
+                state, snoozed_until, detected_at, done_at, file_path, line, hit_count \
          FROM action_inbox_items WHERE {state_clause}"
     );
     let mut bind: Vec<String> = vec![format_time(now)];
@@ -398,6 +372,7 @@ pub(super) fn map_inbox_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<InboxI
         done_at: row.get(17)?,
         file_path: row.get(18)?,
         line: row.get(19)?,
+        hit_count: row.get(20)?,
         insight: None,
     })
 }

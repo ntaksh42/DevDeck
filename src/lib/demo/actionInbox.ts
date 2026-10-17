@@ -25,6 +25,7 @@ function buildSeed(): InboxItem[] {
     doneAt: null,
     filePath: null,
     line: null,
+    hitCount: 1,
     insight: null,
   };
   const seed: InboxItem[] = [
@@ -39,6 +40,7 @@ function buildSeed(): InboxItem[] {
       filePath: "/src/app/dashboard.ts",
       line: 7,
       commentId: 5011,
+      hitCount: 2,
       title: "Add pull request search dashboard",
       author: "Frank Lee",
       snippet: "@you ここの null 扱いを確認してください",

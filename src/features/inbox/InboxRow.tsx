@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, MessageSquare } from "lucide-react";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { gridRowStateClass } from "@/lib/gridRowState";
@@ -85,6 +85,15 @@ export const InboxRow = forwardRef<
           </span>
         ) : null}
       </span>
+      {item.hitCount > 1 ? (
+        <span
+          className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium tabular-nums text-muted-foreground"
+          title={`${item.hitCount} comments waiting in this conversation`}
+        >
+          <MessageSquare className="h-3 w-3" aria-hidden="true" />
+          {item.hitCount}
+        </span>
+      ) : null}
       {item.webUrl ? (
         <button
           type="button"

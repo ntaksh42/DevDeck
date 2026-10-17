@@ -43,6 +43,13 @@ describe("InboxView", () => {
     expect(rows[3].textContent).toContain("!189 android-app");
   });
 
+  it("shows how many comments wait in a conversation when there are several", async () => {
+    renderView();
+    const list = await openList();
+    expect(within(rowFor(list, "!42")).getByTitle("2 comments waiting in this conversation").textContent).toBe("2");
+    expect(within(rowFor(list, "!103")).queryByTitle(/comments waiting/)).toBeNull();
+  });
+
   it("shows the item count and Done / Snoozed buttons in the status bar", async () => {
     renderView();
     await openList();
