@@ -9,6 +9,7 @@ import { QuickPipelinesSettings } from './QuickPipelinesSettings';
 import { SyncHealthSettings } from './SyncHealthSettings';
 import { ThemeSettings } from './ThemeSettings';
 import { DataCacheSettings } from './DataCacheSettings';
+import { BackupSettings } from './BackupSettings';
 import { ValidationModeSettings } from './ValidationModeSettings';
 import { ExperimentalSettings } from './ExperimentalSettings';
 import { ExperimentalUsageStats } from './ExperimentalUsageStats';
@@ -170,6 +171,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Sync health",
         keywords: "background sync status last refresh error",
         render: (organizations) => <SyncHealthSettings organizations={organizations} />,
+      },
+      {
+        id: "backup",
+        title: "Backup",
+        keywords: "export import settings json transfer restore migrate",
+        render: () => <BackupSettings />,
       },
       {
         id: "data-cache",
