@@ -21,8 +21,9 @@ describe("isReadyToMerge", () => {
   });
 
   it("is not ready while CI fails, runs, or a required policy is unmet", () => {
-    const health = { ciStatus: "succeeded", ciContext: null, ciCheckCount: 1, unresolvedThreads: 0 };
+    const health = { ciStatus: "succeeded", ciContext: null, ciCheckCount: 1, unresolvedThreads: 0, mergeStatus: null };
     expect(isReadyToMerge(base, health, [])).toBe(true);
+    expect(isReadyToMerge(base, { ...health, mergeStatus: "conflicts" }, [])).toBe(false);
     expect(isReadyToMerge(base, { ...health, ciStatus: "failed" }, [])).toBe(false);
     expect(isReadyToMerge(base, { ...health, ciStatus: "in_progress" }, [])).toBe(false);
     const unmet = { name: "Build", status: "rejected", isBlocking: true, detail: null };

@@ -21,6 +21,8 @@ pub struct PrHealth {
     pub ci_check_count: i64,
     /// Threads with a human comment that are still open.
     pub unresolved_threads: i64,
+    /// Azure DevOps' merge evaluation, e.g. `conflicts`.
+    pub merge_status: Option<String>,
 }
 
 /// Open threads that carry a human comment; votes, pushes and other system
@@ -43,13 +45,14 @@ impl PrReviewService {
             .db
             .resolve_organization(pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let (statuses, threads) = tokio::try_join!(
+        let (statuses, threads, detail) = tokio::try_join!(
             client.list_pull_request_statuses(
                 &pr.project_id,
                 &pr.repository_id,
                 pr.pull_request_id
             ),
             client.list_pull_request_threads(&pr.project_id, &pr.repository_id, pr.pull_request_id),
+            client.get_pull_request_detail(&pr.project_id, &pr.repository_id, pr.pull_request_id),
         )?;
         let ci = summarize_pr_ci(&statuses);
         Ok(PrHealth {
@@ -57,6 +60,7 @@ impl PrReviewService {
             ci_context: ci.context_name,
             ci_check_count: ci.check_count as i64,
             unresolved_threads: count_unresolved(&threads),
+            merge_status: detail.merge_status,
         })
     }
 }
