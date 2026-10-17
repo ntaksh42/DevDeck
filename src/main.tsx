@@ -8,10 +8,12 @@ import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import "@fontsource-variable/hanken-grotesk/index.css";
 import "./index.css";
 import { applyTheme, loadThemePreference } from "./lib/theme";
+import { applyUiScale, loadUiScale } from "./lib/uiScale";
 
 // Apply the stored theme synchronously before React renders so the first paint
 // already has the correct .dark class (no light-to-dark flash on startup).
 applyTheme(loadThemePreference());
+applyUiScale(loadUiScale());
 
 const queryClient = new QueryClient({
   defaultOptions: {

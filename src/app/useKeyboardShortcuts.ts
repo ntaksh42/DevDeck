@@ -13,6 +13,7 @@ import {
 import { dispatchWorkItemCommand, gotoViewMapFromKeybindings } from "./appHelpers";
 import { GOTO_CHAIN_TIMEOUT_MS } from "./types";
 import { toggleAgentPanel } from "@/components/agent/agentSubject";
+import { resetUiScale, stepUiScale } from "@/lib/uiScale";
 import { bindFramePaneFocus } from "@/lib/paneFocus";
 import type { View } from "./types";
 
@@ -260,6 +261,28 @@ export function useKeyboardShortcuts({
       if (matchesCombo(keybindings.toggleAgent, event)) {
         event.preventDefault();
         toggleAgentPanel();
+        return;
+      }
+
+      // Ctrl+Shift+= reports key "+", so accept it as zoom-in too.
+      if (
+        matchesCombo(keybindings.uiScaleUp, event) ||
+        (keybindings.uiScaleUp === "Ctrl+=" && event.ctrlKey && event.key === "+")
+      ) {
+        event.preventDefault();
+        stepUiScale(1);
+        return;
+      }
+
+      if (matchesCombo(keybindings.uiScaleDown, event)) {
+        event.preventDefault();
+        stepUiScale(-1);
+        return;
+      }
+
+      if (matchesCombo(keybindings.uiScaleReset, event)) {
+        event.preventDefault();
+        resetUiScale();
         return;
       }
 

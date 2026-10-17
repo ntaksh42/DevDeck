@@ -66,7 +66,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       {
         id: "appearance",
         title: "Appearance",
-        keywords: "theme dark light system color",
+        keywords: "theme dark light system color zoom scale size",
         render: () => <ThemeSettings />,
       },
       {
