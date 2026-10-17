@@ -95,6 +95,11 @@ export async function getActionInboxCounts(organizationId?: string): Promise<Inb
   return inboxCountsSchema.parse(result);
 }
 
+/** Starts Claude's notes for one open item; the result arrives as an Inbox update. */
+export async function generateActionInboxInsight(id: number): Promise<void> {
+  await invokeCommand("generate_action_inbox_insight", { id });
+}
+
 export async function setActionInboxItemState(input: SetInboxItemStateInput): Promise<number> {
   const result = await invokeCommand("set_action_inbox_item_state", { input });
   return z.number().parse(result);

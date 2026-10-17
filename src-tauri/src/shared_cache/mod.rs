@@ -33,7 +33,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::error::{AppError, Result};
 
 pub use pull_requests::{
-    read_pull_requests, write_pull_requests, SharedPullRequest, SharedReviewer,
+    read_pull_requests, read_reviewers, write_pull_requests, SharedPullRequest, SharedReviewer,
 };
 pub use work_items::{upsert_work_items, write_work_items, SharedWorkItem};
 

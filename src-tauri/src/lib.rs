@@ -268,7 +268,8 @@ pub fn run() {
             commands::notifications::record_notification,
             commands::action_inbox::list_action_inbox_items,
             commands::action_inbox::get_action_inbox_counts,
-            commands::action_inbox::set_action_inbox_item_state
+            commands::action_inbox::set_action_inbox_item_state,
+            commands::action_inbox::generate_action_inbox_insight
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
