@@ -30,7 +30,7 @@ import {
   type WorkItemQueryView,
   type WorkItemViewLayout,
 } from './workItemViewsStorage';
-import { firstCustomView, viewCardColumnCount } from './workItemViewsHelpers';
+import { firstCustomView, viewCardVerticalIndex } from './workItemViewsHelpers';
 import {
   loadWorkItemViewsCardMode,
   loadWorkItemViewsCollapsed,
@@ -287,7 +287,8 @@ export function WorkItemViewsPanel({
     // Ctrl+B is handled by the panel wrapper so it also works from the grid.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     // The chip row is a single line, so Up/Down step like Left/Right.
-    const columnCount = listCollapsed ? 1 : viewCardColumnCount(event.currentTarget);
+    const verticalIndex = (step: 1 | -1) =>
+      listCollapsed ? selectedViewIndex + step : viewCardVerticalIndex(event.currentTarget, selectedViewIndex, step);
     if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
       event.preventDefault();
       moveSelectedView(-1);
@@ -302,10 +303,10 @@ export function WorkItemViewsPanel({
       selectViewAt(selectedViewIndex - 1);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      selectViewAt(selectedViewIndex + columnCount);
+      selectViewAt(verticalIndex(1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      selectViewAt(selectedViewIndex - columnCount);
+      selectViewAt(verticalIndex(-1));
     } else if (event.key === "Home") {
       event.preventDefault();
       selectViewAt(0);
