@@ -35,6 +35,13 @@ export function WorkItemPreviewToolbar({
   const [popover, setPopover] = useState<"presets" | "fields" | null>(null);
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // The command palette's "Create a branch for the selected work item".
+  useEffect(() => {
+    const open = () => setBranchDialogOpen(true);
+    window.addEventListener("azdodeck:work-items:create-branch", open);
+    return () => window.removeEventListener("azdodeck:work-items:create-branch", open);
+  }, []);
   const wasOpenRef = useRef(false);
 
   // A popover opened from the menu hands focus back to the "⋯" trigger when

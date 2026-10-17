@@ -92,6 +92,12 @@ describe("WorkItemPreviewToolbar", () => {
     expect(follow.toggleFollow).toHaveBeenCalledTimes(1);
   });
 
+  it("opens the branch dialog from the command palette event", async () => {
+    renderToolbar();
+    window.dispatchEvent(new CustomEvent("azdodeck:work-items:create-branch"));
+    expect(await screen.findByRole("dialog", { name: /Create branch/ })).toBeTruthy();
+  });
+
   it("omits Duplicate when the host cannot duplicate", () => {
     renderToolbar({ onDuplicate: null });
     fireEvent.click(screen.getByRole("button", { name: "View options" }));

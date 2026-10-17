@@ -203,6 +203,14 @@ export function useCommandActions({
     {
       disabled: !isWorkItemView,
       group: "Work Items",
+      id: "wi.createBranch",
+      keywords: ["branch", "git", "checkout"],
+      label: "Create a branch for the selected work item",
+      run: () => dispatchWorkItemCommand("create-branch"),
+    },
+    {
+      disabled: !isWorkItemView,
+      group: "Work Items",
       id: "wi.postComment",
       keywords: ["submit", "discussion"],
       label: "Post work item comment",
