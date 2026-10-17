@@ -12,6 +12,27 @@ pub struct PrLocator {
     pub pull_request_id: i64,
 }
 
+/// A person who recently changed the files of a pull request.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrReviewerSuggestion {
+    /// Git author name; the caller resolves it to a directory identity.
+    pub name: String,
+    pub email: Option<String>,
+    pub commit_count: i64,
+    /// One line on why, e.g. "3 recent commits across 2 changed files".
+    pub evidence: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrReviewerSuggestions {
+    pub suggestions: Vec<PrReviewerSuggestion>,
+    /// Changed files whose history was read, out of `files_total`.
+    pub files_considered: i64,
+    pub files_total: i64,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPullRequestFileDiffInput {

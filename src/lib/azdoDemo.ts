@@ -223,6 +223,15 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_pull_request_commits":
       return demoPrCommits;
+    case "suggest_pull_request_reviewers":
+      return {
+        suggestions: [
+          { name: "Carol Wang", email: "carol@contoso.example", commitCount: 6, evidence: "6 recent commits across 3 changed files" },
+          { name: "Frank Lee", email: "frank@contoso.example", commitCount: 2, evidence: "2 recent commits across 1 changed file" },
+        ],
+        filesConsidered: 3,
+        filesTotal: 3,
+      };
     case "list_pull_request_work_items":
       // Two ids so the browser preview exercises the multi-item chooser.
       return [123, 118];

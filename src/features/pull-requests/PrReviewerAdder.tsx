@@ -1,7 +1,11 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { searchPullRequestMentions } from "@/lib/azdoCommands";
+import {
+  searchPullRequestMentions,
+  suggestPullRequestReviewers,
+  type PrLocatorInput,
+} from "@/lib/azdoCommands";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 const MAX_RESULTS = 8;
@@ -16,12 +20,15 @@ export type AddReviewerRequest = { reviewerId?: string; isRequired: boolean };
 // add, Esc to close, and focus returns to the button that opened it.
 export function PrReviewerAdder({
   organizationId,
+  pr,
   existingReviewerIds,
   canAddMe,
   busy,
   onAdd,
 }: {
   organizationId: string;
+  /** When set, people who recently changed the PR's files are suggested before anything is typed. */
+  pr?: PrLocatorInput;
   existingReviewerIds: ReadonlySet<string>;
   canAddMe: boolean;
   busy: boolean;
@@ -41,14 +48,52 @@ export function PrReviewerAdder({
     enabled: open && term.length >= 2,
     staleTime: 30_000,
   });
-  const candidates = (search.data ?? [])
-    .filter((candidate) => !existingReviewerIds.has(candidate.id))
-    .slice(0, MAX_RESULTS);
+  const searching = term.length >= 2;
+
+  // Commit authors are Git identities, so each suggestion is looked up in the
+  // directory by email before it can be added.
+  const suggestionsQuery = useQuery({
+    queryKey: ["prReviewerSuggestions", organizationId, pr?.repositoryId, pr?.pullRequestId],
+    queryFn: async () => {
+      const { suggestions, filesConsidered, filesTotal } = await suggestPullRequestReviewers(pr!);
+      const people = await Promise.all(
+        suggestions.map(async (suggestion) => {
+          const found = await searchPullRequestMentions({
+            organizationId,
+            query: suggestion.email ?? suggestion.name,
+          });
+          const wanted = (suggestion.email ?? suggestion.name).toLowerCase();
+          const match = found.find(
+            (candidate) =>
+              candidate.uniqueName?.toLowerCase() === wanted ||
+              candidate.displayName.toLowerCase() === wanted,
+          );
+          return match ? { candidate: match, evidence: suggestion.evidence } : null;
+        }),
+      );
+      return {
+        people: people.flatMap((person) => (person ? [person] : [])),
+        partial: filesConsidered < filesTotal ? `${filesConsidered} of ${filesTotal} files counted` : null,
+      };
+    },
+    enabled: open && !!pr,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  const suggested = (suggestionsQuery.data?.people ?? []).filter(
+    ({ candidate }) => !existingReviewerIds.has(candidate.id),
+  );
+  const candidates = searching
+    ? (search.data ?? [])
+        .filter((candidate) => !existingReviewerIds.has(candidate.id))
+        .slice(0, MAX_RESULTS)
+        .map((candidate) => ({ candidate, evidence: null as string | null }))
+    : suggested;
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
-  useEffect(() => setActiveIndex(0), [term]);
+  useEffect(() => setActiveIndex(0), [term, suggested.length]);
 
   function close() {
     setOpen(false);
@@ -77,8 +122,8 @@ export function PrReviewerAdder({
     } else if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
-      const candidate = candidates[activeIndex];
-      if (candidate) add(candidate.id);
+      const entry = candidates[activeIndex];
+      if (entry) add(entry.candidate.id);
     }
   }
 
@@ -134,12 +179,18 @@ export function PrReviewerAdder({
               Required
             </label>
           </div>
-          {term.length >= 2 && !search.isFetching && candidates.length === 0 ? (
+          {searching && !search.isFetching && candidates.length === 0 ? (
             <p className="px-1 text-[11px] text-muted-foreground">No matching people.</p>
+          ) : null}
+          {!searching && candidates.length > 0 ? (
+            <p className="px-1 text-[11px] text-muted-foreground">
+              Suggested from recent commits to the changed files
+              {suggestionsQuery.data?.partial ? ` (${suggestionsQuery.data.partial})` : ""}
+            </p>
           ) : null}
           {candidates.length > 0 ? (
             <ul id="pr-reviewer-results" role="listbox" aria-label="People">
-              {candidates.map((candidate, index) => (
+              {candidates.map(({ candidate, evidence }, index) => (
                 <li
                   key={candidate.id}
                   id={`pr-reviewer-option-${index}`}
@@ -154,7 +205,9 @@ export function PrReviewerAdder({
                   <span className="truncate font-medium text-foreground">
                     {candidate.displayName}
                   </span>
-                  {candidate.uniqueName ? (
+                  {evidence ? (
+                    <span className="truncate text-muted-foreground">{evidence}</span>
+                  ) : candidate.uniqueName ? (
                     <span className="truncate text-muted-foreground">{candidate.uniqueName}</span>
                   ) : null}
                 </li>

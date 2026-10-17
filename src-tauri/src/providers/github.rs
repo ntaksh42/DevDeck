@@ -21,8 +21,8 @@ use crate::pipelines::{
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
     EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
-    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrReviewerSuggestions,
+    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
     RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
@@ -255,6 +255,18 @@ impl Provider for GithubProvider {
     async fn list_pull_request_work_items(&self, _input: PrLocator) -> Result<Vec<i64>> {
         // GitHub pull requests have no Azure Boards work item links.
         Ok(Vec::new())
+    }
+
+    async fn suggest_pull_request_reviewers(
+        &self,
+        _input: PrLocator,
+    ) -> Result<PrReviewerSuggestions> {
+        // Suggestions come from Azure DevOps commit history; GitHub has none here.
+        Ok(PrReviewerSuggestions {
+            suggestions: Vec::new(),
+            files_considered: 0,
+            files_total: 0,
+        })
     }
 
     async fn post_pull_request_comment(

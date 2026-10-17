@@ -5,8 +5,8 @@ use crate::error::Result;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
     EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
-    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrReviewerSuggestions,
+    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
     RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
@@ -71,6 +71,19 @@ pub async fn list_pull_request_work_items(
         .provider()
         .await?
         .list_pull_request_work_items(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn suggest_pull_request_reviewers(
+    input: PrLocator,
+    state: State<'_, AppState>,
+) -> Result<PrReviewerSuggestions> {
+    state
+        .provider()
+        .await?
+        .suggest_pull_request_reviewers(input)
         .await
 }
 

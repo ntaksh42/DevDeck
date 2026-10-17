@@ -212,6 +212,27 @@ export async function listPullRequestWorkItems(
   return z.array(z.number()).parse(result);
 }
 
+const prReviewerSuggestionSchema = z.object({
+  name: z.string(),
+  email: z.string().nullable(),
+  commitCount: z.number(),
+  evidence: z.string(),
+});
+const prReviewerSuggestionsSchema = z.object({
+  suggestions: z.array(prReviewerSuggestionSchema),
+  filesConsidered: z.number(),
+  filesTotal: z.number(),
+});
+export type PrReviewerSuggestions = z.infer<typeof prReviewerSuggestionsSchema>;
+
+/** People who recently changed the pull request's files, with a one-line reason each. */
+export async function suggestPullRequestReviewers(
+  input: PrLocatorInput,
+): Promise<PrReviewerSuggestions> {
+  const result = await invokeCommand("suggest_pull_request_reviewers", { input });
+  return prReviewerSuggestionsSchema.parse(result);
+}
+
 export async function getPullRequestFileDiff(
   input: GetPullRequestFileDiffInput,
 ): Promise<PrFileDiff> {

@@ -21,8 +21,8 @@ use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
     EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
     PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewService, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    PrReviewerSuggestions, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    RemovePullRequestLabelInput, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -240,6 +240,13 @@ impl Provider for AzdoProvider {
 
     async fn list_pull_request_work_items(&self, input: PrLocator) -> Result<Vec<i64>> {
         self.pr_review.list_work_item_ids(input).await
+    }
+
+    async fn suggest_pull_request_reviewers(
+        &self,
+        input: PrLocator,
+    ) -> Result<PrReviewerSuggestions> {
+        self.pr_review.suggest_reviewers(input).await
     }
 
     async fn post_pull_request_comment(

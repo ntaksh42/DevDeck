@@ -7,11 +7,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
-import type {
-  PrLabel,
-  PrReviewer,
-  PullRequestReview,
-  ReviewPullRequestSummary,
+import {
+  prLocator,
+  type PrLabel,
+  type PrReviewer,
+  type PullRequestReview,
+  type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 import { type AddReviewerRequest, PrReviewerAdder } from "./PrReviewerAdder";
@@ -305,6 +306,7 @@ export function PrReviewHeader({
               {onAddReviewer ? (
                 <PrReviewerAdder
                   organizationId={selectedPr.organizationId}
+                  pr={prLocator(selectedPr)}
                   existingReviewerIds={
                     new Set(reviewers.flatMap((reviewer) => (reviewer.id ? [reviewer.id] : [])))
                   }
