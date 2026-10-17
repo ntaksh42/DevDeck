@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { isImeComposing } from "@/lib/utils";
 
 export type MultiSelectOption = { value: string; label: string };
 
@@ -109,6 +110,7 @@ export function MultiSelectFilter({
   }
 
   function onPopoverKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

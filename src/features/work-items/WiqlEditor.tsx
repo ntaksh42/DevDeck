@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Maximize2, Minimize2, WandSparkles } from 'lucide-react';
 import { formatWiql, tokenizeWiql, type WiqlCompletion } from './workItemViewsHelpers';
+import { isImeComposing } from '@/lib/utils';
 
 // The overlay and the textarea must resolve to the exact same text metrics, or
 // the highlighted tokens drift away from the characters the user is typing.
@@ -84,6 +85,7 @@ export function WiqlEditor({
   }
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (isImeComposing(event)) return;
     if (event.ctrlKey && event.key === " ") {
       event.preventDefault();
       setActiveCompletionIndex(0);

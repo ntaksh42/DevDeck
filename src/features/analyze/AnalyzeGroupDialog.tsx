@@ -12,6 +12,7 @@ import {
   type AnalyzeGranularity,
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
+import { isImeComposing } from "@/lib/utils";
 
 /** Mirrors the backend guard so the error surfaces before a request is made. */
 function containsAsof(wiql: string): boolean {
@@ -146,6 +147,7 @@ export function AnalyzeGroupDialog({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           // Contained here so Escape never reaches the group list behind it.
+          if (isImeComposing(event)) return;
           if (event.key === "Escape") {
             event.stopPropagation();
             close();

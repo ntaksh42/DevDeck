@@ -368,11 +368,10 @@ export function ViewsListPanel({
           role="listbox"
           aria-label="Saved work item views"
           data-views-panel="true"
-          className={cardMode === "compact" ? "grid gap-1 overflow-auto p-1.5" : "grid gap-2 overflow-auto p-2"}
+          className={cardMode === "compact" ? "flex flex-wrap items-start gap-1 overflow-auto p-1.5" : "grid gap-2 overflow-auto p-2"}
           style={
             cardMode === "compact"
               ? {
-                  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 220px))",
                   maxHeight: "min(24vh, 200px)",
                 }
               : {

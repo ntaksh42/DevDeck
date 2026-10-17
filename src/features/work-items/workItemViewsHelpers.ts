@@ -256,6 +256,32 @@ export function viewExportFileName(): string {
   return `azdodeck-work-item-views-${stamp}.json`;
 }
 
+/** Index of the card one row above (step -1) or below (step 1) the card at `index`. */
+export function viewCardVerticalIndex(container: HTMLElement, index: number, step: 1 | -1): number {
+  if (window.getComputedStyle(container).display !== "flex") {
+    return index + step * viewCardColumnCount(container);
+  }
+  // Wrapped cards have varying widths, so pick the nearest card horizontally in the adjacent row.
+  const items = Array.from(container.children) as HTMLElement[];
+  const current = items[index];
+  if (!current) return index;
+  const tops = items.map((item) => item.offsetTop).filter((top) => step * (top - current.offsetTop) > 0);
+  if (tops.length === 0) return index;
+  const rowTop = step > 0 ? Math.min(...tops) : Math.max(...tops);
+  const center = (item: HTMLElement) => item.offsetLeft + item.offsetWidth / 2;
+  let best = index;
+  let bestDistance = Infinity;
+  items.forEach((item, itemIndex) => {
+    if (item.offsetTop !== rowTop) return;
+    const distance = Math.abs(center(item) - center(current));
+    if (distance < bestDistance) {
+      best = itemIndex;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
 export function viewCardColumnCount(container: HTMLElement): number {
   const styles = window.getComputedStyle(container);
   const templateColumns = styles.gridTemplateColumns;

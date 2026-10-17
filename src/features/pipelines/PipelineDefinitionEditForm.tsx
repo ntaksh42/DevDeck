@@ -12,6 +12,7 @@ import {
   updatePipelineDefinition,
   type PipelineDefinitionDetail,
 } from "@/lib/azdoCommands";
+import { isImeComposing } from "@/lib/utils";
 
 type EditableVariable = {
   id: number;
@@ -167,6 +168,7 @@ export function PipelineDefinitionEditForm({
   // Contain keys so the underlying pipeline list does not also react.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       onCancel();
