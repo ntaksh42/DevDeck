@@ -47,6 +47,7 @@ import {
 import { usePipelineWatchNotifications } from "@/features/pipelines/usePipelineWatchNotifications";
 import { useAgentNoteWatcher } from "@/components/agent-notes/useAgentNoteSummaries";
 import { useInboxBadge } from "@/features/inbox/useInboxEntries";
+import { useAgentNeedsYouBadge } from "@/components/agent-notes/useAgentNeedsYouBadge";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -152,6 +153,8 @@ function AppShell() {
 
   // Open Inbox items, kept current by `action-inbox:updated`.
   const inboxBadge = useInboxBadge();
+  // Agent conversations waiting for the user, visible from any View.
+  const agentBadge = useAgentNeedsYouBadge();
 
   // Experimental: the cross-org summary only exists while its flag is on.
   // Falling back here (rather than only hiding the nav entry) keeps the app out
@@ -421,6 +424,7 @@ function AppShell() {
         myWorkItemsBadge={myWorkItemsBadge}
         notificationsBadge={notificationsBadge}
         inboxBadge={inboxBadge}
+        agentBadge={agentBadge}
         crossOrgSummaryEnabled={crossOrgSummaryEnabled}
         onNavigate={setView}
         onOpenHelp={openHelp}
