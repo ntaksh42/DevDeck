@@ -79,6 +79,23 @@ export async function sendTestDesktopNotification(): Promise<DesktopNotification
 
 // Surfaces the outcome of a manually triggered pipeline run. `webUrl` opens the
 // build results page when the toast is clicked.
+/** One of the user's own pull requests can be merged: everyone approved, CI is clean, nothing blocks it. */
+export async function sendPullRequestReadyNotification(input: {
+  title: string;
+  pullRequestId: number;
+  repositoryName: string;
+  webUrl?: string | null;
+}): Promise<DesktopNotificationResult> {
+  return sendDesktopNotification(`Ready to merge: !${input.pullRequestId}`, {
+    body: `${input.repositoryName}: ${input.title}`,
+    onClick: input.webUrl
+      ? () => {
+          void openExternalUrl(input.webUrl!);
+        }
+      : undefined,
+  });
+}
+
 export async function sendPipelineRunNotification(input: {
   ok: boolean;
   pipelineName: string;

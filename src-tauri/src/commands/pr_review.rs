@@ -2,12 +2,13 @@ use tauri::State;
 
 use crate::app_state::{ensure_write_enabled, AppState};
 use crate::error::Result;
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
-    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator,
+    PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    RemovePullRequestLabelInput, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -71,6 +72,28 @@ pub async fn list_pull_request_work_items(
         .provider()
         .await?
         .list_pull_request_work_items(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_pull_request_health(
+    input: PrLocator,
+    state: State<'_, AppState>,
+) -> Result<PrHealth> {
+    state.provider().await?.get_pull_request_health(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_pull_request_policies(
+    input: PrLocator,
+    state: State<'_, AppState>,
+) -> Result<Vec<PolicyRequirement>> {
+    state
+        .provider()
+        .await?
+        .list_pull_request_policies(input)
         .await
 }
 

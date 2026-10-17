@@ -18,12 +18,13 @@ use crate::pipelines::{
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
     UpdatePipelineDefinitionInput,
 };
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
-    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator,
+    PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    RemovePullRequestLabelInput, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -254,6 +255,25 @@ impl Provider for GithubProvider {
 
     async fn list_pull_request_work_items(&self, _input: PrLocator) -> Result<Vec<i64>> {
         // GitHub pull requests have no Azure Boards work item links.
+        Ok(Vec::new())
+    }
+
+    async fn get_pull_request_health(&self, _input: PrLocator) -> Result<PrHealth> {
+        // The GitHub rows come from the cached review summaries instead.
+        Ok(PrHealth {
+            ci_status: "none".to_string(),
+            ci_context: None,
+            ci_check_count: 0,
+            unresolved_threads: 0,
+            merge_status: None,
+        })
+    }
+
+    async fn list_pull_request_policies(
+        &self,
+        _input: PrLocator,
+    ) -> Result<Vec<PolicyRequirement>> {
+        // Branch policy evaluations are an Azure DevOps concept; no section is shown.
         Ok(Vec::new())
     }
 

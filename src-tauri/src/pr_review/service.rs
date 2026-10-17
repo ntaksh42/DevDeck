@@ -4,7 +4,7 @@ use crate::prs::{short_ref, vote_label};
 use crate::repos::encode_path_segment;
 use crate::work_items::{summarize_mention_candidate, MentionCandidate};
 
-use super::helpers::{fetch_side, map_threads, ChangeFlags};
+use super::helpers::{fetch_side, map_threads, policy_detail, ChangeFlags};
 use super::types::*;
 
 impl PrReviewService {
@@ -152,6 +152,33 @@ impl PrReviewService {
         Ok(client
             .list_pull_request_work_item_ids(&pr.project_id, &pr.repository_id, pr.pull_request_id)
             .await?)
+    }
+
+    /// How each branch policy evaluates for the pull request. Disabled and
+    /// not-applicable policies are left out: they cannot block the merge.
+    pub async fn list_policy_requirements(&self, pr: PrLocator) -> Result<Vec<PolicyRequirement>> {
+        let organization = self
+            .db
+            .resolve_organization(pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let evaluations = client
+            .list_pull_request_policy_evaluations(&pr.project_id, pr.pull_request_id)
+            .await?;
+        Ok(evaluations
+            .into_iter()
+            .filter(|e| e.configuration.is_enabled && e.status.as_deref() != Some("notApplicable"))
+            .map(|e| PolicyRequirement {
+                name: e
+                    .configuration
+                    .policy_type
+                    .display_name
+                    .clone()
+                    .unwrap_or_else(|| "Policy".to_string()),
+                status: e.status.clone().unwrap_or_else(|| "queued".to_string()),
+                is_blocking: e.configuration.is_blocking,
+                detail: policy_detail(&e.configuration.settings),
+            })
+            .collect())
     }
 
     pub async fn list_commits(&self, pr: PrLocator) -> Result<Vec<PrCommit>> {
