@@ -87,3 +87,20 @@ pub async fn set_action_inbox_item_state(
     }
     Ok(changed)
 }
+
+/// Starts writing Claude's notes for one open Inbox item in the background; the
+/// result arrives through `action-inbox:updated`.
+#[tauri::command]
+#[tracing::instrument(skip(state, app))]
+pub async fn generate_action_inbox_insight(
+    id: i64,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<()> {
+    let db = state.db.clone();
+    run_blocking(move || {
+        let settings = db.get_app_settings()?;
+        crate::inbox_insight::start_one(&db, &settings, &app, id).map_err(AppError::InvalidInput)
+    })
+    .await
+}

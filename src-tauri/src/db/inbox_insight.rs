@@ -129,6 +129,23 @@ impl AppDatabase {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// The open item `id` when it is one of `kinds`.
+    pub fn get_open_inbox_item_for_insight(
+        &self,
+        id: i64,
+        kinds: &[&str],
+    ) -> Result<Option<InboxItem>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id,                     repository_name, thread_id, comment_id, title, author, snippet, web_url,                     state, snoozed_until, detected_at, done_at, file_path, line, hit_count              FROM action_inbox_items WHERE id = ?1 AND state = 'open'",
+        )?;
+        let item = stmt
+            .query_map(params![id], super::action_inbox::map_inbox_item)?
+            .next()
+            .transpose()?;
+        Ok(item.filter(|item| kinds.contains(&item.kind.as_str())))
+    }
+
     pub fn save_inbox_insight(&self, item_id: i64, insight: &InboxInsight) -> Result<()> {
         let conn = self.open()?;
         let evidence = serde_json::to_string(&insight.evidence)

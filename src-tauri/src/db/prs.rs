@@ -28,6 +28,23 @@ pub struct CachedPr {
     pub is_draft: bool,
 }
 
+/// An active PR with how many reviewers approved it, as My Pull Requests lists it.
+#[derive(Debug, Clone)]
+pub struct CachedCreatedPr {
+    pub pr: CachedPr,
+    pub approvals: i64,
+    pub reviewer_count: i64,
+}
+
+/// Approval tally of one synced PR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrReviewerCount {
+    pub repository_id: String,
+    pub pull_request_id: i64,
+    pub approvals: i64,
+    pub reviewer_count: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct CachedReviewPr {
     pub org_id: String,
@@ -87,6 +104,64 @@ impl AppDatabase {
         upsert_pull_requests(&tx, prs)?;
         tx.commit()?;
         Ok(())
+    }
+
+    /// Stores the approval tallies of just-synced PRs and drops tallies whose PR
+    /// is no longer cached.
+    pub fn save_pr_reviewer_counts(&self, org_id: &str, counts: &[PrReviewerCount]) -> Result<()> {
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO pr_reviewer_counts                     (org_id, repository_id, pull_request_id, approvals, reviewer_count)                  VALUES (?1, ?2, ?3, ?4, ?5)                  ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET                     approvals = excluded.approvals, reviewer_count = excluded.reviewer_count",
+            )?;
+            for count in counts {
+                stmt.execute(params![
+                    org_id,
+                    count.repository_id,
+                    count.pull_request_id,
+                    count.approvals,
+                    count.reviewer_count
+                ])?;
+            }
+        }
+        tx.execute(
+            "DELETE FROM pr_reviewer_counts WHERE org_id = ?1 AND NOT EXISTS (                 SELECT 1 FROM pull_requests p WHERE p.org_id = pr_reviewer_counts.org_id                   AND p.repository_id = pr_reviewer_counts.repository_id                   AND p.pull_request_id = pr_reviewer_counts.pull_request_id)",
+            params![org_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Active PRs of `org_id` created by the identity `user_id`, newest first.
+    pub fn list_created_pull_requests(
+        &self,
+        org_id: &str,
+        user_id: &str,
+    ) -> Result<Vec<CachedCreatedPr>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT p.org_id, p.project_id, p.project_name, p.repository_id, p.repository_name,
+                   p.pull_request_id, p.title, p.status, p.created_by, p.created_by_id,
+                   p.creation_date, p.source_ref_name, p.target_ref_name, p.web_url, p.is_draft,
+                   COALESCE(c.approvals, 0), COALESCE(c.reviewer_count, 0)
+            FROM pull_requests p
+            LEFT JOIN pr_reviewer_counts c ON c.org_id = p.org_id
+              AND c.repository_id = p.repository_id AND c.pull_request_id = p.pull_request_id
+            WHERE p.org_id = ?1 AND p.status = 'active' AND p.created_by_id = ?2 COLLATE NOCASE
+            ORDER BY p.creation_date DESC
+            LIMIT 1000
+            "#,
+        )?;
+        let rows = stmt.query_map(params![org_id, user_id], |row| {
+            Ok(CachedCreatedPr {
+                pr: map_cached_pr(row)?,
+                approvals: row.get(15)?,
+                reviewer_count: row.get(16)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     pub fn list_review_pull_requests(&self, org_id: &str) -> Result<Vec<CachedReviewPr>> {

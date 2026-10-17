@@ -16,11 +16,34 @@ const VERDICTS: Record<string, { label: string; className: string }> = {
 export function InboxInsightPanel({
   insight,
   onUseDraft,
+  onGenerate,
 }: {
   insight: InboxInsight | null;
   onUseDraft: (text: string) => void;
+  /** Set when notes can be written on request (summaries on, open comment item). */
+  onGenerate?: () => void;
 }) {
-  if (!insight) return null;
+  const generateButton = onGenerate ? (
+    <button
+      type="button"
+      onClick={onGenerate}
+      className="ml-auto shrink-0 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+    >
+      {insight ? "Regenerate" : "Generate notes"} <Kbd>I</Kbd>
+    </button>
+  ) : null;
+  if (!insight) {
+    return generateButton ? (
+      <section
+        aria-label="Notes by Claude"
+        className="mt-1.5 flex items-center gap-2 rounded border border-border bg-muted/40 px-2 py-1.5 text-xs"
+      >
+        <span className="font-semibold text-muted-foreground">Claude</span>
+        <span className="text-muted-foreground">No notes yet.</span>
+        {generateButton}
+      </section>
+    ) : null;
+  }
   const verdict = insight.verdict ? VERDICTS[insight.verdict] : undefined;
   return (
     <section
@@ -45,6 +68,7 @@ export function InboxInsightPanel({
             <span className="min-w-0 break-words">{insight.reason}</span>
           </>
         )}
+        {insight.status === "pending" ? null : generateButton}
       </div>
 
       {insight.evidence.length > 0 ? (
