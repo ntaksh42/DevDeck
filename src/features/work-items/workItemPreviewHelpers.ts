@@ -114,13 +114,14 @@ export function filterCustomFieldOptions(
   options: WorkItemFieldOption[],
   selectedFields: CustomPreviewField[],
   query: string,
+  customOnly = true,
 ): WorkItemFieldOption[] {
   const selected = new Set(selectedFields.map((field) => field.referenceName.toLowerCase()));
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return options
     .filter((option) => !selected.has(option.referenceName.toLowerCase()))
     .filter((option) => {
-      if (terms.length === 0) return option.custom;
+      if (terms.length === 0) return !customOnly || option.custom;
       const haystack = `${option.name} ${option.referenceName} ${option.fieldType}`.toLowerCase();
       return terms.every((term) => haystack.includes(term));
     })

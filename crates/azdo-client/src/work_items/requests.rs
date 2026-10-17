@@ -513,7 +513,11 @@ impl AdoClient {
         &self,
         project_id: &str,
     ) -> Result<Vec<WorkItemFieldDefinition>> {
-        let path = format!("{project_id}/_apis/wit/fields");
+        let path = if project_id.trim().is_empty() {
+            "_apis/wit/fields".to_string()
+        } else {
+            format!("{project_id}/_apis/wit/fields")
+        };
         let response: crate::git::ListResponse<WorkItemFieldDefinition> = self
             .get_json(&path, &[("api-version", "7.1-preview")])
             .await?;

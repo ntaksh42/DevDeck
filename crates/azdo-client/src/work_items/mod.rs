@@ -10,3 +10,6 @@ pub use types::*;
 mod tests_a;
 #[cfg(test)]
 mod tests_b;
+
+#[cfg(test)]
+mod fields_tests;

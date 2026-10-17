@@ -14,21 +14,19 @@ import { normalizeViewExtraColumns } from "./workItemViewsStorage";
  */
 export function WiFieldColumnsSection({
   organizationId,
-  projectId,
   extraColumns,
   onExtraColumnsChange,
 }: {
   organizationId: string;
-  projectId: string;
   extraColumns: string[];
   onExtraColumnsChange: (columns: string[]) => void;
 }) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const fieldsQuery = useQuery({
-    queryKey: workItemQueryKeys.fields(organizationId, projectId || null),
-    queryFn: () => listWorkItemFields({ organizationId, projectId }),
-    enabled: !!organizationId && !!projectId,
+    queryKey: workItemQueryKeys.fields(organizationId, null),
+    queryFn: () => listWorkItemFields({ organizationId, projectId: "" }),
+    enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });
   const fields = useMemo(() => fieldsQuery.data ?? [], [fieldsQuery.data]);
@@ -38,6 +36,7 @@ export function WiFieldColumnsSection({
         fields,
         extraColumns.map((referenceName) => ({ referenceName, label: referenceName })),
         search,
+        false,
       ),
     [fields, extraColumns, search],
   );

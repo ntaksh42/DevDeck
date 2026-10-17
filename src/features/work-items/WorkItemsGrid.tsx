@@ -77,8 +77,8 @@ export function WorkItemsGrid({
   isFetching?: boolean;
   activeExternalFilterCount?: number;
   extraColumns?: string[];
-  /** Org/project whose fields the Columns menu offers as extra columns. */
-  fieldColumnsSource?: { organizationId: string; projectId: string };
+  /** Organization whose fields the Columns menu offers as extra columns. */
+  fieldColumnsSource?: { organizationId: string };
   /** When set, the Columns menu can add/remove extra field columns. */
   onExtraColumnsChange?: (columns: string[]) => void;
   initialSort?: WiSortState;
@@ -437,7 +437,6 @@ export function WorkItemsGrid({
           {fieldColumnsSource && onExtraColumnsChange ? (
             <WiFieldColumnsSection
               organizationId={fieldColumnsSource.organizationId}
-              projectId={fieldColumnsSource.projectId}
               extraColumns={extraColumns}
               onExtraColumnsChange={onExtraColumnsChange}
             />
