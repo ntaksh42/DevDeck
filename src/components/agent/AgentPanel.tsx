@@ -1,3 +1,4 @@
+import { AgentWaitingList } from "./AgentWaitingList";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Bot, X } from "lucide-react";
 import { commandErrorMessage, noteNeedsYou } from "@/lib/azdoCommands";
@@ -91,6 +92,17 @@ export function AgentPanel({
     expanded[c.key] ?? (c.note.status !== "done" && (noteNeedsYou(c.note) || c.key === latestKey));
   const toggle = (c: Conversation, value = !isExpanded(c)) => setExpanded((prev) => ({ ...prev, [c.key]: value }));
 
+  // What the list already shows, so "waiting elsewhere" lists only the rest.
+  const shownKeys = useMemo(
+    () =>
+      new Set([
+        ...(subject && (subject.kind === "pull-request" || subject.kind === "work-item")
+          ? [`${subject.kind}:${subject.id}`]
+          : []),
+        ...conversations.filter((c) => c.section === "ask").map((c) => `ask:${c.item.itemId}`),
+      ]),
+    [subject, conversations],
+  );
   const selected = conversations.find((c) => c.key === selectedKey) ?? null;
   // Run now: the selected conversation's notes, else the subject's.
   const runTarget = selected?.item ?? noteItemOf(subject);
@@ -337,6 +349,7 @@ export function AgentPanel({
         </div>
       )}
 
+      <AgentWaitingList shownKeys={shownKeys} />
       <div
         ref={listRef}
         tabIndex={-1}
