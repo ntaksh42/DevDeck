@@ -122,9 +122,8 @@ const MemoCreatedPrRow = memo(function MemoCreatedPrRow({
   );
 });
 
-// Active pull requests the authenticated user authored. Fetched live from Azure
-// DevOps (not from the local sync cache), so data refreshes on view re-entry
-// rather than via the sync:updated wiring the cached review grid uses. The grid
+// Active pull requests the authenticated user authored, read from the local sync
+// cache and refreshed on sync:updated like the review grid. The grid
 // layout, resizable/toggleable columns, sort headers, row styling, keyboard,
 // and status bar mirror MyReviewsGrid, including the PR review panels docked
 // to the right of the grid.

@@ -69,9 +69,8 @@ impl PullRequestService {
         Ok(results)
     }
 
-    // PRs the user authored are fetched live from Azure DevOps (not cached),
-    // mirroring how PR search hits the API on demand. The server filters by
-    // `searchCriteria.creatorId`, so we fan out one query per project and merge.
+    // PRs the user authored come from the synced active-PR cache, matched by the
+    // author's identity id, so the list shows at once and refreshes with each sync.
     pub async fn list_my_created_pull_requests(
         &self,
         input: ListMyCreatedPullRequestsInput,
@@ -79,31 +78,39 @@ impl PullRequestService {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
 
         // Without an authenticated user id we cannot identify "my" PRs.
-        let Some(user_id) = organization.authenticated_user_id.clone() else {
+        let Some(user_id) = organization.authenticated_user_id.as_deref() else {
             return Ok(MyCreatedPullRequestsResult::default());
         };
 
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let projects = project_id_name_pairs(&client).await?;
-
-        let mut tasks: JoinSet<(String, Result<Vec<MyCreatedPullRequestSummary>>)> = JoinSet::new();
-        for (project_id, project_name) in projects {
-            let client = client.clone();
-            let org = organization.clone();
-            let user_id = user_id.clone();
-            tasks.spawn(async move {
-                let result =
-                    fetch_created_prs_for_project(&client, &org, &project_id, &user_id).await;
-                (project_name, result)
-            });
-        }
-
-        let fetched = collect_project_prs(tasks).await?;
-        let (mut results, warnings) = fetched.finish()?;
-        results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        let pull_requests = self
+            .db
+            .list_created_pull_requests(&organization.id, user_id)?
+            .into_iter()
+            .map(|row| {
+                let pr = row.pr;
+                MyCreatedPullRequestSummary {
+                    organization_id: pr.org_id,
+                    project_id: pr.project_id,
+                    project_name: pr.project_name,
+                    repository_id: pr.repository_id,
+                    repository_name: pr.repository_name,
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title,
+                    creation_date: pr.creation_date,
+                    source_ref_name: pr.source_ref_name,
+                    target_ref_name: pr.target_ref_name,
+                    web_url: pr.web_url,
+                    is_draft: pr.is_draft,
+                    approvals: row.approvals,
+                    reviewer_count: row.reviewer_count,
+                    // The active-PR cache does not keep Azure DevOps' merge status.
+                    merge_status: None,
+                }
+            })
+            .collect();
         Ok(MyCreatedPullRequestsResult {
-            pull_requests: results,
-            warnings,
+            pull_requests,
+            warnings: Vec::new(),
         })
     }
 

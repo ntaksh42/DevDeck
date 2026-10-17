@@ -31,13 +31,13 @@ pub(crate) async fn fetch_active_prs_for_project(
     let label = project.name.clone();
 
     if !force_refresh {
-        if let Some(cached) = read_active_prs_from_shared_cache(&org, &project) {
+        if let Some((cached, reviewers)) = read_active_prs_from_shared_cache(&org, &project) {
             return PrProjectFetch {
                 project_id,
                 label,
                 result: Ok(cached),
                 capped: false,
-                reviewers: Vec::new(),
+                reviewers,
             };
         }
     }
@@ -160,7 +160,7 @@ pub(crate) async fn fetch_active_prs_for_project(
 fn read_active_prs_from_shared_cache(
     org: &Organization,
     project: &TeamProject,
-) -> Option<Vec<CachedPr>> {
+) -> Option<(Vec<CachedPr>, Vec<SharedReviewer>)> {
     let conn = shared_cache::open().ok()?;
     if !shared_cache::is_fresh(
         &conn,
@@ -172,27 +172,28 @@ fn read_active_prs_from_shared_cache(
         return None;
     }
     let rows = shared_cache::read_pull_requests(&conn, &org.name, &project.name).ok()?;
-    Some(
-        rows.into_iter()
-            .map(|row| CachedPr {
-                org_id: org.id.clone(),
-                project_id: project.id.clone(),
-                project_name: project.name.clone(),
-                repository_id: row.repository_id,
-                repository_name: row.repository_name,
-                pull_request_id: row.pull_request_id,
-                title: row.title,
-                status: row.status,
-                created_by: row.created_by,
-                created_by_id: row.created_by_id,
-                creation_date: row.creation_date,
-                source_ref_name: row.source_ref_name,
-                target_ref_name: row.target_ref_name,
-                web_url: row.web_url,
-                is_draft: row.is_draft,
-            })
-            .collect(),
-    )
+    let reviewers = shared_cache::read_reviewers(&conn, &org.name, &project.name).ok()?;
+    let cached = rows
+        .into_iter()
+        .map(|row| CachedPr {
+            org_id: org.id.clone(),
+            project_id: project.id.clone(),
+            project_name: project.name.clone(),
+            repository_id: row.repository_id,
+            repository_name: row.repository_name,
+            pull_request_id: row.pull_request_id,
+            title: row.title,
+            status: row.status,
+            created_by: row.created_by,
+            created_by_id: row.created_by_id,
+            creation_date: row.creation_date,
+            source_ref_name: row.source_ref_name,
+            target_ref_name: row.target_ref_name,
+            web_url: row.web_url,
+            is_draft: row.is_draft,
+        })
+        .collect();
+    Some((cached, reviewers))
 }
 
 /// Best-effort: a failure to reach the shared cache never fails DevDeck's own
@@ -315,57 +316,4 @@ pub(crate) async fn fetch_review_prs_for_project(
         });
     }
     (project_name, Ok(cached_reviews))
-}
-
-pub(crate) async fn fetch_created_prs_for_project(
-    client: &AdoClient,
-    org: &Organization,
-    project_id: &str,
-    user_id: &str,
-) -> Result<Vec<MyCreatedPullRequestSummary>> {
-    let prs = client
-        .list_pull_requests_by_creator(project_id, user_id, 200)
-        .await?;
-
-    let mut summaries = Vec::new();
-    for pr in prs {
-        let Some(repo) = &pr.repository else {
-            continue;
-        };
-        let repo_name = repo.name.clone();
-        let (proj_id, proj_name) = repo
-            .project
-            .as_ref()
-            .map(|p| (p.id.clone(), p.name.clone()))
-            .unwrap_or_else(|| (project_id.to_string(), project_id.to_string()));
-
-        let reviewers = pr.reviewers.as_deref().unwrap_or(&[]);
-        let approvals = reviewers.iter().filter(|r| r.vote == 10).count() as i64;
-
-        let web_url = format!(
-            "{}/{}/_git/{}/pullrequest/{}",
-            org.base_url,
-            encode_path_segment(&proj_name),
-            encode_path_segment(&repo_name),
-            pr.pull_request_id
-        );
-        summaries.push(MyCreatedPullRequestSummary {
-            organization_id: org.id.clone(),
-            project_id: proj_id,
-            project_name: proj_name,
-            repository_id: repo.id.clone(),
-            repository_name: repo_name,
-            pull_request_id: pr.pull_request_id,
-            title: pr.title.clone(),
-            creation_date: pr.creation_date.to_rfc3339(),
-            source_ref_name: short_ref(&pr.source_ref_name),
-            target_ref_name: short_ref(&pr.target_ref_name),
-            web_url: Some(web_url),
-            is_draft: pr.is_draft.unwrap_or(false),
-            approvals,
-            reviewer_count: reviewers.len() as i64,
-            merge_status: pr.merge_status.clone(),
-        });
-    }
-    Ok(summaries)
 }

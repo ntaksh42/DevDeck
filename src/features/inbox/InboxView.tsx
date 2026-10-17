@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   commandErrorMessage,
+  generateActionInboxInsight,
   getActionInboxCounts,
   getAppSettings,
   listOrganizations,
@@ -9,6 +10,7 @@ import {
   type MentionCandidate,
 } from "@/lib/azdoCommands";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
+import { pushToast } from "@/lib/toast";
 import { clamp, focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
@@ -39,6 +41,8 @@ import { useInboxListFocus } from "./useInboxListFocus";
 import { useInboxStateChanges } from "./useInboxStateChanges";
 
 const OVERSCAN = 8;
+/** Comment kinds Claude can write notes for (matches the backend). */
+const INSIGHT_KINDS: string[] = ["pr_mention", "pr_reply", "wi_mention"];
 const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
 
 export function InboxView() {
@@ -71,6 +75,7 @@ export function InboxView() {
     staleTime: 5 * 60_000,
   });
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+  const insightEnabled = settingsQuery.data?.inboxInsightEnabled ?? false;
 
   const { entries: fetchedEntries, isLoading, error, refetch } = useInboxEntries({
     tab,
@@ -157,6 +162,24 @@ export function InboxView() {
   }
 
   const openInApp = openInboxEntryInApp;
+
+  // Notes can be asked for on any open comment item (beyond the few each sync
+  // writes, or again after a failure) while summaries are on and none is running.
+  function canGenerateInsight(entry: InboxEntry | null): entry is InboxEntry {
+    return (
+      insightEnabled &&
+      tab === "open" &&
+      entry !== null &&
+      INSIGHT_KINDS.includes(entry.kind) &&
+      entry.insight?.status !== "pending"
+    );
+  }
+
+  function generateInsight(entry: InboxEntry) {
+    generateActionInboxInsight(entry.id).catch((error: unknown) => {
+      pushToast(`Could not start the notes: ${commandErrorMessage(error)}`);
+    });
+  }
 
   function applyReplyDraft(text: string) {
     if (readOnly || !text) return;
@@ -289,6 +312,11 @@ export function InboxView() {
       event.preventDefault();
       if (tab === "snoozed") changeState(selected, "open");
       else openSnoozeMenu();
+    } else if (lower === "i") {
+      if (canGenerateInsight(selected)) {
+        event.preventDefault();
+        generateInsight(selected);
+      }
     } else if (lower === "r" && event.shiftKey) {
       if (selected.insight?.replyDraft) {
         event.preventDefault();
@@ -430,6 +458,9 @@ export function InboxView() {
               onToggleContext={() => setContextExpanded((value) => !value)}
               draft={draft}
               onUseDraft={applyReplyDraft}
+              onGenerateInsight={
+                canGenerateInsight(selected) ? () => generateInsight(selected) : undefined
+              }
             />
         </div>
       ),
