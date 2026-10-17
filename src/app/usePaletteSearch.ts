@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import {
   searchAll,
   searchWiki,
+  setActiveOrganization,
   submitPullRequestVote,
   type Organization,
   type PullRequestSummary,
@@ -13,6 +14,7 @@ import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import type { CommandPaletteSearchItem } from "@/components/CommandPalette";
 import { parsePaletteSearch } from "./appHelpers";
+import { paletteUrlItems, parsePaletteUrl } from "./paletteUrl";
 import type { ExternalSearchRequest, View } from "./types";
 
 export interface PaletteSearchCallbacks {
@@ -51,6 +53,11 @@ export function usePaletteSearch(
   }, [paletteSearchText]);
 
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
+  // A pasted Azure DevOps link opens its item directly instead of being searched as text.
+  const paletteUrl = useMemo(
+    () => parsePaletteUrl(debouncedPaletteSearchText, organizations),
+    [debouncedPaletteSearchText, organizations],
+  );
   const paletteQueryLongEnough = /^\d+$/.test(paletteSearch.query)
     ? paletteSearch.query.length >= 1
     : paletteSearch.query.length >= 2;
@@ -60,6 +67,7 @@ export function usePaletteSearch(
     commandPaletteOpen &&
     organizations.length > 0 &&
     paletteSearch.kind !== "wiki" &&
+    paletteUrl === null &&
     paletteQueryLongEnough;
   const paletteWikiEnabled =
     commandPaletteOpen &&
@@ -106,6 +114,23 @@ export function usePaletteSearch(
     }
   }
 
+  // The search views read the active connection, so a link to another registered
+  // organization switches to it first (as the cross-org summary does).
+  function openLinkedItem(
+    kind: "workItems" | "pullRequests",
+    query: string,
+    organizationId: string,
+  ): void {
+    if (organizationId === activeOrganizationId) {
+      openSearchTarget(kind, query, organizationId);
+      return;
+    }
+    setActiveOrganization(organizationId)
+      .then(() => queryClient.invalidateQueries())
+      .catch((error) => console.error("Failed to switch connection for a pasted link", error))
+      .finally(() => openSearchTarget(kind, query, organizationId));
+  }
+
   // Cast a review vote on a PR directly from the command palette (E-36). The
   // palette has no toast surface, so failures are logged; the resulting state
   // reflects in My Reviews, which is invalidated on success.
@@ -132,6 +157,7 @@ export function usePaletteSearch(
   );
 
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    if (paletteUrl) return paletteUrlItems(paletteUrl, activeOrganizationId, openLinkedItem);
     const kind = paletteSearch.kind;
     const showOrg = organizations.length > 1;
 
@@ -267,6 +293,8 @@ export function usePaletteSearch(
     paletteWikiQuery.data,
     paletteWikiQuery.isError,
     paletteCodeOrgId,
+    paletteUrl,
+    activeOrganizationId,
   ]);
 
   // The palette surfaces recently opened Work Items and PRs. With an empty query

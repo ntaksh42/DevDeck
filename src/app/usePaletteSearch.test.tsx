@@ -5,11 +5,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Organization } from "@/lib/azdoCommands";
 
 const searchWiki = vi.fn();
+const searchAll = vi.fn();
 const getActiveOrganization = vi.fn();
 
 vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
   searchWiki: (...args: unknown[]) => searchWiki(...args),
+  searchAll: (...args: unknown[]) => searchAll(...args),
   getActiveOrganization: () => getActiveOrganization(),
 }));
 
@@ -88,5 +90,46 @@ describe("usePaletteSearch wiki search", () => {
         "Wiki Search is unavailable",
       ]);
     });
+  });
+});
+
+describe("usePaletteSearch pasted links", () => {
+  const linkedOrganizations = [
+    { id: "org-1", name: "contoso", baseUrl: "https://dev.azure.com/contoso" },
+  ] as unknown as Organization[];
+
+  beforeEach(() => {
+    searchAll.mockReset();
+    getActiveOrganization.mockReset().mockResolvedValue(linkedOrganizations[0]);
+    callbacks.setPullRequestSearchRequest.mockReset();
+    callbacks.setView.mockReset();
+  });
+  afterEach(cleanup);
+
+  it("opens a pasted pull request URL instead of searching the text", async () => {
+    const { result } = renderHook(
+      () => usePaletteSearch(true, linkedOrganizations, callbacks),
+      { wrapper },
+    );
+
+    act(() =>
+      result.current.setPaletteSearchText(
+        "https://dev.azure.com/contoso/Web/_git/site/pullrequest/123",
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current.paletteSearchItems.map((item) => item.label)).toEqual([
+        "Open pull request !123",
+      ]);
+    });
+    expect(result.current.paletteSearchEnabled).toBe(false);
+    expect(searchAll).not.toHaveBeenCalled();
+
+    act(() => result.current.paletteSearchItems[0].run());
+    expect(callbacks.setPullRequestSearchRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "123", organizationId: "org-1" }),
+    );
+    expect(callbacks.setView).toHaveBeenCalledWith("pullRequestSearch");
   });
 });
