@@ -102,6 +102,10 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `wiki:` はアクティブな接続の Wiki ページ検索 (`search_wiki`、Search 拡張が必要) を実行し (失敗時は「Wiki Search is unavailable」の 1 行)、
   ヒットを `Enter` でアプリ内プレビューダイアログ (`get_wiki_page`、本文を Markdown としてサニタイズ表示。Esc で閉じ、フォーカスは元に戻る) に開き、`Ctrl+Enter` でブラウザに開く。Wiki の編集はブラウザへジャンプする方針で、アプリ内編集はしない。GitHub 接続では未対応 (`NotSupported`)。
   横断検索は組織ごとに実行し、一部の組織が失敗しても成功した組織のヒットを返す(失敗はログのみで UI には通知しない)。
+  Azure DevOps の URL (`dev.azure.com/{org}/…` / `{org}.visualstudio.com/…`) を貼ると、テキスト検索の代わりに「Link」の 1 行を出す (`src/app/paletteUrl.ts`)。
+  PR (`/_git/{repo}/pullrequest/{id}`) は PR Search、WI (`/_workitems/edit/{id}`、ボード等の `?workitem={id}`) は Work Item Search を、URL の組織名に一致する接続でその ID により開く (検索ビューはアクティブ接続を読むため、別の登録済み組織の URL ならアクティブ接続をその組織へ切り替えてから開き、行の詳細にその旨を出す。組織横断サマリーと同じ挙動)。PR Search は active の PR を対象にするため、完了済み / 破棄済みの PR は見つからない。
+  パイプライン実行 (`/_build/results?buildId={id}`) は特定の実行をアプリ内で選ぶ手段が無いためブラウザで開く行だけを出す。URL の組織が未登録なら「not registered」と示し、ブラウザで開く行だけを出す。
+  解釈できない URL は通常のテキスト入力として扱う。`Ctrl+Enter` はどの行でも URL をブラウザで開く。
 - **作業項目のフォロー** (issue #304): プレビューのタブ帯 `⋯` メニューの Follow 項目 (✓ で現在の状態を表示) で Follow/Unfollow
   (`follow_work_item` / `unfollow_work_item`)。Azure DevOps に公開の follow/購読設定 REST API が
   無いため、フォローはローカルの SQLite ウォッチリスト (`followed_work_items`、フォロー時点の
