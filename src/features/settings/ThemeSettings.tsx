@@ -6,6 +6,13 @@ import {
   THEME_CHANGED_EVENT,
   type ThemePreference,
 } from "@/lib/theme";
+import {
+  loadUiScale,
+  setUiScale,
+  UI_SCALE_CHANGED_EVENT,
+  UI_SCALE_LEVELS,
+  type UiScale,
+} from "@/lib/uiScale";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -25,6 +32,17 @@ export function ThemeSettings() {
     return () => window.removeEventListener(THEME_CHANGED_EVENT, onThemeChanged);
   }, []);
 
+  const [scale, setScale] = useState<UiScale>(loadUiScale);
+
+  // The zoom shortcuts change the scale outside this panel.
+  useEffect(() => {
+    function onScaleChanged() {
+      setScale(loadUiScale());
+    }
+    window.addEventListener(UI_SCALE_CHANGED_EVENT, onScaleChanged);
+    return () => window.removeEventListener(UI_SCALE_CHANGED_EVENT, onScaleChanged);
+  }, []);
+
   function selectTheme(next: ThemePreference) {
     setPreference(next);
     setThemePreference(next);
@@ -40,7 +58,7 @@ export function ThemeSettings() {
           <div>
             <h2 className="text-base font-semibold">Appearance</h2>
             <p className="text-sm text-muted-foreground">
-              Choose a theme. System follows your operating system setting.
+              Choose a theme and the app zoom. System follows your operating system setting.
             </p>
           </div>
         </div>
@@ -73,6 +91,32 @@ export function ThemeSettings() {
             );
           })}
         </div>
+
+        <div
+          role="radiogroup"
+          aria-label="UI scale"
+          className="mt-3 inline-flex gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {UI_SCALE_LEVELS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              role="radio"
+              aria-checked={scale === level}
+              onClick={() => setUiScale(level)}
+              className={`rounded px-3 py-1.5 text-sm font-medium ${
+                scale === level
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {level}%
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ctrl+= / Ctrl+- zoom, Ctrl+0 resets.
+        </p>
       </div>
     </div>
   );

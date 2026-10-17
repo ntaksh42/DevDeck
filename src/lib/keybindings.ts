@@ -24,6 +24,9 @@ export type KeybindingId =
   | "focusComment"
   | "toggleSidebar"
   | "toggleAgent"
+  | "uiScaleUp"
+  | "uiScaleDown"
+  | "uiScaleReset"
   | "syncNow"
   | "openSettings"
   | "gotoLeader"
@@ -77,6 +80,9 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "focusFilter", label: "Focus filter", group: "Focus & navigation", defaultCombo: "Ctrl+F", scope: "global" },
   { id: "toggleSidebar", label: "Collapse / expand left navigation", group: "Focus & navigation", defaultCombo: "Ctrl+\\", scope: "global" },
   { id: "toggleAgent", label: "Open / close the Agent panel", group: "Focus & navigation", defaultCombo: "Ctrl+J", scope: "global" },
+  { id: "uiScaleUp", label: "Zoom the app in", group: "Focus & navigation", defaultCombo: "Ctrl+=", scope: "global" },
+  { id: "uiScaleDown", label: "Zoom the app out", group: "Focus & navigation", defaultCombo: "Ctrl+-", scope: "global" },
+  { id: "uiScaleReset", label: "Reset app zoom", group: "Focus & navigation", defaultCombo: "Ctrl+0", scope: "global" },
 
   { id: "gotoLeader", label: "Go to view (leader key, then a letter below)", group: "Go to view", defaultCombo: "G", scope: "global", reserved: true },
   { id: "gotoMyReviews", label: "My Reviews", group: "Go to view", defaultCombo: "R", scope: "goto" },
