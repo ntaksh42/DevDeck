@@ -21,7 +21,10 @@ use tauri::{AppHandle, Emitter};
 use crate::agent_notes::launch::{
     is_plain_folder_name, is_plain_model_name, shell_command, AZURE_TOKEN_VARS,
 };
-use crate::db::{AppDatabase, AppSettings, InboxInsight, InboxItem, InsightEvidence};
+use crate::db::{
+    AppDatabase, AppSettings, InboxInsight, InboxItem, InsightEvidence, PR_INSIGHT_KINDS,
+    WI_INSIGHT_KINDS,
+};
 
 /// Items summarized per sync; the rest wait for the next one.
 const ITEMS_PER_RUN: u32 = 3;
@@ -100,48 +103,103 @@ pub(crate) fn start(
             return;
         }
     };
+    let (model, workspace) = run_settings(settings);
+    let db = db.clone();
+    let handle = handle.clone();
+    std::thread::spawn(move || {
+        for item in &items {
+            let thread = threads.get(&(item.repository_id.clone(), item.thread_id));
+            write_insight(
+                &db,
+                &handle,
+                item,
+                thread.map(String::as_str),
+                &model,
+                workspace.as_deref(),
+            );
+        }
+        RUNNING.store(false, Ordering::SeqCst);
+    });
+}
+
+/// Writes the summary of one more open item the user asked for, replacing any
+/// earlier one (e.g. a failed run, or an item past the per-sync limit). The
+/// full thread is only at hand during the PR sync, so this works from the
+/// stored excerpt. Fails when summaries are off, the item is gone or not open
+/// or not a comment kind, or another run is going.
+pub(crate) fn start_one(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    handle: &AppHandle,
+    item_id: i64,
+) -> Result<(), String> {
+    if !settings.inbox_insight_enabled {
+        return Err("Inbox summaries are turned off in Settings".into());
+    }
+    let item = db
+        .get_open_inbox_item_for_insight(
+            item_id,
+            &[PR_INSIGHT_KINDS.as_slice(), WI_INSIGHT_KINDS.as_slice()].concat(),
+        )
+        .map_err(|e| e.to_string())?
+        .ok_or("this item cannot be summarized")?;
+    if RUNNING.swap(true, Ordering::SeqCst) {
+        return Err("another summary is being written; try again in a moment".into());
+    }
+    let (model, workspace) = run_settings(settings);
+    let db = db.clone();
+    let handle = handle.clone();
+    std::thread::spawn(move || {
+        write_insight(&db, &handle, &item, None, &model, workspace.as_deref());
+        RUNNING.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
+fn run_settings(settings: &AppSettings) -> (String, Option<PathBuf>) {
     let model = settings
         .inbox_insight_model
         .clone()
         .filter(|model| is_plain_model_name(model))
         .unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    let workspace = settings.agent_workspace_path.clone().map(PathBuf::from);
-    let db = db.clone();
-    let handle = handle.clone();
-    std::thread::spawn(move || {
-        for item in &items {
-            let pending = InboxInsight {
-                status: "pending".into(),
+    (
+        model,
+        settings.agent_workspace_path.clone().map(PathBuf::from),
+    )
+}
+
+/// Marks `item` pending, runs Claude Code and saves what it answered.
+fn write_insight(
+    db: &AppDatabase,
+    handle: &AppHandle,
+    item: &InboxItem,
+    thread: Option<&str>,
+    model: &str,
+    workspace: Option<&std::path::Path>,
+) {
+    let pending = InboxInsight {
+        status: "pending".into(),
+        ..InboxInsight::default()
+    };
+    if db.save_inbox_insight(item.id, &pending).is_err() {
+        return;
+    }
+    notify(handle);
+    let insight = match run_claude(item, thread, model, workspace) {
+        Ok(insight) => insight,
+        Err(error) => {
+            tracing::warn!(item = item.id, %error, "inbox insight: run failed");
+            InboxInsight {
+                status: "failed".into(),
+                error: Some(error),
                 ..InboxInsight::default()
-            };
-            if db.save_inbox_insight(item.id, &pending).is_err() {
-                continue;
             }
-            notify(&handle);
-            let thread = threads.get(&(item.repository_id.clone(), item.thread_id));
-            let insight = match run_claude(
-                item,
-                thread.map(String::as_str),
-                &model,
-                workspace.as_deref(),
-            ) {
-                Ok(insight) => insight,
-                Err(error) => {
-                    tracing::warn!(item = item.id, %error, "inbox insight: run failed");
-                    InboxInsight {
-                        status: "failed".into(),
-                        error: Some(error),
-                        ..InboxInsight::default()
-                    }
-                }
-            };
-            if let Err(e) = db.save_inbox_insight(item.id, &insight) {
-                tracing::warn!(item = item.id, error = ?e, "inbox insight: failed to save");
-            }
-            notify(&handle);
         }
-        RUNNING.store(false, Ordering::SeqCst);
-    });
+    };
+    if let Err(e) = db.save_inbox_insight(item.id, &insight) {
+        tracing::warn!(item = item.id, error = ?e, "inbox insight: failed to save");
+    }
+    notify(handle);
 }
 
 fn notify(handle: &AppHandle) {

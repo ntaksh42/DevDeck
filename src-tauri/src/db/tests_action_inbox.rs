@@ -296,6 +296,34 @@ fn insights_are_listed_with_their_items_and_cleared_when_pending() {
 }
 
 #[test]
+fn a_single_item_for_insight_must_be_open_and_of_a_comment_kind() {
+    let (_tf, db) = setup();
+    db.insert_inbox_items(&[item("org1", 1, 1)]).unwrap();
+    let id = db.list_inbox_items(None, InboxListState::Open, 10).unwrap()[0].id;
+    let kinds: Vec<&str> = [PR_INSIGHT_KINDS.as_slice(), WI_INSIGHT_KINDS.as_slice()].concat();
+
+    assert_eq!(
+        db.get_open_inbox_item_for_insight(id, &kinds)
+            .unwrap()
+            .map(|item| item.id),
+        Some(id)
+    );
+    assert!(db
+        .get_open_inbox_item_for_insight(id, &WI_INSIGHT_KINDS)
+        .unwrap()
+        .is_none());
+    assert!(db
+        .get_open_inbox_item_for_insight(id + 100, &kinds)
+        .unwrap()
+        .is_none());
+    db.set_inbox_item_state(&[id], "done", None).unwrap();
+    assert!(db
+        .get_open_inbox_item_for_insight(id, &kinds)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn insights_are_picked_only_for_the_requested_kinds() {
     let (_tf, db) = setup();
     let mention = NewInboxItem {

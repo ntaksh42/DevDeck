@@ -31,6 +31,7 @@ export function isReadyToMerge(
   return (
     !pr.isDraft &&
     pr.mergeStatus !== "conflicts" &&
+    health?.mergeStatus !== "conflicts" &&
     pr.reviewerCount > 0 &&
     pr.approvals >= pr.reviewerCount &&
     health?.ciStatus !== "failed" &&
@@ -88,7 +89,7 @@ export function MyPrBadges({ pr }: { pr: MyCreatedPullRequestSummary }) {
 
   return (
     <>
-      {pr.mergeStatus === "conflicts" ? (
+      {pr.mergeStatus === "conflicts" || health.data?.mergeStatus === "conflicts" ? (
         <span className={`${BADGE} ${RED}`} title="This pull request has merge conflicts">
           Conflicts
         </span>

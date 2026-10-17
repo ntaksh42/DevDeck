@@ -240,6 +240,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ciContext: "build",
         ciCheckCount: 2,
         unresolvedThreads: id % 3,
+        mergeStatus: id === 210 ? "conflicts" : null,
       };
     }
     case "list_pull_request_policies":

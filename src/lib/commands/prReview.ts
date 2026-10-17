@@ -239,6 +239,8 @@ const prHealthSchema = z.object({
   ciContext: z.string().nullable(),
   ciCheckCount: z.number(),
   unresolvedThreads: z.number(),
+  // Azure DevOps' merge evaluation, e.g. "conflicts".
+  mergeStatus: z.string().nullable().default(null),
 });
 export type PrHealth = z.infer<typeof prHealthSchema>;
 

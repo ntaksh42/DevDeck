@@ -278,6 +278,7 @@ impl Provider for GithubProvider {
             ci_context: None,
             ci_check_count: 0,
             unresolved_threads: 0,
+            merge_status: None,
         })
     }
 
