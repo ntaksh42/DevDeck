@@ -684,5 +684,20 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         super::inbox_threads::migrate_v27(conn)?;
         conn.execute_batch("PRAGMA user_version = 27;")?;
     }
+    if current < 28 {
+        // My Pull Requests reads the synced active PRs; the approval count and
+        // reviewer total come from the reviewers the PR sync saw.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS pr_reviewer_counts (
+                org_id TEXT NOT NULL,
+                repository_id TEXT NOT NULL,
+                pull_request_id INTEGER NOT NULL,
+                approvals INTEGER NOT NULL,
+                reviewer_count INTEGER NOT NULL,
+                PRIMARY KEY (org_id, repository_id, pull_request_id)
+            );
+            PRAGMA user_version = 28;",
+        )?;
+    }
     Ok(())
 }
