@@ -118,7 +118,7 @@ impl AppDatabase {
         let sql = format!(
             "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id, \
                     repository_name, thread_id, comment_id, title, author, snippet, web_url, \
-                    state, snoozed_until, detected_at, done_at, file_path, line \
+                    state, snoozed_until, detected_at, done_at, file_path, line, hit_count \
              FROM action_inbox_items i \
              WHERE org_id = ?1 AND state = 'open' AND kind IN ({kinds}) \
                AND NOT EXISTS (SELECT 1 FROM action_inbox_insights s WHERE s.item_id = i.id) \

@@ -129,6 +129,21 @@ impl InboxUpdate {
     }
 }
 
+/// Finishes items whose PR was completed or abandoned. Run only after a
+/// successful PR sync, so the caches it reads are current.
+pub(crate) fn finish_inbox_items_of_closed_prs(
+    db: &AppDatabase,
+    org: &Organization,
+) -> InboxUpdate {
+    match db.finish_inbox_items_of_closed_prs(&org.id) {
+        Ok(resolved) => InboxUpdate { added: 0, resolved },
+        Err(e) => {
+            tracing::warn!(org = %org.name, error = ?e, "inbox: failed to close items of closed PRs");
+            InboxUpdate::default()
+        }
+    }
+}
+
 /// Adds Inbox items for new mentions/replies and closes items whose thread was
 /// handled. Failures are logged per PR and never stop the sync.
 pub(crate) fn update_action_inbox(

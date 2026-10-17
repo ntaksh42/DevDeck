@@ -31,6 +31,7 @@ function item(overrides: Partial<InboxItem> = {}): InboxItem {
     doneAt: null,
     filePath: null,
     line: null,
+    hitCount: 1,
     insight: null,
     ...overrides,
   };

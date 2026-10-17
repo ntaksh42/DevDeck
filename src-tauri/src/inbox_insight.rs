@@ -403,6 +403,7 @@ mod tests {
             done_at: None,
             file_path: Some("/src/a.rs".into()),
             line: Some(12),
+            hit_count: 1,
             insight: None,
         };
         let with_clone = build_prompt(&item, Some("Frank: why null?"), true);

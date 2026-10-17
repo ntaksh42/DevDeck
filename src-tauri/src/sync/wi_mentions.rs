@@ -316,6 +316,75 @@ pub(super) async fn update_work_item_mentions(
     update
 }
 
+/// States that end a work item; the same list My Work Items leaves out.
+const FINISHED_STATES: [&str; 4] = ["Closed", "Done", "Completed", "Removed"];
+
+/// Ids of open mention items whose work item reached a finished state.
+pub(super) fn finished_mention_ids(
+    items: &[azdo_client::WorkItem],
+    open: &[StateInboxRef],
+) -> Vec<i64> {
+    let finished: Vec<i64> = items
+        .iter()
+        .filter(|item| {
+            field_str(item, "System.State")
+                .is_some_and(|state| FINISHED_STATES.contains(&state.as_str()))
+        })
+        .map(|item| item.id)
+        .collect();
+    open.iter()
+        .filter(|item| finished.contains(&item.subject_id))
+        .map(|item| item.id)
+        .collect()
+}
+
+/// Finishes mention items whose work item was closed or removed. Looks up the
+/// state of every work item with an open mention, whether or not it is still
+/// among the recent mentions the scan reads comments for.
+pub(super) async fn finish_closed_work_item_mentions(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+    budget: &SyncBudget,
+) -> InboxUpdate {
+    let mut update = InboxUpdate::default();
+    let open = db
+        .unfinished_inbox_refs(&org.id, &[KIND_WI_MENTION])
+        .unwrap_or_default();
+    let mut ids: Vec<i64> = open.iter().map(|item| item.subject_id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() {
+        return update;
+    }
+    let items = {
+        let Ok(_permit) = budget.clone().acquire_owned().await else {
+            return update;
+        };
+        match client
+            .get_work_items_batch_org(ids, vec!["System.State".to_string()])
+            .await
+        {
+            Ok(items) => items,
+            Err(e) => {
+                tracing::warn!(org = %org.name, error = ?e, "inbox: failed to read the state of mentioned work items");
+                return update;
+            }
+        }
+    };
+    let finished = finished_mention_ids(&items, &open);
+    if finished.is_empty() {
+        return update;
+    }
+    match db.set_inbox_item_state(&finished, "done", None) {
+        Ok(count) => update.resolved += count,
+        Err(e) => {
+            tracing::warn!(org = %org.name, error = ?e, "inbox: failed to close mentions of closed work items")
+        }
+    }
+    update
+}
+
 #[cfg(test)]
 mod tests {
     use azdo_client::CommentIdentityRef;
@@ -403,5 +472,28 @@ mod tests {
             comment(20, "tanaka", &format!("@<{ME}> b")),
         ];
         assert_eq!(answered_mention_ids(&comments, ME, &refs), vec![1]);
+    }
+
+    #[test]
+    fn mentions_of_finished_work_items_are_finished() {
+        let work_item = |id: i64, state: &str| azdo_client::WorkItem {
+            id,
+            fields: HashMap::from([("System.State".to_string(), state.into())]),
+            links: None,
+            relations: Vec::new(),
+        };
+        let open = [(1, 42), (2, 43), (3, 44)].map(|(id, subject_id)| StateInboxRef {
+            id,
+            kind: KIND_WI_MENTION.into(),
+            repository_id: String::new(),
+            subject_id,
+            comment_id: 1,
+        });
+        let items = [
+            work_item(42, "Closed"),
+            work_item(43, "Active"),
+            work_item(44, "Removed"),
+        ];
+        assert_eq!(finished_mention_ids(&items, &open), vec![1, 3]);
     }
 }

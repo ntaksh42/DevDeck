@@ -54,6 +54,8 @@ const inboxItemSchema = z.object({
   /** Where a PR comment thread sits in the code; null for PR-wide threads and other kinds. */
   filePath: z.string().nullable().default(null),
   line: z.number().nullable().default(null),
+  /** Comments waiting in this thread (PR) or work item; one row per conversation. */
+  hitCount: z.number().default(1),
   /** Claude Code's summary (Settings → Inbox summaries); null until written or when off. */
   insight: inboxInsightSchema.nullable().default(null),
 });

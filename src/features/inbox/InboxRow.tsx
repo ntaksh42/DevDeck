@@ -69,6 +69,14 @@ export const InboxRow = forwardRef<
             {location}
           </span>
         ) : null}
+        {item.hitCount > 1 ? (
+          <span
+            className="shrink-0 rounded bg-muted px-1 text-[11px] font-medium tabular-nums text-muted-foreground"
+            title={`${item.hitCount} comments waiting in this conversation`}
+          >
+            {item.hitCount}
+          </span>
+        ) : null}
         <span className="min-w-0 shrink truncate text-muted-foreground" title={item.snippet ?? undefined}>
           {item.author ? `${item.author}: ` : ""}
           {item.snippet ?? item.title}

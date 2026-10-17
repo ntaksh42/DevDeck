@@ -7,6 +7,7 @@ use crate::error::Result;
 
 mod action_inbox;
 mod inbox_insight;
+mod inbox_threads;
 mod migrate;
 mod notifications;
 mod organizations;
@@ -25,6 +26,8 @@ mod test_support;
 #[cfg(test)]
 #[cfg(test)]
 mod tests_action_inbox;
+#[cfg(test)]
+mod tests_inbox_threads;
 #[cfg(test)]
 mod tests_migrations;
 #[cfg(test)]
@@ -51,7 +54,7 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 26;
+pub(crate) const SCHEMA_VERSION: i64 = 27;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 
