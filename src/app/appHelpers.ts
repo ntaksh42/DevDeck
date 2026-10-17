@@ -19,6 +19,8 @@ export function invalidateSyncedDataQueries(
   const hot = scopeSet.has("hot");
   if (all || hot || scopeSet.has("myReviews")) {
     void queryClient.invalidateQueries({ queryKey: ["myReviews"], refetchType });
+    // The same PR sync fills the cache My Pull Requests reads.
+    void queryClient.invalidateQueries({ queryKey: ["myCreatedPullRequests"], refetchType });
   }
   if (all || hot || scopeSet.has("myWorkItems")) {
     void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot(), refetchType });
