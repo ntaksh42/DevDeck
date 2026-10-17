@@ -207,6 +207,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
       if (!input) throw new Error("missing input");
       return demoSetInboxItemState(input);
     }
+    case "generate_action_inbox_insight":
+      return null;
     // ── Agent notes ───────────────────────────────────────────────────────
     case "list_agent_notes": {
       const input = (args as { input?: AgentNoteItem } | undefined)?.input;

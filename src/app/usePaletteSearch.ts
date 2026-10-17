@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  listActionInboxItems,
   searchAll,
   searchWiki,
+  setActiveOrganization,
+  setActionInboxItemState,
   submitPullRequestVote,
   type Organization,
   type PullRequestSummary,
@@ -11,8 +14,10 @@ import { openWikiPagePreview } from "@/features/wiki/wikiPreviewEvents";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
+import { SNOOZE_PRESETS, presetToIso } from "@/lib/snoozePresets";
 import type { CommandPaletteSearchItem } from "@/components/CommandPalette";
 import { parsePaletteSearch } from "./appHelpers";
+import { paletteUrlItems, parsePaletteUrl } from "./paletteUrl";
 import type { ExternalSearchRequest, View } from "./types";
 
 export interface PaletteSearchCallbacks {
@@ -51,6 +56,11 @@ export function usePaletteSearch(
   }, [paletteSearchText]);
 
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
+  // A pasted Azure DevOps link opens its item directly instead of being searched as text.
+  const paletteUrl = useMemo(
+    () => parsePaletteUrl(debouncedPaletteSearchText, organizations),
+    [debouncedPaletteSearchText, organizations],
+  );
   const paletteQueryLongEnough = /^\d+$/.test(paletteSearch.query)
     ? paletteSearch.query.length >= 1
     : paletteSearch.query.length >= 2;
@@ -60,6 +70,8 @@ export function usePaletteSearch(
     commandPaletteOpen &&
     organizations.length > 0 &&
     paletteSearch.kind !== "wiki" &&
+    paletteUrl === null &&
+    paletteSearch.kind !== "inbox" &&
     paletteQueryLongEnough;
   const paletteWikiEnabled =
     commandPaletteOpen &&
@@ -92,6 +104,17 @@ export function usePaletteSearch(
     retry: false,
   });
 
+  // Inbox rows are local (SQLite), so the `inbox:` list needs no minimum query
+  // length; the text only narrows the Open items client-side.
+  const paletteInboxEnabled =
+    commandPaletteOpen && organizations.length > 0 && paletteSearch.kind === "inbox";
+  const paletteInboxQuery = useQuery({
+    queryKey: ["actionInbox", "palette"],
+    queryFn: () => listActionInboxItems({ state: "open" }),
+    enabled: paletteInboxEnabled,
+    staleTime: 5_000,
+  });
+
   function openSearchTarget(
     kind: "workItems" | "pullRequests",
     query: string,
@@ -104,6 +127,23 @@ export function usePaletteSearch(
       callbacks.setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
       callbacks.setView("pullRequestSearch");
     }
+  }
+
+  // The search views read the active connection, so a link to another registered
+  // organization switches to it first (as the cross-org summary does).
+  function openLinkedItem(
+    kind: "workItems" | "pullRequests",
+    query: string,
+    organizationId: string,
+  ): void {
+    if (organizationId === activeOrganizationId) {
+      openSearchTarget(kind, query, organizationId);
+      return;
+    }
+    setActiveOrganization(organizationId)
+      .then(() => queryClient.invalidateQueries())
+      .catch((error) => console.error("Failed to switch connection for a pasted link", error))
+      .finally(() => openSearchTarget(kind, query, organizationId));
   }
 
   // Cast a review vote on a PR directly from the command palette (E-36). The
@@ -131,7 +171,21 @@ export function usePaletteSearch(
     [queryClient],
   );
 
+  // Done / Snooze straight from the palette. Failures are logged (no toast
+  // surface here); the Inbox list and badge refresh through the invalidation.
+  const changeInboxItem = useCallback(
+    (id: number, state: "done" | "snoozed", snoozedUntil?: string) => {
+      void setActionInboxItemState({ ids: [id], state, snoozedUntil })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["actionInbox"] }))
+        .catch((error) => {
+          console.error("Failed to update Inbox item from palette", error);
+        });
+    },
+    [queryClient],
+  );
+
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    if (paletteUrl) return paletteUrlItems(paletteUrl, activeOrganizationId, openLinkedItem);
     const kind = paletteSearch.kind;
     const showOrg = organizations.length > 1;
 
@@ -162,6 +216,38 @@ export function usePaletteSearch(
         });
       }
       return wikiItems;
+    }
+
+    if (kind === "inbox") {
+      const needle = paletteSearch.query.toLowerCase();
+      const tomorrow = SNOOZE_PRESETS.find((preset) => preset.id === "tomorrow");
+      const inboxItems: CommandPaletteSearchItem[] = [];
+      for (const item of paletteInboxEnabled ? (paletteInboxQuery.data ?? []) : []) {
+        const haystack = [item.title, item.repositoryName, item.author, item.snippet]
+          .join(" ")
+          .toLowerCase();
+        if (needle && !haystack.includes(needle)) continue;
+        const detail = [showOrg ? item.organizationId : null, item.repositoryName, item.author]
+          .filter(Boolean)
+          .join(" · ");
+        inboxItems.push({
+          id: `inbox-done:${item.id}`,
+          group: "Inbox",
+          label: `Done — ${item.title}`,
+          detail,
+          run: () => changeInboxItem(item.id, "done"),
+        });
+        if (tomorrow) {
+          inboxItems.push({
+            id: `inbox-snooze:${item.id}`,
+            group: "Inbox",
+            label: `Snooze until tomorrow — ${item.title}`,
+            detail,
+            run: () => changeInboxItem(item.id, "snoozed", presetToIso(tomorrow)),
+          });
+        }
+      }
+      return inboxItems;
     }
 
     const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
@@ -263,10 +349,15 @@ export function usePaletteSearch(
     paletteSearchEnabled,
     searchAllQuery.data,
     votePullRequest,
+    changeInboxItem,
+    paletteInboxEnabled,
+    paletteInboxQuery.data,
     paletteWikiEnabled,
     paletteWikiQuery.data,
     paletteWikiQuery.isError,
     paletteCodeOrgId,
+    paletteUrl,
+    activeOrganizationId,
   ]);
 
   // The palette surfaces recently opened Work Items and PRs. With an empty query
@@ -274,7 +365,7 @@ export function usePaletteSearch(
   // previously opened item is reachable without re-running a search.
   const paletteRecentItems = useMemo<CommandPaletteSearchItem[]>(() => {
     if (!commandPaletteOpen || organizations.length === 0) return [];
-    // A prefixed search (wi:/pr:/wiki:) is an explicit live search, not a recents lookup.
+    // A prefixed search (wi:/pr:/wiki:/inbox:) is an explicit live search, not a recents lookup.
     if (paletteSearch.kind !== null) return [];
     // Once live cross-org search kicks in, those results stand on their own;
     // recents are the fallback for an empty or too-short query.

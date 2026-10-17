@@ -3,7 +3,7 @@ use chrono::Utc;
 use tokio::task::JoinSet;
 
 use super::*;
-use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
+use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization, PrReviewerCount};
 use crate::error::{AppError, Result};
 use crate::shared_cache::SharedReviewer;
 use crate::sync::SyncBudget;
@@ -23,8 +23,8 @@ pub(crate) struct PrProjectFetch {
     /// The live query returned `PROJECT_PR_SYNC_TOP` PRs, so the snapshot may be
     /// truncated and must not be used to delete the project's cached rows.
     pub(crate) capped: bool,
-    /// Reviewer entries of the fetched PRs. Empty when the list came from the
-    /// shared cache, which does not expose reviewers to this app.
+    /// Reviewer entries of the fetched PRs (read from the shared cache when the
+    /// list came from there).
     pub(crate) reviewers: Vec<SharedReviewer>,
 }
 
@@ -67,6 +67,36 @@ pub async fn sync_prs_for_org(
             Err(e)
         }
     }
+}
+
+/// Approvals and reviewer total of each PR, for My Pull Requests.
+pub(super) fn reviewer_counts(
+    prs: &[CachedPr],
+    reviewers: &[SharedReviewer],
+) -> Vec<PrReviewerCount> {
+    let mut by_pr: std::collections::HashMap<(&str, i64), (i64, i64)> =
+        std::collections::HashMap::new();
+    for reviewer in reviewers {
+        let tally = by_pr
+            .entry((reviewer.repository_id.as_str(), reviewer.pull_request_id))
+            .or_default();
+        tally.0 += i64::from(reviewer.vote == 10);
+        tally.1 += 1;
+    }
+    prs.iter()
+        .map(|pr| {
+            let (approvals, reviewer_count) = by_pr
+                .get(&(pr.repository_id.as_str(), pr.pull_request_id))
+                .copied()
+                .unwrap_or_default();
+            PrReviewerCount {
+                repository_id: pr.repository_id.clone(),
+                pull_request_id: pr.pull_request_id,
+                approvals,
+                reviewer_count,
+            }
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -138,6 +168,10 @@ pub(crate) async fn do_sync_prs(
         .map(String::as_str)
         .collect();
     db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
+    db.save_pr_reviewer_counts(
+        &org.id,
+        &reviewer_counts(&active.cached_prs, &active.reviewers),
+    )?;
 
     let mut warning_parts: Vec<String> = Vec::new();
     warning_parts.extend(group_warning);
