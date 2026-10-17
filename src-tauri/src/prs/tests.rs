@@ -532,3 +532,43 @@ fn is_ado_not_found_only_matches_404_api_errors() {
     )));
     assert!(!is_ado_not_found(&AdoError::Unauthorized));
 }
+
+#[test]
+fn reviewer_counts_tally_approvals_per_pr() {
+    use crate::shared_cache::SharedReviewer;
+    let reviewer = |pull_request_id, id: &str, vote| SharedReviewer {
+        repository_id: "repo".to_string(),
+        pull_request_id,
+        reviewer_id: id.to_string(),
+        vote,
+        is_required: false,
+    };
+    let pr = |pull_request_id| CachedPr {
+        org_id: "org".to_string(),
+        project_id: "proj".to_string(),
+        project_name: "Project".to_string(),
+        repository_id: "repo".to_string(),
+        repository_name: "Repo".to_string(),
+        pull_request_id,
+        title: String::new(),
+        status: "active".to_string(),
+        created_by: None,
+        created_by_id: None,
+        creation_date: "2024-01-01T00:00:00Z".to_string(),
+        source_ref_name: "feature".to_string(),
+        target_ref_name: "main".to_string(),
+        web_url: None,
+        is_draft: false,
+    };
+    let counts = sync::reviewer_counts(
+        &[pr(1), pr(2)],
+        &[
+            reviewer(1, "a", 10),
+            reviewer(1, "b", 5),
+            reviewer(1, "c", -10),
+        ],
+    );
+    assert_eq!((counts[0].approvals, counts[0].reviewer_count), (1, 3));
+    // A PR without reviewers is still tallied, as 0 of 0.
+    assert_eq!((counts[1].approvals, counts[1].reviewer_count), (0, 0));
+}

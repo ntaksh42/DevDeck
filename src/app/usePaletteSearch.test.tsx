@@ -7,12 +7,16 @@ import type { Organization } from "@/lib/azdoCommands";
 const searchWiki = vi.fn();
 const searchAll = vi.fn();
 const getActiveOrganization = vi.fn();
+const listActionInboxItems = vi.fn();
+const setActionInboxItemState = vi.fn();
 
 vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
   searchWiki: (...args: unknown[]) => searchWiki(...args),
   searchAll: (...args: unknown[]) => searchAll(...args),
   getActiveOrganization: () => getActiveOrganization(),
+  listActionInboxItems: (...args: unknown[]) => listActionInboxItems(...args),
+  setActionInboxItemState: (...args: unknown[]) => setActionInboxItemState(...args),
 }));
 
 import { usePaletteSearch } from "./usePaletteSearch";
@@ -131,5 +135,65 @@ describe("usePaletteSearch pasted links", () => {
       expect.objectContaining({ query: "123", organizationId: "org-1" }),
     );
     expect(callbacks.setView).toHaveBeenCalledWith("pullRequestSearch");
+  });
+});
+
+describe("usePaletteSearch inbox actions", () => {
+  const inboxItem = (id: number, title: string) => ({
+    id,
+    organizationId: "org-1",
+    title,
+    repositoryName: "repo",
+    author: "Alice",
+    snippet: null,
+  });
+
+  beforeEach(() => {
+    listActionInboxItems.mockReset().mockResolvedValue([
+      inboxItem(1, "Fix null check"),
+      inboxItem(2, "Rename helper"),
+    ]);
+    setActionInboxItemState.mockReset().mockResolvedValue(1);
+    getActiveOrganization.mockReset().mockResolvedValue(organizations[0]);
+  });
+  afterEach(cleanup);
+
+  it("lists open items behind inbox: and narrows them by text", async () => {
+    const { result } = renderHook(() => usePaletteSearch(true, organizations, callbacks), {
+      wrapper,
+    });
+
+    act(() => result.current.setPaletteSearchText("inbox: rename"));
+
+    await waitFor(() => {
+      expect(result.current.paletteSearchItems.map((item) => item.label)).toEqual([
+        "Done — Rename helper",
+        "Snooze until tomorrow — Rename helper",
+      ]);
+    });
+    expect(listActionInboxItems).toHaveBeenCalledWith({ state: "open" });
+  });
+
+  it("marks done and snoozes through the Inbox state command", async () => {
+    const { result } = renderHook(() => usePaletteSearch(true, organizations, callbacks), {
+      wrapper,
+    });
+
+    act(() => result.current.setPaletteSearchText("inbox:"));
+    await waitFor(() => expect(result.current.paletteSearchItems).toHaveLength(4));
+
+    act(() => result.current.paletteSearchItems[0].run());
+    expect(setActionInboxItemState).toHaveBeenLastCalledWith({
+      ids: [1],
+      state: "done",
+      snoozedUntil: undefined,
+    });
+
+    act(() => result.current.paletteSearchItems[1].run());
+    expect(setActionInboxItemState).toHaveBeenLastCalledWith({
+      ids: [1],
+      state: "snoozed",
+      snoozedUntil: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
   });
 });

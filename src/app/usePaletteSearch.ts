@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  listActionInboxItems,
   searchAll,
   searchWiki,
   setActiveOrganization,
+  setActionInboxItemState,
   submitPullRequestVote,
   type Organization,
   type PullRequestSummary,
@@ -12,6 +14,7 @@ import { openWikiPagePreview } from "@/features/wiki/wikiPreviewEvents";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
+import { SNOOZE_PRESETS, presetToIso } from "@/lib/snoozePresets";
 import type { CommandPaletteSearchItem } from "@/components/CommandPalette";
 import { parsePaletteSearch } from "./appHelpers";
 import { paletteUrlItems, parsePaletteUrl } from "./paletteUrl";
@@ -68,6 +71,7 @@ export function usePaletteSearch(
     organizations.length > 0 &&
     paletteSearch.kind !== "wiki" &&
     paletteUrl === null &&
+    paletteSearch.kind !== "inbox" &&
     paletteQueryLongEnough;
   const paletteWikiEnabled =
     commandPaletteOpen &&
@@ -98,6 +102,17 @@ export function usePaletteSearch(
     // Wiki search needs the optional Search extension; a failure is reported as
     // a single "unavailable" row instead of retrying.
     retry: false,
+  });
+
+  // Inbox rows are local (SQLite), so the `inbox:` list needs no minimum query
+  // length; the text only narrows the Open items client-side.
+  const paletteInboxEnabled =
+    commandPaletteOpen && organizations.length > 0 && paletteSearch.kind === "inbox";
+  const paletteInboxQuery = useQuery({
+    queryKey: ["actionInbox", "palette"],
+    queryFn: () => listActionInboxItems({ state: "open" }),
+    enabled: paletteInboxEnabled,
+    staleTime: 5_000,
   });
 
   function openSearchTarget(
@@ -156,6 +171,19 @@ export function usePaletteSearch(
     [queryClient],
   );
 
+  // Done / Snooze straight from the palette. Failures are logged (no toast
+  // surface here); the Inbox list and badge refresh through the invalidation.
+  const changeInboxItem = useCallback(
+    (id: number, state: "done" | "snoozed", snoozedUntil?: string) => {
+      void setActionInboxItemState({ ids: [id], state, snoozedUntil })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["actionInbox"] }))
+        .catch((error) => {
+          console.error("Failed to update Inbox item from palette", error);
+        });
+    },
+    [queryClient],
+  );
+
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
     if (paletteUrl) return paletteUrlItems(paletteUrl, activeOrganizationId, openLinkedItem);
     const kind = paletteSearch.kind;
@@ -188,6 +216,38 @@ export function usePaletteSearch(
         });
       }
       return wikiItems;
+    }
+
+    if (kind === "inbox") {
+      const needle = paletteSearch.query.toLowerCase();
+      const tomorrow = SNOOZE_PRESETS.find((preset) => preset.id === "tomorrow");
+      const inboxItems: CommandPaletteSearchItem[] = [];
+      for (const item of paletteInboxEnabled ? (paletteInboxQuery.data ?? []) : []) {
+        const haystack = [item.title, item.repositoryName, item.author, item.snippet]
+          .join(" ")
+          .toLowerCase();
+        if (needle && !haystack.includes(needle)) continue;
+        const detail = [showOrg ? item.organizationId : null, item.repositoryName, item.author]
+          .filter(Boolean)
+          .join(" · ");
+        inboxItems.push({
+          id: `inbox-done:${item.id}`,
+          group: "Inbox",
+          label: `Done — ${item.title}`,
+          detail,
+          run: () => changeInboxItem(item.id, "done"),
+        });
+        if (tomorrow) {
+          inboxItems.push({
+            id: `inbox-snooze:${item.id}`,
+            group: "Inbox",
+            label: `Snooze until tomorrow — ${item.title}`,
+            detail,
+            run: () => changeInboxItem(item.id, "snoozed", presetToIso(tomorrow)),
+          });
+        }
+      }
+      return inboxItems;
     }
 
     const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
@@ -289,6 +349,9 @@ export function usePaletteSearch(
     paletteSearchEnabled,
     searchAllQuery.data,
     votePullRequest,
+    changeInboxItem,
+    paletteInboxEnabled,
+    paletteInboxQuery.data,
     paletteWikiEnabled,
     paletteWikiQuery.data,
     paletteWikiQuery.isError,
@@ -302,7 +365,7 @@ export function usePaletteSearch(
   // previously opened item is reachable without re-running a search.
   const paletteRecentItems = useMemo<CommandPaletteSearchItem[]>(() => {
     if (!commandPaletteOpen || organizations.length === 0) return [];
-    // A prefixed search (wi:/pr:/wiki:) is an explicit live search, not a recents lookup.
+    // A prefixed search (wi:/pr:/wiki:/inbox:) is an explicit live search, not a recents lookup.
     if (paletteSearch.kind !== null) return [];
     // Once live cross-org search kicks in, those results stand on their own;
     // recents are the fallback for an empty or too-short query.
