@@ -21,6 +21,8 @@ pub struct GitPullRequestDetail {
     /// Tip of the source branch; required when completing a PR to guard against
     /// merging a stale revision.
     pub last_merge_source_commit: Option<GitCommitRefId>,
+    /// Merge evaluation: `succeeded` | `conflicts` | `queued` | `rejectedByPolicy` | `failure`.
+    pub merge_status: Option<String>,
     /// Labels (tags) on the pull request, including deactivated ones.
     #[serde(default)]
     pub labels: Vec<PullRequestLabel>,
