@@ -212,6 +212,21 @@ export async function listPullRequestWorkItems(
   return z.array(z.number()).parse(result);
 }
 
+const policyRequirementSchema = z.object({
+  name: z.string(),
+  // approved | rejected | running | queued | notApplicable | broken
+  status: z.string(),
+  isBlocking: z.boolean(),
+  detail: z.string().nullable(),
+});
+export type PolicyRequirement = z.infer<typeof policyRequirementSchema>;
+
+/** Branch policies evaluated for the pull request (its merge requirements). */
+export async function listPullRequestPolicies(input: PrLocatorInput): Promise<PolicyRequirement[]> {
+  const result = await invokeCommand("list_pull_request_policies", { input });
+  return z.array(policyRequirementSchema).parse(result);
+}
+
 export async function getPullRequestFileDiff(
   input: GetPullRequestFileDiffInput,
 ): Promise<PrFileDiff> {

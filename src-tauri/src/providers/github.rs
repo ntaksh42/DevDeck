@@ -20,10 +20,10 @@ use crate::pipelines::{
 };
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
-    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator,
+    PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    RemovePullRequestLabelInput, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -254,6 +254,14 @@ impl Provider for GithubProvider {
 
     async fn list_pull_request_work_items(&self, _input: PrLocator) -> Result<Vec<i64>> {
         // GitHub pull requests have no Azure Boards work item links.
+        Ok(Vec::new())
+    }
+
+    async fn list_pull_request_policies(
+        &self,
+        _input: PrLocator,
+    ) -> Result<Vec<PolicyRequirement>> {
+        // Branch policy evaluations are an Azure DevOps concept; no section is shown.
         Ok(Vec::new())
     }
 

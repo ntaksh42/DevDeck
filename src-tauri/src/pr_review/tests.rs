@@ -120,3 +120,21 @@ fn root_comment_id_picks_the_thread_root_not_first_visible() {
     .unwrap();
     assert_eq!(root_comment_id(&thread), 10);
 }
+
+#[test]
+fn policy_detail_names_the_required_approver_count() {
+    use super::helpers::policy_detail;
+    assert_eq!(
+        policy_detail(&serde_json::json!({ "minimumApproverCount": 2 })).as_deref(),
+        Some("2 approvers required")
+    );
+    assert_eq!(
+        policy_detail(&serde_json::json!({ "minimumApproverCount": 1 })).as_deref(),
+        Some("1 approver required")
+    );
+    assert_eq!(
+        policy_detail(&serde_json::json!({ "buildDefinitionId": 9 })),
+        None
+    );
+    assert_eq!(policy_detail(&serde_json::Value::Null), None);
+}
