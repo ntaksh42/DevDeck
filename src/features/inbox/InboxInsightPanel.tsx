@@ -73,12 +73,13 @@ export function InboxInsightPanel({
       ) : null}
 
       {insight.replyDraft ? (
-        <div className="mt-1.5 border-t border-dashed border-border pt-1">
-          <p className="whitespace-pre-line break-words">{insight.replyDraft}</p>
+        <div className="mt-1.5 rounded border-l-2 border-l-sky-500 bg-background px-2 py-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Suggested reply</p>
+          <p className="mt-0.5 whitespace-pre-line break-words">{insight.replyDraft}</p>
           <button
             type="button"
             onClick={() => onUseDraft(insight.replyDraft ?? "")}
-            className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+            className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
           >
             Use as reply <Kbd>Shift+R</Kbd>
           </button>

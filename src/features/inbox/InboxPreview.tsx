@@ -1,7 +1,6 @@
 import type { RefObject } from "react";
 import type { MentionCandidate } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
-import { PreviewBand } from "@/components/PreviewBand";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import {
   inboxKindClass,
@@ -108,7 +107,9 @@ export function InboxPreview({
       tabIndex={-1}
       style={{ zoom }}
       // A thread's reply box stays pinned to the bottom while its thread is in view.
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2 outline-none [&_[data-thread-reply-area]]:sticky [&_[data-thread-reply-area]]:bottom-0 [&_[data-thread-reply-area]]:z-10 [&_[data-thread-reply-area]]:bg-card [&_[data-thread-reply-area]]:py-0.5"
+      // Children keep their height (the clamped heading would otherwise shrink
+      // away once a long thread overflows the pane).
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto [&>*]:shrink-0 px-3 py-2 outline-none [&_[data-thread-reply-area]]:sticky [&_[data-thread-reply-area]]:bottom-0 [&_[data-thread-reply-area]]:z-10 [&_[data-thread-reply-area]]:bg-card [&_[data-thread-reply-area]]:py-0.5"
     >
       <h2 className="line-clamp-2 text-sm font-semibold leading-snug">{heading}</h2>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -164,9 +165,18 @@ export function InboxPreview({
         ) : null}
       </div>
 
-      <div className="-mx-2 mt-1">
-        <PreviewBand>{bandTitle(item)}</PreviewBand>
-      </div>
+      {!detail.isLoading && !detail.error ? (
+        <InboxContextDescription
+          {...contextProps}
+          expanded={contextExpanded}
+          onToggleExpanded={onToggleContext}
+          resolveImageSource={resolveImageSource}
+        />
+      ) : null}
+
+      <h3 className="mt-2 border-b border-border pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {bandTitle(item)}
+      </h3>
       {detail.isLoading ? (
         <LoadingState />
       ) : detail.error ? (
@@ -204,14 +214,6 @@ export function InboxPreview({
       ) : null}
 
       {!isThreadItem(item) && !detail.isLoading && !detail.error ? <InboxContextCode {...contextProps} /> : null}
-      {!detail.isLoading && !detail.error ? (
-        <InboxContextDescription
-          {...contextProps}
-          expanded={contextExpanded}
-          onToggleExpanded={onToggleContext}
-          resolveImageSource={resolveImageSource}
-        />
-      ) : null}
 
       {links.length > 0 ? (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-dashed border-border pt-1.5 text-xs">
