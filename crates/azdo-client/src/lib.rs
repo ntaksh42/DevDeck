@@ -29,7 +29,7 @@ pub use pipelines::{
     BuildLogTail, DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic,
     Timeline, TimelineLogRef, TimelineRecord,
 };
-pub use policy::{PolicyConfiguration, PolicyType};
+pub use policy::{PolicyConfiguration, PolicyEvaluation, PolicyType};
 pub use pr_review::{
     GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,
     GitItemContent, GitIteration, GitPullRequestDetail, GitThread, GitThreadComment,

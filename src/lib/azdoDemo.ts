@@ -223,6 +223,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_pull_request_commits":
       return demoPrCommits;
+    case "list_pull_request_policies":
+      return [
+        { name: "Minimum number of reviewers", status: "rejected", isBlocking: true, detail: "2 approvers required" },
+        { name: "Build", status: "approved", isBlocking: true, detail: null },
+        { name: "Comment requirements", status: "approved", isBlocking: false, detail: null },
+      ];
     case "list_pull_request_work_items":
       // Two ids so the browser preview exercises the multi-item chooser.
       return [123, 118];
