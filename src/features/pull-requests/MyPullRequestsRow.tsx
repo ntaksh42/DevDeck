@@ -6,6 +6,16 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { sortLabels, type SortKey, type SortState } from "./myPullRequestsTypes";
 import { gridRowStateClass } from "@/lib/gridRowState";
 
+/** Everyone approved, not a draft, no conflicts. Needs no extra API calls; CI and policies are not considered. */
+export function isReadyToMerge(pr: MyCreatedPullRequestSummary): boolean {
+  return (
+    !pr.isDraft &&
+    pr.mergeStatus !== "conflicts" &&
+    pr.reviewerCount > 0 &&
+    pr.approvals >= pr.reviewerCount
+  );
+}
+
 export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): ReactNode {
   switch (key) {
     case "pullRequestId":
@@ -46,6 +56,14 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
               title="This pull request has merge conflicts"
             >
               Conflicts
+            </span>
+          ) : null}
+          {isReadyToMerge(pr) ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-green-200 bg-green-100 px-1.5 py-0.5 text-[11px] font-medium text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
+              title="Every reviewer approved and there are no merge conflicts (CI and branch policies are not checked)"
+            >
+              Ready to merge
             </span>
           ) : null}
         </div>
