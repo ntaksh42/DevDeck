@@ -29,6 +29,22 @@ pub struct PolicyConfiguration {
     pub settings: serde_json::Value,
 }
 
+/// The result of one policy configuration evaluated against a pull request.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyEvaluation {
+    /// `approved` | `rejected` | `running` | `queued` | `notApplicable` | `broken`.
+    #[serde(default)]
+    pub status: Option<String>,
+    pub configuration: PolicyConfiguration,
+}
+
+#[derive(Debug, Deserialize)]
+struct PolicyEvaluationList {
+    #[serde(default)]
+    value: Vec<PolicyEvaluation>,
+}
+
 #[derive(Debug, Deserialize)]
 struct PolicyList {
     #[serde(default)]
@@ -52,6 +68,29 @@ impl AdoClient {
                     ("repositoryId", repository_id),
                     ("refName", ref_name),
                     ("api-version", "7.1"),
+                ],
+            )
+            .await?;
+        Ok(list.value)
+    }
+
+    /// Lists how each policy evaluates for one pull request (the "merge
+    /// requirements" the web UI shows). The artifact id is the code review id
+    /// `vstfs:///CodeReview/CodeReviewId/{projectId}/{pullRequestId}`.
+    pub async fn list_pull_request_policy_evaluations(
+        &self,
+        project_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Vec<PolicyEvaluation>> {
+        let path = format!("{project_id}/_apis/policy/evaluations");
+        let artifact_id =
+            format!("vstfs:///CodeReview/CodeReviewId/{project_id}/{pull_request_id}");
+        let list: PolicyEvaluationList = self
+            .get_json(
+                &path,
+                &[
+                    ("artifactId", artifact_id.as_str()),
+                    ("api-version", "7.1-preview.1"),
                 ],
             )
             .await?;
@@ -107,5 +146,59 @@ mod tests {
             Some("Minimum number of reviewers")
         );
         assert_eq!(policies[0].settings["minimumApproverCount"], 2);
+    }
+    #[tokio::test]
+    async fn list_pull_request_policy_evaluations_uses_the_code_review_artifact_id() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/p-1/_apis/policy/evaluations"))
+            .and(query_param(
+                "artifactId",
+                "vstfs:///CodeReview/CodeReviewId/p-1/42",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    {
+                        "status": "rejected",
+                        "configuration": {
+                            "id": 7,
+                            "isEnabled": true,
+                            "isBlocking": true,
+                            "type": { "id": "fa4e907d", "displayName": "Minimum number of reviewers" },
+                            "settings": { "minimumApproverCount": 2 }
+                        }
+                    },
+                    {
+                        "status": "approved",
+                        "configuration": {
+                            "id": 8,
+                            "isEnabled": true,
+                            "isBlocking": false,
+                            "type": { "id": "0609b952", "displayName": "Build" }
+                        }
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+        let base_url = Url::parse(&format!("{}/", server.uri())).unwrap();
+        let client = AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(base_url);
+
+        let evaluations = client
+            .list_pull_request_policy_evaluations("p-1", 42)
+            .await
+            .unwrap();
+
+        assert_eq!(evaluations.len(), 2);
+        assert_eq!(evaluations[0].status.as_deref(), Some("rejected"));
+        assert!(evaluations[0].configuration.is_blocking);
+        assert_eq!(
+            evaluations[0].configuration.settings["minimumApproverCount"],
+            2
+        );
+        assert!(!evaluations[1].configuration.is_blocking);
     }
 }
