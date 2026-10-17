@@ -377,6 +377,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "add_work_item_link":
     case "remove_work_item_link":
       return null;
+    case "create_work_item_branch": {
+      const input = (args as { input?: { branchName?: string } } | undefined)?.input;
+      return { branchName: input?.branchName ?? "", linked: true, linkError: null };
+    }
     case "delete_work_item_comment": {
       const input = (args as { input?: DeleteWorkItemCommentInput } | undefined)?.input;
       if (input) deleteDemoWorkItemComment(input.commentId);

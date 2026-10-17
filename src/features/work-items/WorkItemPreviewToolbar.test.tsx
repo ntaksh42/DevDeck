@@ -78,8 +78,8 @@ describe("WorkItemPreviewToolbar", () => {
       "false",
     );
 
-    // ↓ walks Follow -> Email -> Duplicate -> Presets -> Comments layout.
-    for (let i = 0; i < 4; i++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    // ↓ walks Follow -> Email -> Duplicate -> Create branch -> Presets -> Comments layout.
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     const layout = screen.getByRole("menuitemcheckbox", { name: "Comments beside details" });
     expect(document.activeElement).toBe(layout);
     fireEvent.click(layout);
@@ -90,6 +90,12 @@ describe("WorkItemPreviewToolbar", () => {
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Follow" }));
     expect(follow.toggleFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the branch dialog from the command palette event", async () => {
+    renderToolbar();
+    window.dispatchEvent(new CustomEvent("azdodeck:work-items:create-branch"));
+    expect(await screen.findByRole("dialog", { name: /Create branch/ })).toBeTruthy();
   });
 
   it("omits Duplicate when the host cannot duplicate", () => {
