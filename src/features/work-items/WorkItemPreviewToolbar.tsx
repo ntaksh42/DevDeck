@@ -6,6 +6,7 @@ import { buildWorkItemEmailLink } from "./workItemChanges";
 import { useWorkItemFollow } from "./useWorkItemFollow";
 import { FieldConfigMenu } from "./FieldConfigMenu";
 import { PresetMenu } from "./PreviewPresetMenu";
+import { CreateBranchDialog } from "./CreateBranchDialog";
 
 type PresetMenuProps = Omit<React.ComponentProps<typeof PresetMenu>, "open" | "onClose">;
 type FieldConfigProps = Omit<React.ComponentProps<typeof FieldConfigMenu>, "open" | "onClose">;
@@ -32,6 +33,7 @@ export function WorkItemPreviewToolbar({
 }) {
   const { isFollowed, toggleFollow, pending: followPending } = useWorkItemFollow(preview);
   const [popover, setPopover] = useState<"presets" | "fields" | null>(null);
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
 
@@ -55,6 +57,7 @@ export function WorkItemPreviewToolbar({
         { label: "Follow", checked: isFollowed, disabled: followPending, onSelect: toggleFollow },
         { label: "Email a link", onSelect: () => void openMailtoUrl(buildWorkItemEmailLink(preview)) },
         ...(onDuplicate ? [{ label: "Duplicate work item", hint: "D", onSelect: onDuplicate }] : []),
+        { label: "Create branch…", onSelect: () => setBranchDialogOpen(true) },
         { label: "Field presets…", hint: "1-9", onSelect: () => setPopover("presets") },
         { label: "Comments beside details", checked: sideBySide, onSelect: onToggleCommentsLayout },
         { label: "Configure preview fields…", onSelect: () => setPopover("fields") },
@@ -62,6 +65,9 @@ export function WorkItemPreviewToolbar({
     >
       <PresetMenu {...presets} open={popover === "presets"} onClose={() => setPopover(null)} />
       <FieldConfigMenu {...fieldConfig} open={popover === "fields"} onClose={() => setPopover(null)} />
+      {branchDialogOpen ? (
+        <CreateBranchDialog preview={preview} onClose={() => setBranchDialogOpen(false)} />
+      ) : null}
     </PreviewToolbar>
   );
 }

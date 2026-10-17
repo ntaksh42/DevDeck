@@ -78,8 +78,8 @@ describe("WorkItemPreviewToolbar", () => {
       "false",
     );
 
-    // ↓ walks Follow -> Email -> Duplicate -> Presets -> Comments layout.
-    for (let i = 0; i < 4; i++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    // ↓ walks Follow -> Email -> Duplicate -> Create branch -> Presets -> Comments layout.
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     const layout = screen.getByRole("menuitemcheckbox", { name: "Comments beside details" });
     expect(document.activeElement).toBe(layout);
     fireEvent.click(layout);

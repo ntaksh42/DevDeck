@@ -30,6 +30,7 @@ mod sync;
 mod types;
 pub(crate) use candidates::*;
 use conversions::*;
+pub use mutations::{CreateWorkItemBranchInput, CreateWorkItemBranchResult};
 pub(crate) use query::*;
 pub(crate) use sync::*;
 pub use types::*;
