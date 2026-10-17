@@ -197,6 +197,8 @@ fn app_settings_can_be_saved_and_cleared() {
             experimental_diagnostics_export: true,
             experimental_cross_org_summary: true,
             experimental_auto_update_check: true,
+            start_minimized: true,
+            keep_running_in_tray: true,
         },
     )
     .unwrap();
@@ -214,6 +216,8 @@ fn app_settings_can_be_saved_and_cleared() {
     assert!(saved.experimental_diagnostics_export);
     assert!(saved.experimental_cross_org_summary);
     assert!(saved.experimental_auto_update_check);
+    assert!(saved.start_minimized);
+    assert!(saved.keep_running_in_tray);
     assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);
     assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
     assert!(saved.read_only_validation_mode_enabled);

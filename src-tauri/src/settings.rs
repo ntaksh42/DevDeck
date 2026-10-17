@@ -66,6 +66,8 @@ pub struct UpdateAppSettingsInput {
     pub experimental_diagnostics_export: Option<bool>,
     pub experimental_cross_org_summary: Option<bool>,
     pub experimental_auto_update_check: Option<bool>,
+    pub start_minimized: Option<bool>,
+    pub keep_running_in_tray: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -270,6 +272,8 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         experimental_diagnostics_export: input.experimental_diagnostics_export.unwrap_or(false),
         experimental_cross_org_summary: input.experimental_cross_org_summary.unwrap_or(false),
         experimental_auto_update_check: input.experimental_auto_update_check.unwrap_or(false),
+        start_minimized: input.start_minimized.unwrap_or(false),
+        keep_running_in_tray: input.keep_running_in_tray.unwrap_or(false),
     }
 }
 

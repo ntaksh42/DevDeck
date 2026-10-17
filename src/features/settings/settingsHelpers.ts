@@ -49,6 +49,8 @@ export function settingsInput(
       settings?.experimentalDiagnosticsExport ?? false,
     experimentalCrossOrgSummary: settings?.experimentalCrossOrgSummary ?? false,
     experimentalAutoUpdateCheck: settings?.experimentalAutoUpdateCheck ?? false,
+    startMinimized: settings?.startMinimized ?? false,
+    keepRunningInTray: settings?.keepRunningInTray ?? false,
     ...input,
   };
 }

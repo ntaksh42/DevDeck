@@ -23,6 +23,7 @@ mod settings;
 mod shared_cache;
 mod snooze;
 mod sync;
+mod tray;
 mod wiki;
 mod work_items;
 
@@ -95,6 +96,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![tray::MINIMIZED_ARG]),
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -150,11 +155,22 @@ pub fn run() {
             tauri::async_runtime::spawn(
                 SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
             );
+            tray::setup_tray(app.handle()).inspect_err(|e| {
+                eprintln!("DevDeck setup failed (setup_tray): {e}");
+            })?;
+            if settings.start_minimized && tray::launched_minimized() {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
             Ok(())
         })
+        .on_window_event(tray::handle_window_event)
         .invoke_handler(tauri::generate_handler![
             commands::orgs::list_organizations,
             commands::settings::get_app_settings,
+            commands::startup::get_autostart_enabled,
+            commands::startup::set_autostart_enabled,
             commands::settings::update_app_settings,
             commands::settings::get_review_result_preview,
             commands::settings::get_work_item_result_preview,

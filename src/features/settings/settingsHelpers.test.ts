@@ -57,6 +57,8 @@ function nonDefaultSettings(): AppSettings {
     experimentalDiagnosticsExport: true,
     experimentalCrossOrgSummary: true,
     experimentalAutoUpdateCheck: true,
+    startMinimized: true,
+    keepRunningInTray: true,
   };
 }
 

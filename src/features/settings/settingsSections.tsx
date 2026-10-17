@@ -8,6 +8,7 @@ import { ProjectInfoSettings } from './ProjectInfoSettings';
 import { QuickPipelinesSettings } from './QuickPipelinesSettings';
 import { SyncHealthSettings } from './SyncHealthSettings';
 import { ThemeSettings } from './ThemeSettings';
+import { StartupSettings } from './StartupSettings';
 import { DataCacheSettings } from './DataCacheSettings';
 import { ValidationModeSettings } from './ValidationModeSettings';
 import { ExperimentalSettings } from './ExperimentalSettings';
@@ -68,6 +69,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Appearance",
         keywords: "theme dark light system color",
         render: () => <ThemeSettings />,
+      },
+      {
+        id: "startup",
+        title: "Startup",
+        keywords: "autostart sign in login tray minimized background close quit",
+        render: () => <StartupSettings />,
       },
       {
         id: "keyboard-shortcuts",

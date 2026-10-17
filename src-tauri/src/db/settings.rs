@@ -95,6 +95,10 @@ pub struct AppSettings {
     pub experimental_diagnostics_export: bool,
     pub experimental_cross_org_summary: bool,
     pub experimental_auto_update_check: bool,
+    /// Started by "Start DevDeck when I sign in": keep the window hidden.
+    pub start_minimized: bool,
+    /// The close button hides the window and leaves DevDeck in the tray.
+    pub keep_running_in_tray: bool,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
@@ -140,6 +144,8 @@ impl Default for AppSettings {
             experimental_diagnostics_export: false,
             experimental_cross_org_summary: false,
             experimental_auto_update_check: false,
+            start_minimized: false,
+            keep_running_in_tray: false,
         }
     }
 }
@@ -239,6 +245,8 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
             "experimental_auto_update_check",
             false,
         )?,
+        start_minimized: get_bool_setting(conn, "start_minimized", false)?,
+        keep_running_in_tray: get_bool_setting(conn, "keep_running_in_tray", false)?,
     })
 }
 
@@ -413,6 +421,8 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         "experimental_auto_update_check",
         settings.experimental_auto_update_check,
     )?;
+    set_bool_setting(conn, "start_minimized", settings.start_minimized)?;
+    set_bool_setting(conn, "keep_running_in_tray", settings.keep_running_in_tray)?;
     get_app_settings(conn)
 }
 

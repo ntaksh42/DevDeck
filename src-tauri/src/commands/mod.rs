@@ -10,6 +10,7 @@ pub mod repos;
 pub mod search;
 pub mod settings;
 pub mod snooze;
+pub mod startup;
 pub mod sync;
 pub mod wiki;
 pub mod work_items;

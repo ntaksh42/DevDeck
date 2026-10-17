@@ -112,6 +112,7 @@ import {
 import { dispatchExt } from "@/lib/demo/dispatchExt";
 
 let demoSettings: AppSettings = { ...DEFAULT_DEMO_SETTINGS };
+let demoAutostart = false;
 let demoSyncStates: SyncState[] = DEFAULT_DEMO_SYNC_STATES.map((s) => ({ ...s }));
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
@@ -145,6 +146,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           resolveReviewThreads: true,
         },
       };
+    case "get_autostart_enabled":
+      return demoAutostart;
+    case "set_autostart_enabled":
+      demoAutostart = Boolean((args as { enabled?: boolean } | undefined)?.enabled);
+      return demoAutostart;
     case "get_app_settings":
       return demoSettings;
     case "update_app_settings": {

@@ -77,6 +77,10 @@ export const appSettingsSchema = z.object({
   experimentalDiagnosticsExport: z.boolean().default(false),
   experimentalCrossOrgSummary: z.boolean().default(false),
   experimentalAutoUpdateCheck: z.boolean().default(false),
+  // Startup: whether a sign-in launch keeps the window hidden, and whether the
+  // close button leaves DevDeck running in the tray.
+  startMinimized: z.boolean().default(false),
+  keepRunningInTray: z.boolean().default(false),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -228,6 +232,8 @@ export type UpdateAppSettingsInput = {
   experimentalDiagnosticsExport?: boolean;
   experimentalCrossOrgSummary?: boolean;
   experimentalAutoUpdateCheck?: boolean;
+  startMinimized?: boolean;
+  keepRunningInTray?: boolean;
 };
 
 export type GetReviewResultPreviewInput = {

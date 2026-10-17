@@ -96,6 +96,8 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   experimentalDiagnosticsExport: false,
   experimentalCrossOrgSummary: false,
   experimentalAutoUpdateCheck: false,
+  startMinimized: false,
+  keepRunningInTray: false,
 };
 
 export const DEFAULT_DEMO_SYNC_STATES: SyncState[] = [
@@ -255,6 +257,12 @@ export function applyDemoSettingsUpdate(
       input && "experimentalAutoUpdateCheck" in input
         ? Boolean(input.experimentalAutoUpdateCheck)
         : current.experimentalAutoUpdateCheck,
+    startMinimized:
+      input && "startMinimized" in input ? Boolean(input.startMinimized) : current.startMinimized,
+    keepRunningInTray:
+      input && "keepRunningInTray" in input
+        ? Boolean(input.keepRunningInTray)
+        : current.keepRunningInTray,
   };
 }
 
