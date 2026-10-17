@@ -36,6 +36,7 @@ import { openInboxEntryInApp, openInboxEntryInBrowser, openInboxLink } from "./i
 import { useInboxDetail } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
 import { useInboxListFocus } from "./useInboxListFocus";
+import { useInboxChecked } from "./useInboxChecked";
 import { useInboxStateChanges } from "./useInboxStateChanges";
 
 const OVERSCAN = 8;
@@ -83,6 +84,7 @@ export function InboxView() {
     onReselect: (target) => moveSelectionTo(target),
   });
   const entries = stateChanges.visibleEntries;
+  const checked = useInboxChecked(entries);
   const countsQuery = useQuery({
     queryKey: ["actionInbox", "counts", organizationId],
     queryFn: () => getActionInboxCounts(organizationId || undefined),
@@ -146,6 +148,14 @@ export function InboxView() {
   /** The item leaves the list at once, so the next row is selected and the list keeps focus. */
   function changeState(entry: InboxEntry, state: InboxTab, snoozedUntil?: string, resolved = false) {
     stateChanges.changeState(entry, state, snoozedUntil, { resolved });
+    focusList();
+  }
+
+  /** E / Z on marked items applies to all of them; with none marked it is the selected row. */
+  function changeMarkedOrSelected(entry: InboxEntry, state: InboxTab, snoozedUntil?: string) {
+    if (checked.checkedEntries.length === 0) return changeState(entry, state, snoozedUntil);
+    stateChanges.changeStates(checked.checkedEntries, state, snoozedUntil);
+    checked.clear();
     focusList();
   }
 
@@ -232,6 +242,11 @@ export function InboxView() {
       filterBar.onOpen();
       return;
     }
+    if (key === "Escape" && checked.ids.size > 0) {
+      event.preventDefault();
+      checked.clear();
+      return;
+    }
     if (key.toLowerCase() === "u" && !event.shiftKey) {
       // Works on an emptied list too: undoing the last item brings it back.
       if (stateChanges.undoLast()) event.preventDefault();
@@ -244,7 +259,13 @@ export function InboxView() {
       return;
     }
     const lower = key.toLowerCase();
-    if (key === "ArrowDown" || lower === "j") {
+    if (event.shiftKey && (key === "ArrowDown" || key === "ArrowUp")) {
+      // Extends the marked range over the row being left and the one entered.
+      event.preventDefault();
+      const next = index + (key === "ArrowDown" ? 1 : -1);
+      checked.add(entries[index], entries[next]);
+      moveSelectionTo(next);
+    } else if (key === "ArrowDown" || lower === "j") {
       event.preventDefault();
       moveSelectionTo(index + 1);
     } else if (key === "ArrowUp" || lower === "k") {
@@ -276,9 +297,12 @@ export function InboxView() {
         event.preventDefault();
         void toggleThreadStatus();
       }
+    } else if (lower === "x") {
+      event.preventDefault();
+      checked.toggle(selected);
     } else if (lower === "e") {
       event.preventDefault();
-      changeState(selected, tab === "done" ? "open" : "done");
+      changeMarkedOrSelected(selected, tab === "done" ? "open" : "done");
     } else if (lower === "d") {
       event.preventDefault();
       setContextExpanded((value) => !value);
@@ -287,7 +311,7 @@ export function InboxView() {
       scrollPreview(event.shiftKey ? -1 : 1);
     } else if (lower === "z") {
       event.preventDefault();
-      if (tab === "snoozed") changeState(selected, "open");
+      if (tab === "snoozed") changeMarkedOrSelected(selected, "open");
       else openSnoozeMenu();
     } else if (lower === "r" && event.shiftKey) {
       if (selected.insight?.replyDraft) {
@@ -369,6 +393,7 @@ export function InboxView() {
           virtual={virtual}
           entries={entries}
           selectedIndex={index}
+          checkedIds={checked.ids}
           isLoading={isLoading}
           error={error ? commandErrorMessage(error) : null}
           onRetry={refetch}
@@ -456,7 +481,7 @@ export function InboxView() {
         <SnoozeMenu
           anchorRect={snoozeAnchor}
           onSnooze={(until) => {
-            changeState(selected, "snoozed", until);
+            changeMarkedOrSelected(selected, "snoozed", until);
             setSnoozeAnchor(null);
           }}
           onClose={() => setSnoozeAnchor(null)}

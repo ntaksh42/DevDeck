@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { ExternalLink, MessageSquare } from "lucide-react";
+import { Check, ExternalLink, MessageSquare } from "lucide-react";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { gridRowStateClass } from "@/lib/gridRowState";
@@ -23,11 +23,13 @@ export const InboxRow = forwardRef<
     item: InboxEntry;
     tab: InboxTab;
     selected: boolean;
+    /** Marked with X / Shift+↑↓ for a bulk Done / Snooze. */
+    checked?: boolean;
     domId: string;
     onSelect: () => void;
     onOpen: () => void;
   }
->(({ item, tab, selected, domId, onSelect, onOpen }, ref) => {
+>(({ item, tab, selected, checked = false, domId, onSelect, onOpen }, ref) => {
   const timeLabel =
     tab === "snoozed"
       ? formatSnoozeUntil(item.snoozedUntil)
@@ -55,8 +57,9 @@ export const InboxRow = forwardRef<
       onClick={onSelect}
       onDoubleClick={onOpen}
       style={{ height: INBOX_ROW_HEIGHT }}
-      className={`group flex cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected })}`}
+      className={`group flex cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection: checked })}`}
     >
+      {checked ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Marked" /> : null}
       <span className={`w-16 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
         {inboxKindLabel(item.kind)}
       </span>
