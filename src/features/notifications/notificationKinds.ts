@@ -7,6 +7,7 @@ const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   prReviewRequested: "Review requested",
   prVoteReset: "Vote reset",
   prCommentReply: "Comment reply",
+  prReadyToMerge: "Ready to merge",
   wiAssigned: "Work item assigned",
   wiStateChanged: "Work item state changed",
   syncFailed: "Sync failed",

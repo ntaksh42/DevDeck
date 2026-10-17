@@ -31,6 +31,7 @@ const pr: MyCreatedPullRequestSummary = {
   isDraft: false,
   approvals: 0,
   reviewerCount: 0,
+  readyToMerge: false,
 };
 
 describe("MyPullRequestsGrid copy shortcuts", () => {

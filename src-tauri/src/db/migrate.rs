@@ -699,5 +699,8 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             PRAGMA user_version = 28;",
         )?;
     }
+    if current < 29 {
+        super::merge_readiness::migrate_v29(conn)?;
+    }
     Ok(())
 }

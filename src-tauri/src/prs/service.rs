@@ -88,6 +88,11 @@ impl PullRequestService {
             .into_iter()
             .map(|row| {
                 let pr = row.pr;
+                let ready_to_merge = !pr.is_draft
+                    && self
+                        .db
+                        .pr_ready_to_merge(&organization.id, &pr.repository_id, pr.pull_request_id)
+                        .unwrap_or(false);
                 MyCreatedPullRequestSummary {
                     organization_id: pr.org_id,
                     project_id: pr.project_id,
@@ -103,6 +108,7 @@ impl PullRequestService {
                     is_draft: pr.is_draft,
                     approvals: row.approvals,
                     reviewer_count: row.reviewer_count,
+                    ready_to_merge,
                 }
             })
             .collect();

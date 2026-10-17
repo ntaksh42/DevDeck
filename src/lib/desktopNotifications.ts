@@ -35,7 +35,7 @@ export type PullRequestNotificationEvent = {
 };
 
 type PullRequestNotificationItem = {
-  kind: "reviewRequested" | "voteReset" | "commentReply";
+  kind: "reviewRequested" | "voteReset" | "commentReply" | "readyToMerge";
   pullRequestId: number;
   repositoryId: string;
   title: string;
@@ -431,6 +431,8 @@ function pullRequestNotificationTitle(item: PullRequestNotificationItem): string
       return `Vote reset: !${item.pullRequestId}`;
     case "commentReply":
       return `New reply: !${item.pullRequestId}`;
+    case "readyToMerge":
+      return `Ready to merge: !${item.pullRequestId}`;
   }
 }
 

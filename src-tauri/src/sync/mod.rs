@@ -7,11 +7,14 @@ use crate::db::AppDatabase;
 use crate::secrets::SecretStore;
 
 mod inbox;
+mod merge_readiness;
 mod notifications;
 mod org;
 mod runner;
 mod wi_mentions;
 
+#[cfg(test)]
+mod merge_readiness_tests;
 #[cfg(test)]
 mod tests;
 

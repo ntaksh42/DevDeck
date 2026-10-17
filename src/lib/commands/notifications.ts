@@ -8,6 +8,7 @@ export const NOTIFICATION_KINDS = [
   "prReviewRequested",
   "prVoteReset",
   "prCommentReply",
+  "prReadyToMerge",
   "wiAssigned",
   "wiStateChanged",
   "syncFailed",
@@ -73,7 +74,7 @@ export type PipelineNotificationPayload = {
 
 /** Discriminated union returned by `parseNotificationPayload`, narrowed on `kind`. */
 export type ParsedNotificationPayload =
-  | { kind: "prReviewRequested" | "prVoteReset" | "prCommentReply"; payload: PrNotificationPayload }
+  | { kind: "prReviewRequested" | "prVoteReset" | "prCommentReply" | "prReadyToMerge"; payload: PrNotificationPayload }
   | { kind: "wiAssigned" | "wiStateChanged"; payload: WorkItemNotificationPayload }
   | { kind: "syncFailed"; payload: SyncFailedNotificationPayload }
   | {
@@ -88,6 +89,7 @@ export function parseNotificationPayload(record: NotificationRecord): ParsedNoti
   switch (record.kind) {
     case "prReviewRequested":
     case "prVoteReset":
+    case "prReadyToMerge":
     case "prCommentReply":
       return { kind: record.kind, payload: record.payload as PrNotificationPayload };
     case "wiAssigned":

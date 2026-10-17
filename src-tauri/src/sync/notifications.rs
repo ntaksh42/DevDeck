@@ -65,6 +65,7 @@ pub enum PrNotificationKind {
     ReviewRequested,
     VoteReset,
     CommentReply,
+    ReadyToMerge,
 }
 
 impl PrNotificationKind {
@@ -75,6 +76,7 @@ impl PrNotificationKind {
             PrNotificationKind::ReviewRequested => "reviewRequested",
             PrNotificationKind::VoteReset => "voteReset",
             PrNotificationKind::CommentReply => "commentReply",
+            PrNotificationKind::ReadyToMerge => "readyToMerge",
         }
     }
 
@@ -84,6 +86,7 @@ impl PrNotificationKind {
             PrNotificationKind::ReviewRequested => "prReviewRequested",
             PrNotificationKind::VoteReset => "prVoteReset",
             PrNotificationKind::CommentReply => "prCommentReply",
+            PrNotificationKind::ReadyToMerge => "prReadyToMerge",
         }
     }
 }
@@ -334,6 +337,7 @@ fn pr_notification_record(
         }
         PrNotificationKind::VoteReset => format!("Vote reset: !{}", item.pull_request_id),
         PrNotificationKind::CommentReply => format!("New reply: !{}", item.pull_request_id),
+        PrNotificationKind::ReadyToMerge => format!("Ready to merge: !{}", item.pull_request_id),
     };
     let body = if matches!(item.kind, PrNotificationKind::CommentReply) {
         let author = item.comment_author.as_deref().unwrap_or("Someone");

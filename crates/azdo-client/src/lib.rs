@@ -4,6 +4,7 @@ pub mod code_search;
 pub mod error;
 pub mod git;
 pub mod identity;
+mod merge_readiness;
 pub mod pipelines;
 pub mod policy;
 pub mod pr_review;

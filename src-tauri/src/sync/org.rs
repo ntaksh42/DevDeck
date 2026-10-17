@@ -117,7 +117,6 @@ async fn sync_org_prs(
         return outcome;
     }
     outcome.record_success();
-    emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
     let current_reviews = db.list_review_pull_requests(&org.id).unwrap_or_default();
     // Collect comment notifications first: the call advances the comment-seen
     // markers that snooze revival then reads.
@@ -168,7 +167,21 @@ async fn sync_org_prs(
             HashSet::new()
         }
     };
-    if should_collect {
+    match super::merge_readiness::collect_ready_prs(
+        db,
+        client,
+        org,
+        settings,
+        budget,
+        &snoozed_pr_keys,
+    )
+    .await
+    {
+        Ok(ready_items) => items.extend(ready_items),
+        Err(error) => tracing::warn!(%error, "merge readiness sync failed"),
+    }
+    emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
+    if should_collect || !items.is_empty() {
         items.retain(|item| {
             !snoozed_pr_keys.contains(&format!("{}:{}", item.repository_id, item.pull_request_id))
         });
@@ -185,7 +198,15 @@ async fn sync_org_prs(
                 db,
                 handle,
                 &org.name,
-                pr_notification_records(&org.id, &org.name, &items),
+                pr_notification_records(
+                    &org.id,
+                    &org.name,
+                    &items
+                        .iter()
+                        .filter(|item| item.kind != PrNotificationKind::ReadyToMerge)
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                ),
             );
             let event = PullRequestNotificationEvent {
                 organization_id: org.id.clone(),

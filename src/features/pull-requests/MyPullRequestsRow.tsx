@@ -32,6 +32,9 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
     case "title":
       return (
         <div className="flex min-w-0 items-center gap-1.5">
+          {pr.readyToMerge && !pr.isDraft && (
+            <span className="shrink-0 rounded border border-green-600 px-1.5 py-0.5 text-xs text-green-600 dark:text-green-400">Ready to merge</span>
+          )}
           {pr.isDraft && (
             <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               Draft

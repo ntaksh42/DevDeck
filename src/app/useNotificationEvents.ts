@@ -10,7 +10,7 @@ import {
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import type { AppSettings } from "@/lib/azdoCommands";
 
-export type NotificationListView = "myReviews" | "myWorkItems";
+export type NotificationListView = "myReviews" | "myWorkItems" | "myPullRequests" | "notifications";
 
 // `onOpenView` lets a clicked summary notification ("5 pull request updates")
 // open the matching list in the app instead of a single item in the browser.
@@ -22,6 +22,10 @@ export function useNotificationEvents(
   onOpenViewRef.current = onOpenView;
   const openListFor = (view: NotificationListView) =>
     onOpenViewRef.current ? () => onOpenViewRef.current?.(view) : undefined;
+  const openPrListFor = (event: PullRequestNotificationEvent) => openListFor(
+    event.items.every((item) => item.kind === "readyToMerge") ? "myPullRequests"
+      : event.items.some((item) => item.kind === "readyToMerge") ? "notifications" : "myReviews",
+  );
   const appSettingsRef = useRef<AppSettings | null>(null);
   // Notification events that arrived before settings finished loading. They are
   // replayed once settings are available so the first events are not dropped.
@@ -44,7 +48,7 @@ export function useNotificationEvents(
       void showWorkItemNotificationEvent(event, settings, openListFor("myWorkItems"));
     }
     for (const event of pullRequestEvents) {
-      void showPullRequestNotificationEvent(event, settings, openListFor("myReviews"));
+      void showPullRequestNotificationEvent(event, settings, openPrListFor(event));
     }
     for (const event of syncFailedEvents) {
       void showSyncFailedNotificationEvent(event, settings);
@@ -74,7 +78,7 @@ export function useNotificationEvents(
           pendingPullRequestEventsRef.current.push(payload);
           return;
         }
-        void showPullRequestNotificationEvent(payload, settings, openListFor("myReviews"));
+        void showPullRequestNotificationEvent(payload, settings, openPrListFor(payload));
       },
     );
   }, []);
