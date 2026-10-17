@@ -43,7 +43,8 @@ function buildSeed(): InboxItem[] {
       hitCount: 2,
       title: "Add pull request search dashboard",
       author: "Frank Lee",
-      snippet: "@you ここの null 扱いを確認してください",
+      // A mention followed by a general reply stays Priority for this conversation.
+      snippet: "null 扱いの補足です。未指定の場合も確認してください",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
       detectedAt: minsAgo(12),
       // Matches the demo thread 1 shown for this PR (a request for a test).

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getActionInboxCounts, listActionInboxItems } from "@/lib/azdoCommands";
-import { matchesInboxFilter, type InboxEntry, type InboxTab } from "./inboxPresentation";
+import { matchesInboxFilter, matchesInboxPriority, type InboxEntry, type InboxPriority, type InboxTab } from "./inboxPresentation";
 
 /** Sidebar badge: the number of open Inbox items, the same count the Inbox lists. */
 export function useInboxBadge(): number | null {
@@ -13,15 +13,17 @@ export function useInboxBadge(): number | null {
   return counts.data?.open ?? null;
 }
 
-/** The rows of the Inbox for one tab, filtered by the text filter. */
+/** The rows of the Inbox for one tab, filtered by text and priority. */
 export function useInboxEntries({
   tab,
   organizationId,
   filterText,
+  priority,
 }: {
   tab: InboxTab;
   organizationId: string;
   filterText: string;
+  priority: InboxPriority;
 }) {
   const listQuery = useQuery({
     queryKey: ["actionInbox", "list", tab, organizationId],
@@ -32,8 +34,8 @@ export function useInboxEntries({
   });
 
   const entries = useMemo<InboxEntry[]>(
-    () => (listQuery.data ?? []).filter((entry) => matchesInboxFilter(entry, filterText)),
-    [listQuery.data, filterText],
+    () => (listQuery.data ?? []).filter((entry) => matchesInboxFilter(entry, filterText) && matchesInboxPriority(entry, priority)),
+    [listQuery.data, filterText, priority],
   );
 
   return {
