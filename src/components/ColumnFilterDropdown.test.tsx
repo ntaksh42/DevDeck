@@ -123,3 +123,16 @@ describe("ColumnFilterDropdown keyboard navigation", () => {
     expect(activeLabel()).toBe("search");
   });
 });
+
+describe("ColumnFilterDropdown IME composition", () => {
+  it("keeps the popup open when Escape cancels an IME conversion", () => {
+    const { props, dropdown } = renderDropdown();
+    const search = dropdown.querySelector("input:not([type=checkbox])") as HTMLInputElement;
+
+    fireEvent.keyDown(search, { key: "Escape", isComposing: true });
+    expect(props.onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+});

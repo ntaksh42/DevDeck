@@ -5,6 +5,7 @@ import {
   CandidateAvatar,
   HighlightedText,
 } from "./PreviewEditorsBase";
+import { isImeComposing } from "@/lib/utils";
 
 export function AssigneePicker({
   current,
@@ -70,6 +71,7 @@ export function AssigneePicker({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Escape") {
                 event.preventDefault();
                 onOpenChange(false);

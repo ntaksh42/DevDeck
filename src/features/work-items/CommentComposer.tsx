@@ -27,6 +27,7 @@ import {
 } from "./workItemMentions";
 import { useWorkItemMentionPicker } from "./useWorkItemMentionPicker";
 import { MentionPickerDropdown } from "./MentionPickerDropdown";
+import { isImeComposing } from "@/lib/utils";
 
 // Owns the comment draft and drives the shared mention picker so typing
 // re-renders only this subtree, not the whole preview panel with its comment
@@ -159,6 +160,7 @@ export function CommentComposer({
   }
 
   function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (isImeComposing(event)) return;
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       const posted = postComment();

@@ -9,6 +9,7 @@ import {
 import type { ViewEditorDraftReturn } from './useViewEditorDraft';
 import { ProjectQueryPicker } from './ProjectQueryPicker';
 import { WiqlEditor } from './WiqlEditor';
+import { isImeComposing } from '@/lib/utils';
 
 export type ViewEditorDialogProps = {
   draft: ViewEditorDraftReturn;
@@ -96,6 +97,7 @@ export function ViewEditorDialog({
         onKeyDown={(event) => {
           // On the outer dialog rather than the form so Escape also works from
           // the header close button, and never reaches the grid behind it.
+          if (isImeComposing(event)) return;
           if (event.key === "Escape") {
             event.stopPropagation();
             close();
@@ -121,6 +123,7 @@ export function ViewEditorDialog({
           className="grid gap-3 p-4"
           onSubmit={onSave}
           onKeyDown={(event) => {
+            if (isImeComposing(event)) return;
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
               viewFormRef.current?.requestSubmit();

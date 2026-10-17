@@ -10,6 +10,7 @@ import { REMOVABLE_LINK_TYPES, WORK_ITEM_LINK_TYPES } from "./workItemPreviewHel
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
 import { PreviewSection } from "./PreviewSection";
 import { NativeSelect } from "@/components/SearchBar";
+import { isImeComposing } from "@/lib/utils";
 
 export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) {
   const linkQueryClient = useQueryClient();
@@ -128,6 +129,7 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
           value={newLinkTargetId}
           onChange={(event) => setNewLinkTargetId(event.target.value)}
           onKeyDown={(event) => {
+            if (isImeComposing(event)) return;
             if (event.key === "Enter") {
               event.preventDefault();
               event.stopPropagation();

@@ -16,6 +16,7 @@ import {
   filterCustomFieldOptions,
   PREVIEW_FIELD_DEFINITIONS,
 } from "./workItemPreviewHelpers";
+import { isImeComposing } from "@/lib/utils";
 
 // Popover half of the "Configure preview fields…" View options item: no
 // trigger of its own, the toolbar's menu opens it and gets focus back on
@@ -126,6 +127,7 @@ export function FieldConfigMenu({
       ref={fieldMenuRef}
       className="relative"
       onKeyDown={(event) => {
+        if (isImeComposing(event)) return;
         if (event.key === "Escape" && fieldMenuOpen) {
           // Close the menu instead of letting Escape bubble to the
           // panel (which would discard staged edits / leave the panel).

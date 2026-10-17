@@ -5,6 +5,7 @@ import { workItemQueryKeys } from "./queryKeys";
 import { filterCustomFieldOptions } from "./workItemPreviewHelpers";
 import { extraColumnLabel } from "./workItemsGridHelpers";
 import { normalizeViewExtraColumns } from "./workItemViewsStorage";
+import { isImeComposing } from "@/lib/utils";
 
 /**
  * "Field columns" section of the work-item Columns menu: lists the Azure
@@ -88,6 +89,7 @@ export function WiFieldColumnsSection({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
+            if (isImeComposing(event)) return;
             if (event.key === "Enter" && matches[0]) {
               event.preventDefault();
               add(matches[0].referenceName);
