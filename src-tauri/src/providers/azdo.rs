@@ -17,6 +17,7 @@ use crate::pipelines::{
     QueuePipelineRunInput, RerunPipelineRunInput, RetryPipelineStageInput,
     UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
     EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
@@ -240,6 +241,10 @@ impl Provider for AzdoProvider {
 
     async fn list_pull_request_work_items(&self, input: PrLocator) -> Result<Vec<i64>> {
         self.pr_review.list_work_item_ids(input).await
+    }
+
+    async fn get_pull_request_health(&self, input: PrLocator) -> Result<PrHealth> {
+        self.pr_review.get_health(input).await
     }
 
     async fn list_pull_request_policies(&self, input: PrLocator) -> Result<Vec<PolicyRequirement>> {

@@ -212,6 +212,21 @@ export async function listPullRequestWorkItems(
   return z.array(z.number()).parse(result);
 }
 
+const prHealthSchema = z.object({
+  // succeeded | failed | in_progress | none
+  ciStatus: z.string(),
+  ciContext: z.string().nullable(),
+  ciCheckCount: z.number(),
+  unresolvedThreads: z.number(),
+});
+export type PrHealth = z.infer<typeof prHealthSchema>;
+
+/** CI verdict and open-comment count for one pull request (two requests). */
+export async function getPullRequestHealth(input: PrLocatorInput): Promise<PrHealth> {
+  const result = await invokeCommand("get_pull_request_health", { input });
+  return prHealthSchema.parse(result);
+}
+
 const policyRequirementSchema = z.object({
   name: z.string(),
   // approved | rejected | running | queued | notApplicable | broken

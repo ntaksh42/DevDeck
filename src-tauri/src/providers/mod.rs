@@ -28,6 +28,7 @@ use crate::pipelines::{
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
     UpdatePipelineDefinitionInput,
 };
+use crate::pr_review::PrHealth;
 use crate::pr_review::{
     AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
     EditPullRequestCommentInput, GetPullRequestFileDiffInput, PolicyRequirement,
@@ -162,6 +163,8 @@ pub(crate) trait Provider: Send + Sync {
     async fn list_pull_request_commits(&self, input: PrLocator) -> Result<Vec<PrCommit>>;
     /// Ids of work items linked to the pull request.
     async fn list_pull_request_work_items(&self, input: PrLocator) -> Result<Vec<i64>>;
+    /// CI verdict and unresolved-comment count for one pull request.
+    async fn get_pull_request_health(&self, input: PrLocator) -> Result<PrHealth>;
     /// Branch policies evaluated for the pull request (its merge requirements).
     async fn list_pull_request_policies(&self, input: PrLocator) -> Result<Vec<PolicyRequirement>>;
     async fn post_pull_request_comment(
