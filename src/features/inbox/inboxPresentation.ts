@@ -2,6 +2,12 @@ import type { InboxItem } from "@/lib/azdoCommands";
 import type { AgentSubject, OpenAgentPanelDetail } from "@/components/agent/agentSubject";
 
 export type InboxTab = "open" | "snoozed" | "done";
+export type InboxPriority = "all" | "priority" | "other";
+
+export function matchesInboxPriority(item: Pick<InboxItem, "kind">, priority: InboxPriority): boolean {
+  const mention = item.kind === "pr_mention" || item.kind === "wi_mention";
+  return priority === "all" || (priority === "priority" ? mention : !mention);
+}
 
 /** A row of the Inbox: a comment addressed to the user, stored by the sync. */
 export type InboxEntry = InboxItem;

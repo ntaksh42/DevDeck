@@ -11,7 +11,7 @@ import {
 } from "@/lib/azdoCommands";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { pushToast } from "@/lib/toast";
-import { clamp, focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
+import { clamp, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 import { useDockFilter } from "@/components/DockFilterBar";
@@ -19,6 +19,7 @@ import { DockableWorkspace, type DockablePanelSpec } from "@/components/Dockable
 import { SnoozeMenu } from "@/components/SnoozeMenu";
 import { usePublishAgentListScope } from "@/components/agent/agentListScope";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
+import { inboxListKeyHandler } from "./inboxListKeyHandler";
 import { inboxAgentList } from "./inboxAgentList";
 import { InboxListHeader } from "./InboxListHeader";
 import { InboxListPane } from "./InboxListPane";
@@ -29,9 +30,9 @@ import type { ReplySeed } from "./InboxPreviewPanels";
 import {
   agentRequestOf,
   inboxAgentSubject,
-  isThreadItem,
   type InboxEntry,
   type InboxLink,
+  type InboxPriority,
   type InboxTab,
 } from "./inboxPresentation";
 import { openInboxEntryInApp, openInboxEntryInBrowser, openInboxLink } from "./inboxNavigation";
@@ -48,6 +49,7 @@ const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
 
 export function InboxView() {
   const [tab, setTab] = useState<InboxTab>("open");
+  const [priority, setPriority] = useState<InboxPriority>("all");
   const [organizationId, setOrganizationId] = useState("");
   const [filterText, setFilterText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -80,6 +82,7 @@ export function InboxView() {
 
   const { entries: fetchedEntries, isLoading, error, refetch } = useInboxEntries({
     tab,
+    priority,
     organizationId,
     filterText,
   });
@@ -249,129 +252,12 @@ export function InboxView() {
     setSelectedIndex(0);
   }
 
-  function handleListKeyDown(event: React.KeyboardEvent) {
-    if (isEditableTarget(event.target)) return;
-    if (event.altKey || event.metaKey) return;
-    if (event.ctrlKey) {
-      if (event.key === "Enter" && selected) {
-        event.preventDefault();
-        openInBrowser(selected);
-      }
-      return;
-    }
-    const key = event.key;
-    if (key === "/") {
-      event.preventDefault();
-      filterBar.onOpen();
-      return;
-    }
-    if (key === "Escape" && checked.ids.size > 0) {
-      event.preventDefault();
-      checked.clear();
-      return;
-    }
-    if (key.toLowerCase() === "u" && !event.shiftKey) {
-      // Works on an emptied list too: undoing the last item brings it back.
-      if (stateChanges.undoLast()) event.preventDefault();
-      return;
-    }
-    if (entries.length === 0) return;
-    if (event.shiftKey && key === "Enter") {
-      event.preventDefault();
-      if (selected) openInApp(selected);
-      return;
-    }
-    const lower = key.toLowerCase();
-    if (event.shiftKey && (key === "ArrowDown" || key === "ArrowUp")) {
-      // Extends the marked range over the row being left and the one entered.
-      event.preventDefault();
-      const next = index + (key === "ArrowDown" ? 1 : -1);
-      checked.add(entries[index], entries[next]);
-      moveSelectionTo(next);
-    } else if (key === "ArrowDown" || lower === "j") {
-      event.preventDefault();
-      moveSelectionTo(index + 1);
-    } else if (key === "ArrowUp" || lower === "k") {
-      event.preventDefault();
-      moveSelectionTo(index - 1);
-    } else if (key === "Home") {
-      event.preventDefault();
-      moveSelectionTo(0);
-    } else if (key === "End") {
-      event.preventDefault();
-      moveSelectionTo(entries.length - 1);
-    } else if (key === "PageDown") {
-      event.preventDefault();
-      moveSelectionTo(index + 10);
-    } else if (key === "PageUp") {
-      event.preventDefault();
-      moveSelectionTo(index - 10);
-    } else if (key === "Enter" || key === "ArrowRight") {
-      event.preventDefault();
-      focusPrimaryPreview();
-    } else if (!selected) {
-      return;
-    } else if (lower === "o") {
-      event.preventDefault();
-      openInBrowser(selected);
-    } else if (lower === "e" && event.shiftKey) {
-      // Resolve + Done, the same as the preview's button.
-      if (tab === "open" && isThreadItem(selected) && detail.thread && !detail.thread.isResolved && !readOnly) {
-        event.preventDefault();
-        void toggleThreadStatus();
-      }
-    } else if (lower === "x") {
-      event.preventDefault();
-      checked.toggle(selected);
-    } else if (lower === "e") {
-      event.preventDefault();
-      changeMarkedOrSelected(selected, tab === "done" ? "open" : "done");
-    } else if (lower === "d") {
-      event.preventDefault();
-      setContextExpanded((value) => !value);
-    } else if (key === " ") {
-      event.preventDefault();
-      scrollPreview(event.shiftKey ? -1 : 1);
-    } else if (lower === "z") {
-      event.preventDefault();
-      if (tab === "snoozed") changeMarkedOrSelected(selected, "open");
-      else openSnoozeMenu();
-    } else if (lower === "i") {
-      if (canGenerateInsight(selected)) {
-        event.preventDefault();
-        generateInsight(selected);
-      }
-    } else if (lower === "r" && event.shiftKey) {
-      if (selected.insight?.replyDraft) {
-        event.preventDefault();
-        applyReplyDraft(selected.insight.replyDraft);
-      }
-    } else if (lower === "r") {
-      event.preventDefault();
-      activatePanel("conversation");
-      // Wait for the panel to mount if it was stacked behind the agent's tab.
-      window.setTimeout(() => {
-        const preview = previewRef.current;
-        const target =
-          preview?.querySelector<HTMLElement>('[data-inbox-mention-reply="true"], [data-thread-reply="true"]') ??
-          preview?.querySelector<HTMLElement>('[data-inbox-composer="true"] textarea');
-        if (target instanceof HTMLTextAreaElement) target.focus();
-        else target?.click();
-      }, 0);
-    } else if (lower === "q") {
-      event.preventDefault();
-      openAgentPanel(agentRequestOf(selected));
-    } else if (lower === "c") {
-      event.preventDefault();
-      if (selected.webUrl) void navigator.clipboard?.writeText(selected.webUrl);
-    } else if (/^[1-9]$/.test(key)) {
-      const link = detail.links[Number(key) - 1];
-      if (link) {
-        event.preventDefault();
-        openLink(link);
-      }
-    }
-  }
+  const handleListKeyDown = inboxListKeyHandler({
+    selected, entries, index, tab, checked, stateChanges, detail, readOnly,
+    filterBar, moveSelectionTo, openInBrowser, openInApp, toggleThreadStatus,
+    changeMarkedOrSelected, setContextExpanded, scrollPreview, openSnoozeMenu,
+    canGenerateInsight, generateInsight, applyReplyDraft, activatePanel, previewRef, openLink,
+  });
 
   const returnToList = (event: React.KeyboardEvent) => {
     if (handlePreviewZoomKey(event, { zoomIn, zoomOut, resetZoom })) return;
@@ -411,6 +297,11 @@ export function InboxView() {
       content: (
         <InboxListPane
           tab={tab}
+          priority={priority}
+          onPriorityChange={(value) => {
+            setPriority(value);
+            setSelectedIndex(0);
+          }}
           tabCounts={tabCounts}
           onTabChange={switchTab}
           filterText={filterText}

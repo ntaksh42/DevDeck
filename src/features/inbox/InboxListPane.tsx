@@ -5,7 +5,8 @@ import { isEditableTarget } from "@/lib/utils";
 import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
-import type { InboxEntry, InboxTab } from "./inboxPresentation";
+import { InboxPriorityFilter } from "./InboxPriorityFilter";
+import type { InboxEntry, InboxPriority, InboxTab } from "./inboxPresentation";
 import type { InboxUndo } from "./useInboxStateChanges";
 
 const EMPTY_MESSAGE: Record<InboxTab, string> = {
@@ -21,6 +22,8 @@ const EMPTY_MESSAGE: Record<InboxTab, string> = {
  */
 export function InboxListPane({
   tab,
+  priority,
+  onPriorityChange,
   tabCounts,
   onTabChange,
   filterText,
@@ -42,6 +45,8 @@ export function InboxListPane({
   onUndo,
 }: {
   tab: InboxTab;
+  priority: InboxPriority;
+  onPriorityChange: (priority: InboxPriority) => void;
   tabCounts: Record<InboxTab, number>;
   onTabChange: (tab: InboxTab) => void;
   filterText: string;
@@ -79,6 +84,7 @@ export function InboxListPane({
       onKeyDown={handleSectionKeyDown}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
     >
+      <InboxPriorityFilter value={priority} onChange={onPriorityChange} onFocusList={() => listRef.current?.focus()} />
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : isLoading ? (
@@ -101,7 +107,7 @@ export function InboxListPane({
         >
           {entries.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {filterText.trim() ? "No items match the filter." : EMPTY_MESSAGE[tab]}
+              {filterText.trim() || priority !== "all" ? "No items match the filter." : EMPTY_MESSAGE[tab]}
             </div>
           ) : (
             <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
