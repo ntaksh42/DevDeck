@@ -11,6 +11,7 @@ import {
   type KeybindingId,
   type KeybindingMap,
 } from "@/lib/keybindings";
+import { SettingsRow } from './SettingsRow';
 
 export function KeyboardShortcutSettings() {
   const defaults = defaultKeybindingMap();
@@ -99,22 +100,11 @@ export function KeyboardShortcutSettings() {
   const bindingById = new Map(KEYBINDINGS.map((b) => [b.id, b]));
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Keyboard className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Keyboard shortcuts</h2>
-            <p className="text-sm text-muted-foreground">
-              Reassign app-level shortcuts. Focus a shortcut and press the new key combination.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-3">
+    <SettingsRow
+      title="Keyboard shortcuts"
+      description={<>Reassign app-level shortcuts. Focus a shortcut and press the new key combination.</>}
+    >
+      <div className="grid gap-3">
         {groups.map(({ group, ids }) => (
           <div key={group} className="grid gap-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -196,6 +186,6 @@ export function KeyboardShortcutSettings() {
           </button>
         </div>
       </div>
-    </div>
+    </SettingsRow>
   );
 }

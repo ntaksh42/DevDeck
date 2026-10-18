@@ -41,6 +41,8 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
   const [draft, setDraft] = useState<TemplateDraft>(() => emptyDraft());
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // The menu is fixed-positioned so a clipping ancestor (the header toolbar slot scrolls) cannot cut it off.
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
 
   const manageButtonRef = useRef<HTMLButtonElement | null>(null);
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -210,6 +212,8 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
             aria-expanded={createMenuOpen}
             onClick={() => {
               restoreFocusRef.current = createButtonRef.current;
+              const rect = createButtonRef.current?.getBoundingClientRect();
+              if (rect) setMenuPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 256) });
               setCreateMenuOpen((open) => !open);
             }}
             className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
@@ -229,7 +233,8 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                 role="menu"
                 aria-label="Create from template"
                 onKeyDown={handleCreateMenuKeyDown}
-                className="absolute right-0 z-50 mt-1 max-h-72 w-64 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
+                style={menuPos}
+                className="fixed z-50 max-h-72 w-64 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
               >
                 {templates.map((template) => (
                   <button

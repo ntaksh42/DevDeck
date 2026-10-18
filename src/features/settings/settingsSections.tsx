@@ -55,7 +55,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         id: "add-connection",
         title: "Add connection",
         keywords: "connect organization azure devops github pat personal access token azure cli login",
-        render: () => <SetupPanel compact />,
+        render: (organizations) => (
+          <SetupPanel compact hasConnections={organizations.length > 0} />
+        ),
       },
     ],
   },

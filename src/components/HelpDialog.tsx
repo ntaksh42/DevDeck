@@ -197,7 +197,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
         </div>
         <div className={group}>
           <p {...sectionProps("inbox")}>Inbox</p>
-          <div className={row}><span>Priority / Other / All (Tab to the priority filter; Enter returns to items)</span><kbd className={kbd}>← → / ↑ ↓</kbd></div>
+          <div className={row}><span>Priority (direct PR / WI mentions) / Other (general replies) / All: Tab to the filter in the tab strip, arrows switch, Enter returns to items</span><kbd className={kbd}>← → / ↑ ↓</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Focus the preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in DevDeck</span><kbd className={kbd}>Shift+Enter</kbd></div>

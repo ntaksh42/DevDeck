@@ -10,6 +10,12 @@ import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { setAnalyzeGroupContext } from "@/components/agent/analyzeGroupContext";
 import { AnalyzeGroupDialog } from "./AnalyzeGroupDialog";
 import { AnalyzeGroupList } from "./AnalyzeGroupList";
+import {
+  ANALYZE_TEMPLATES,
+  AnalyzeTemplatePreview,
+  buildGroupFromTemplate,
+  type AnalyzeTemplate,
+} from "./AnalyzeTemplates";
 import { AnalyzeSummaryPanel, type AnalyzeSelection } from "./AnalyzeSummaryPanel";
 import { QueryDetailPanel } from "./AnalyzeDetailPanels";
 import {
@@ -50,6 +56,7 @@ export function AnalyzeView() {
   const [selection, setSelection] = useState<AnalyzeSelection | null>(null);
   const [editing, setEditing] = useState<{ group: AnalyzeGroup; isNew: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [focusedTemplateId, setFocusedTemplateId] = useState(ANALYZE_TEMPLATES[0].id);
   const detailRef = useRef<HTMLDivElement | null>(null);
 
   const selected = useMemo(
@@ -117,6 +124,18 @@ export function AnalyzeView() {
       group: emptyGroup(organizationId, projectsQuery.data?.[0]?.projectId ?? ""),
       isNew: true,
     });
+  }
+
+  function addTemplate(template: AnalyzeTemplate) {
+    const group = buildGroupFromTemplate(
+      template,
+      organizationId,
+      projectsQuery.data?.[0]?.projectId ?? "",
+    );
+    persist([...groups, group]);
+    setSelectedId(group.id);
+    // Land on the new group's row once the list has rendered it.
+    window.setTimeout(focusPrimaryGrid, 0);
   }
 
   function openEdit(groupId: string) {
@@ -199,13 +218,18 @@ export function AnalyzeView() {
               data-primary-preview="true"
               className="flex min-h-0 flex-1 focus:outline-none"
             >
-              <PreviewEmptyState
-                message={
-                  groups.length === 0
-                    ? "Add a group to track how a set of queries changes over time."
-                    : "Select a group."
-                }
-              />
+              {groups.length === 0 ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <AnalyzeTemplatePreview
+                    template={
+                      ANALYZE_TEMPLATES.find((template) => template.id === focusedTemplateId) ??
+                      ANALYZE_TEMPLATES[0]
+                    }
+                  />
+                </div>
+              ) : (
+                <PreviewEmptyState message="Select a group." />
+              )}
             </div>
           ) : (
             <>
@@ -337,6 +361,9 @@ export function AnalyzeView() {
           onAdd={openAdd}
           onEdit={openEdit}
           onDelete={removeGroup}
+          focusedTemplateId={focusedTemplateId}
+          onFocusTemplate={setFocusedTemplateId}
+          onAddTemplate={addTemplate}
         />
       ),
     },

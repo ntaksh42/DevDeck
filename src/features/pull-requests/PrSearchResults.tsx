@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
 import { Filter } from 'lucide-react';
 import { type PullRequestSummary } from '@/lib/azdoCommands';
 import {
@@ -54,6 +54,7 @@ import {
 
 export function PullRequestResults({
   activeExternalFilterCount = 0,
+  emptyContent,
   loading,
   onClearExternalFilters,
   results,
@@ -62,6 +63,8 @@ export function PullRequestResults({
   total = 0,
 }: {
   activeExternalFilterCount?: number;
+  /** Replaces the default "Run a search" empty state (e.g. recent searches). */
+  emptyContent?: ReactNode;
   loading: boolean;
   onClearExternalFilters?: () => void;
   results: PullRequestSummary[];
@@ -330,7 +333,7 @@ export function PullRequestResults({
         }}
       >
       {!searched && !loading ? (
-        <PreviewEmptyState message="Run a search to load pull requests." hint={SEARCH_EMPTY_HINT} />
+        emptyContent ?? <PreviewEmptyState message="Run a search to load pull requests." hint={SEARCH_EMPTY_HINT} />
       ) : results.length === 0 && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           No pull requests matched.

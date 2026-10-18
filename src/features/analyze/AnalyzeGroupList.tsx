@@ -1,7 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
-import { PreviewEmptyState } from "@/components/StateDisplay";
 import type { AnalyzeGroup } from "./analyzeGroupsStorage";
+import { AnalyzeTemplateList, type AnalyzeTemplate } from "./AnalyzeTemplates";
 
 export type AnalyzeGroupListProps = {
   groups: AnalyzeGroup[];
@@ -12,6 +12,9 @@ export type AnalyzeGroupListProps = {
   onAdd: () => void;
   onEdit: (groupId: string) => void;
   onDelete: (groupId: string) => void;
+  focusedTemplateId: string;
+  onFocusTemplate: (templateId: string) => void;
+  onAddTemplate: (template: AnalyzeTemplate) => void;
 };
 
 export function AnalyzeGroupList({
@@ -22,6 +25,9 @@ export function AnalyzeGroupList({
   onAdd,
   onEdit,
   onDelete,
+  focusedTemplateId,
+  onFocusTemplate,
+  onAddTemplate,
 }: AnalyzeGroupListProps) {
   const rowRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   const selectedIndex = groups.findIndex((group) => group.id === selectedId);
@@ -100,9 +106,10 @@ export function AnalyzeGroupList({
     >
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {groups.length === 0 ? (
-          <PreviewEmptyState
-            message="No groups yet."
-            hint="Press N to add one and track a set of queries together."
+          <AnalyzeTemplateList
+            focusedId={focusedTemplateId}
+            onFocusTemplate={onFocusTemplate}
+            onAddTemplate={onAddTemplate}
           />
         ) : (
           groups.map((group, index) => {

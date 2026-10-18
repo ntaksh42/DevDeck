@@ -26,6 +26,7 @@ const MODEL_FIELDS = [
   { key: "codexModelChoices", label: "More Codex models", placeholder: "gpt-5.1, gpt-5.1-mini, …" },
 ] as const;
 type ModelKey = (typeof MODEL_FIELDS)[number]["key"];
+import { SettingsRow } from './SettingsRow';
 
 export function AgentCommandSettings() {
   const queryClient = useQueryClient();
@@ -94,24 +95,11 @@ export function AgentCommandSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Bot className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Agent command</h2>
-            <p className="text-sm text-muted-foreground">
-              Started by a request in the Agent panel (Ctrl+J), in the repository's clone inside
-              the workspace folder (else the result folder). The panel can switch the agent for
-              each request.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
+    <SettingsRow
+      title="Agent command"
+      description={<>Started by a request in the Agent panel (Ctrl+J), in the repository's clone inside the workspace folder (else the result folder). The panel can switch the agent for each request.</>}
+    >
+      <form className="grid max-w-xl gap-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Default agent</span>
           <select
@@ -250,6 +238,6 @@ export function AgentCommandSettings() {
           </button>
         </div>
       </form>
-    </div>
+    </SettingsRow>
   );
 }

@@ -23,6 +23,7 @@ import {
   viewCardStats,
   type ViewCountQueryResult,
 } from './ViewsListItems';
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { WorkItemViewsOverflowMenu } from './WorkItemViewsOverflowMenu';
 
 export type ViewsListPanelProps = {
@@ -91,8 +92,8 @@ export function ViewsListPanel({
   // "Collapsed" is the default one-row chip display (a borderless toolbar row,
   // same height as the search rows); expanded is the card/compact-row grid.
   const chips = collapsed;
-  const iconBtn = chips ? "h-8 w-8" : "h-7 w-7";
-  const textBtn = chips ? "h-8" : "h-7";
+  const iconBtn = "h-7 w-7";
+  const textBtn = "h-7";
 
   const toggle = (
     <button
@@ -112,241 +113,247 @@ export function ViewsListPanel({
     </button>
   );
 
+  const headerRow = (
+    <div
+      className={
+        chips
+          ? "flex min-w-0 flex-1 items-center gap-2"
+          : "flex items-center justify-between border-b border-border px-2 py-1"
+      }
+    >
+      {chips ? (
+        <>
+          {toggle}
+          {/* The header breadcrumb already says "Views"; keep the heading for screen readers only. */}
+          <h2 className="sr-only">Views</h2>
+          {views.length === 0 ? (
+            <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              No saved WIQL views (N to add one)
+            </p>
+          ) : (
+            <div
+              role="listbox"
+              aria-label="Saved work item views"
+              aria-orientation="horizontal"
+              data-views-panel="true"
+              className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+              style={{ scrollbarWidth: "thin" }}
+              onKeyDown={onKeyDown}
+            >
+              {views.map((view, index) => (
+                <ViewCompactRow
+                  key={view.id}
+                  chip
+                  view={view}
+                  query={viewCountQueries[index]}
+                  stats={stats[index]}
+                  selected={selectedView?.id === view.id}
+                  buttonRef={(element) => {
+                    viewButtonRefs.current[index] = element;
+                  }}
+                  onSelect={() => onSelectView(view)}
+                  onEdit={() => onEditView(view)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex min-w-0 items-center gap-2">
+          {toggle}
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h2 className="text-sm font-semibold">Views</h2>
+            <p className="text-xs text-muted-foreground">
+              {views.length === 0
+                ? "No saved WIQL views"
+                : `${views.length} saved view${views.length === 1 ? "" : "s"}`}
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {chips ? null : (
+        <>
+        <div
+          role="group"
+          aria-label="View list density"
+          className="inline-flex items-center rounded-md border border-border p-0.5"
+        >
+          <button
+            type="button"
+            aria-pressed={cardMode === "card"}
+            onClick={() => onCardModeChange("card")}
+            title="Card view list"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded disabled:cursor-not-allowed disabled:opacity-50 ${
+              cardMode === "card" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
+            }`}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-pressed={cardMode === "compact"}
+            onClick={() => onCardModeChange("compact")}
+            title="Compact view list"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded disabled:cursor-not-allowed disabled:opacity-50 ${
+              cardMode === "compact" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
+            }`}
+          >
+            <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+        </>
+        )}
+        <div
+          role="group"
+          aria-label="Result layout"
+          className="inline-flex items-center rounded-md border border-border p-0.5"
+        >
+          <button
+            type="button"
+            disabled={!selectedView}
+            aria-pressed={layout === "list"}
+            onClick={() => onLayoutChange("list")}
+            title="List layout"
+            className={`inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+              layout === "list" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
+            }`}
+          >
+            <List className="h-3.5 w-3.5" aria-hidden="true" />
+            List
+          </button>
+          <button
+            type="button"
+            disabled={!selectedView}
+            aria-pressed={layout === "board"}
+            onClick={() => onLayoutChange("board")}
+            title="Board layout"
+            className={`inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+              layout === "board" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
+            }`}
+          >
+            <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
+            Board
+          </button>
+        </div>
+        {chips ? null : (
+        <>
+        <button
+          type="button"
+          disabled={!selectedView}
+          onClick={onPinToggle}
+          title={selectedView?.pinned ? "Unpin selected view" : "Pin selected view"}
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {selectedView?.pinned ? (
+            <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          <span className="sr-only">{selectedView?.pinned ? "Unpin" : "Pin"}</span>
+        </button>
+        <button
+          type="button"
+          disabled={!selectedView || selectedViewIndex <= 0}
+          onClick={onMoveLeft}
+          title="Move selected view left"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          disabled={!selectedView || selectedViewIndex >= views.length - 1}
+          onClick={onMoveRight}
+          title="Move selected view right"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          disabled={!selectedView}
+          onClick={onPreviewToggle}
+          title={
+            selectedView?.previewVisible === false
+              ? "Show preview for this view"
+              : "Hide preview for this view"
+          }
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {selectedView?.previewVisible === false ? (
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          <span className="sr-only">Preview</span>
+        </button>
+        </>
+        )}
+        <WorkItemViewsOverflowMenu
+          viewActions={
+            chips
+              ? {
+                  pinned: !!selectedView?.pinned,
+                  previewVisible: selectedView?.previewVisible !== false,
+                  canMoveLeft: !!selectedView && selectedViewIndex > 0,
+                  canMoveRight: !!selectedView && selectedViewIndex < views.length - 1,
+                  onPinToggle,
+                  onPreviewToggle,
+                  onMoveLeft,
+                  onMoveRight,
+                }
+              : undefined
+          }
+          hasSelectedView={!!selectedView}
+          hasViews={views.length > 0}
+          importInputRef={importInputRef}
+          onShare={onShare}
+          onExport={onExport}
+          onImport={onImport}
+          onDelete={onDelete}
+        />
+        <button
+          type="button"
+          disabled={!selectedView}
+          onClick={onEditOpen}
+          aria-keyshortcuts="E"
+          title="Edit selected view (E)"
+          className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          disabled={views.length === 0}
+          onClick={onRun}
+          title="Run all views (R)"
+          className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
+        >
+          <Play className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-keyshortcuts="N"
+          onClick={onAddOpen}
+          title="Add new view (N)"
+          className={`inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 ${textBtn}`}
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          Add
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={
-        chips ? "shrink-0" : "shrink-0 overflow-hidden rounded-md border border-border bg-card"
+        // In chip mode the row lives in the app header, so this wrapper takes no space of its own.
+        chips ? "contents" : "shrink-0 overflow-hidden rounded-md border border-border bg-card"
       }
     >
-      <div
-        className={
-          chips
-            ? "flex items-center gap-2"
-            : "flex items-center justify-between border-b border-border px-2 py-1"
-        }
-      >
-        {chips ? (
-          <>
-            {toggle}
-            <h2 className="shrink-0 text-sm font-semibold">Views</h2>
-            {views.length === 0 ? (
-              <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                No saved WIQL views (N to add one)
-              </p>
-            ) : (
-              <div
-                role="listbox"
-                aria-label="Saved work item views"
-                aria-orientation="horizontal"
-                data-views-panel="true"
-                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
-                style={{ scrollbarWidth: "thin" }}
-                onKeyDown={onKeyDown}
-              >
-                {views.map((view, index) => (
-                  <ViewCompactRow
-                    key={view.id}
-                    chip
-                    view={view}
-                    query={viewCountQueries[index]}
-                    stats={stats[index]}
-                    selected={selectedView?.id === view.id}
-                    buttonRef={(element) => {
-                      viewButtonRefs.current[index] = element;
-                    }}
-                    onSelect={() => onSelectView(view)}
-                    onEdit={() => onEditView(view)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex min-w-0 items-center gap-2">
-            {toggle}
-            <div className="flex min-w-0 items-baseline gap-2">
-              <h2 className="text-sm font-semibold">Views</h2>
-              <p className="text-xs text-muted-foreground">
-                {views.length === 0
-                  ? "No saved WIQL views"
-                  : `${views.length} saved view${views.length === 1 ? "" : "s"}`}
-              </p>
-            </div>
-          </div>
-        )}
-        <div className="flex shrink-0 items-center gap-1.5">
-          {chips ? null : (
-          <>
-          <div
-            role="group"
-            aria-label="View list density"
-            className="inline-flex items-center rounded-md border border-border p-0.5"
-          >
-            <button
-              type="button"
-              aria-pressed={cardMode === "card"}
-              onClick={() => onCardModeChange("card")}
-              title="Card view list"
-              className={`inline-flex h-7 w-7 items-center justify-center rounded disabled:cursor-not-allowed disabled:opacity-50 ${
-                cardMode === "card" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
-              }`}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              aria-pressed={cardMode === "compact"}
-              onClick={() => onCardModeChange("compact")}
-              title="Compact view list"
-              className={`inline-flex h-7 w-7 items-center justify-center rounded disabled:cursor-not-allowed disabled:opacity-50 ${
-                cardMode === "compact" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
-              }`}
-            >
-              <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
-          </>
-          )}
-          <div
-            role="group"
-            aria-label="Result layout"
-            className="inline-flex items-center rounded-md border border-border p-0.5"
-          >
-            <button
-              type="button"
-              disabled={!selectedView}
-              aria-pressed={layout === "list"}
-              onClick={() => onLayoutChange("list")}
-              title="List layout"
-              className={`inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
-                layout === "list" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
-              }`}
-            >
-              <List className="h-3.5 w-3.5" aria-hidden="true" />
-              List
-            </button>
-            <button
-              type="button"
-              disabled={!selectedView}
-              aria-pressed={layout === "board"}
-              onClick={() => onLayoutChange("board")}
-              title="Board layout"
-              className={`inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
-                layout === "board" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
-              }`}
-            >
-              <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
-              Board
-            </button>
-          </div>
-          {chips ? null : (
-          <>
-          <button
-            type="button"
-            disabled={!selectedView}
-            onClick={onPinToggle}
-            title={selectedView?.pinned ? "Unpin selected view" : "Pin selected view"}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {selectedView?.pinned ? (
-              <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <Pin className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            <span className="sr-only">{selectedView?.pinned ? "Unpin" : "Pin"}</span>
-          </button>
-          <button
-            type="button"
-            disabled={!selectedView || selectedViewIndex <= 0}
-            onClick={onMoveLeft}
-            title="Move selected view left"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            disabled={!selectedView || selectedViewIndex >= views.length - 1}
-            onClick={onMoveRight}
-            title="Move selected view right"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            disabled={!selectedView}
-            onClick={onPreviewToggle}
-            title={
-              selectedView?.previewVisible === false
-                ? "Show preview for this view"
-                : "Hide preview for this view"
-            }
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {selectedView?.previewVisible === false ? (
-              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            <span className="sr-only">Preview</span>
-          </button>
-          </>
-          )}
-          <WorkItemViewsOverflowMenu
-            viewActions={
-              chips
-                ? {
-                    pinned: !!selectedView?.pinned,
-                    previewVisible: selectedView?.previewVisible !== false,
-                    canMoveLeft: !!selectedView && selectedViewIndex > 0,
-                    canMoveRight: !!selectedView && selectedViewIndex < views.length - 1,
-                    onPinToggle,
-                    onPreviewToggle,
-                    onMoveLeft,
-                    onMoveRight,
-                  }
-                : undefined
-            }
-            hasSelectedView={!!selectedView}
-            hasViews={views.length > 0}
-            importInputRef={importInputRef}
-            onShare={onShare}
-            onExport={onExport}
-            onImport={onImport}
-            onDelete={onDelete}
-          />
-          <button
-            type="button"
-            disabled={!selectedView}
-            onClick={onEditOpen}
-            aria-keyshortcuts="E"
-            title="Edit selected view (E)"
-            className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            disabled={views.length === 0}
-            onClick={onRun}
-            title="Run all views (R)"
-            className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
-          >
-            <Play className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-keyshortcuts="N"
-            onClick={onAddOpen}
-            title="Add new view (N)"
-            className={`inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 ${textBtn}`}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            Add
-          </button>
-        </div>
-      </div>
+      {chips ? <HeaderToolbarPortal>{headerRow}</HeaderToolbarPortal> : headerRow}
 
       {viewMessage ? (
         <div

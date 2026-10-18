@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Palette, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import {
   ROW_COLORS,
   ROW_COLOR_FIELDS,
@@ -8,6 +8,7 @@ import {
   saveRowColorRules,
   type RowColorRule,
 } from "@/lib/rowColorRules";
+import { SettingsRow } from './SettingsRow';
 
 function newRuleId(): string {
   try {
@@ -55,22 +56,11 @@ export function RowColorRulesSettings() {
     "h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring";
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Palette className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Row color rules</h2>
-            <p className="text-sm text-muted-foreground">
-              Tint Work Item grid rows by condition. The first matching rule wins.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-2 p-3">
+    <SettingsRow
+      title="Row color rules"
+      description={<>Tint Work Item grid rows by condition. The first matching rule wins.</>}
+    >
+      <div className="grid gap-2">
         {rules.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No rules yet. Add one to highlight rows — for example, color rows where State equals
@@ -193,6 +183,6 @@ export function RowColorRulesSettings() {
           </button>
         </div>
       </div>
-    </div>
+    </SettingsRow>
   );
 }

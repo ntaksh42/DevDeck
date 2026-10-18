@@ -1,6 +1,5 @@
 import { type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock } from 'lucide-react';
 import {
   commandErrorMessage,
   getAppSettings,
@@ -11,6 +10,7 @@ import {
   WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 } from '@/lib/azdoCommands';
 import { settingsInput } from './settingsHelpers';
+import { SettingsRow } from './SettingsRow';
 
 export function ReviewStaleThresholdSettings() {
   const queryClient = useQueryClient();
@@ -39,22 +39,11 @@ export function ReviewStaleThresholdSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Clock className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">My Reviews</h2>
-            <p className="text-sm text-muted-foreground">
-              Highlight review requests as stale after this many days.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-3">
+    <SettingsRow
+      title="My Reviews"
+      description={<>Highlight review requests as stale after this many days.</>}
+    >
+      <div className="grid gap-3">
         <label className="grid gap-2">
           <span className="text-sm font-medium">Stale review threshold</span>
           <select
@@ -89,7 +78,7 @@ export function ReviewStaleThresholdSettings() {
           </p>
         ) : null}
       </div>
-    </div>
+    </SettingsRow>
   );
 }
 
@@ -120,22 +109,11 @@ export function WorkItemStaleThresholdSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Clock className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">My Work Items</h2>
-            <p className="text-sm text-muted-foreground">
-              Flag active work items as stale after this many days without a change.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-3">
+    <SettingsRow
+      title="My Work Items"
+      description={<>Flag active work items as stale after this many days without a change.</>}
+    >
+      <div className="grid gap-3">
         <label className="grid gap-2">
           <span className="text-sm font-medium">Stale work item threshold</span>
           <select
@@ -170,6 +148,6 @@ export function WorkItemStaleThresholdSettings() {
           </p>
         ) : null}
       </div>
-    </div>
+    </SettingsRow>
   );
 }

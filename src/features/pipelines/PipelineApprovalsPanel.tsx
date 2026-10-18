@@ -28,7 +28,7 @@ export function PipelineApprovalsPanel({
   };
   const first = approvals[0]?.instructions?.trim() || "Approval required to continue";
   return (
-    <div className="shrink-0 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30">
+    <div className="relative min-w-0 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
@@ -50,6 +50,8 @@ export function PipelineApprovalsPanel({
           </span>
         ) : null}
       </button>
+      {error || expanded ? (
+        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-md border border-amber-300 bg-amber-50 shadow-lg dark:border-amber-700/60 dark:bg-amber-950">
       {error ? (
         <p role="alert" className="px-3 py-2 text-xs text-destructive">
           {error}
@@ -103,6 +105,8 @@ export function PipelineApprovalsPanel({
           );
         })}
       </ul>
+      ) : null}
+        </div>
       ) : null}
     </div>
   );

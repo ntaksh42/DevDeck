@@ -33,6 +33,7 @@ import {
   defaultSortDirection,
   loadMyReviewsGridViewState,
   reviewSectionOf,
+  sectionPreview,
   reviewTriageKey,
   reviewTriageSnapshot,
   storeMyReviewsGridViewState,
@@ -238,10 +239,12 @@ export function useMyReviewsGrid({
   const { reviewRows, prFlatIndexes } = useMemo(() => {
     const rows: ReviewRow[] = [];
     const flatIndexes: number[] = [];
-    const sectionCounts = new Map<ReviewSection, number>();
+    const sectionPrs = new Map<ReviewSection, ReviewPullRequestSummary[]>();
     for (const pr of sortedPrs) {
       const section = reviewSectionOf(pr);
-      sectionCounts.set(section, (sectionCounts.get(section) ?? 0) + 1);
+      const list = sectionPrs.get(section);
+      if (list) list.push(pr);
+      else sectionPrs.set(section, [pr]);
     }
     let currentSection: ReviewSection | null = null;
     sortedPrs.forEach((pr, prIndex) => {
@@ -252,7 +255,8 @@ export function useMyReviewsGrid({
           kind: 'header',
           key: section,
           label: REVIEW_SECTION_LABELS[section],
-          count: sectionCounts.get(section) ?? 0,
+          count: sectionPrs.get(section)?.length ?? 0,
+          preview: collapsedSections.has(section) ? sectionPreview(sectionPrs.get(section) ?? []) : '',
         });
       }
       if (!collapsedSections.has(section)) {

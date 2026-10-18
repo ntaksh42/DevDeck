@@ -7,6 +7,7 @@ import {
   updateAppSettings,
 } from '@/lib/azdoCommands';
 import { settingsInput } from './settingsHelpers';
+import { SettingsRow } from './SettingsRow';
 
 export function ValidationModeSettings() {
   const queryClient = useQueryClient();
@@ -38,22 +39,11 @@ export function ValidationModeSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Validation mode</h2>
-            <p className="text-sm text-muted-foreground">
-              Use real sync, search, and previews while blocking Azure DevOps writes.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+    <SettingsRow
+      title="Validation mode"
+      description={<>Use real sync, search, and previews while blocking Azure DevOps writes.</>}
+    >
+      <form className="grid gap-3" onSubmit={onSubmit}>
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -95,6 +85,6 @@ export function ValidationModeSettings() {
           </button>
         </div>
       </form>
-    </div>
+    </SettingsRow>
   );
 }

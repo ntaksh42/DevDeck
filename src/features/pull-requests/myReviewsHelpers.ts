@@ -196,3 +196,13 @@ export function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
 }
 
 export { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS };
+
+const SECTION_PREVIEW_LIMIT = 3;
+
+/** "#87 Fix retry · #90 Bump axios" — shown after a collapsed group's label. */
+export function sectionPreview(prs: readonly ReviewPullRequestSummary[]): string {
+  return prs
+    .slice(0, SECTION_PREVIEW_LIMIT)
+    .map((pr) => `#${pr.pullRequestId} ${pr.title}`)
+    .join(' · ');
+}

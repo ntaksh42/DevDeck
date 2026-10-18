@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import {
   commandErrorMessage,
   getAppSettings,
@@ -52,6 +52,7 @@ function ListTextInput({
     />
   );
 }
+import { SettingsRow } from './SettingsRow';
 
 export function NotificationRulesSettings() {
   const queryClient = useQueryClient();
@@ -125,26 +126,11 @@ export function NotificationRulesSettings() {
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedRules ?? []);
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Bell className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Notification rules</h2>
-            <p className="text-sm text-muted-foreground">
-              Allow rules deliver only matching desktop notifications. Mute rules
-              suppress matching notifications and take precedence, so you can
-              silence a noisy project/repository without allow-listing everything
-              else. With no rules, the per-type toggles above apply. Repository
-              filters apply to pull requests only.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-3">
+    <SettingsRow
+      title="Notification rules"
+      description={<>Allow rules deliver only matching desktop notifications. Mute rules suppress matching notifications and take precedence, so you can silence a noisy project/repository without allow-listing everything else. With no rules, the per-type toggles above apply. Repository filters apply to pull requests only.</>}
+    >
+      <div className="grid gap-3">
         {draft.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No rules — every enabled notification is delivered.
@@ -271,6 +257,6 @@ export function NotificationRulesSettings() {
           </p>
         ) : null}
       </div>
-    </div>
+    </SettingsRow>
   );
 }

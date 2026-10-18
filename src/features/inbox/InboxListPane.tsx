@@ -5,7 +5,6 @@ import { isEditableTarget } from "@/lib/utils";
 import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
-import { InboxPriorityFilter } from "./InboxPriorityFilter";
 import type { InboxEntry, InboxPriority, InboxTab } from "./inboxPresentation";
 import type { InboxUndo } from "./useInboxStateChanges";
 
@@ -23,7 +22,6 @@ const EMPTY_MESSAGE: Record<InboxTab, string> = {
 export function InboxListPane({
   tab,
   priority,
-  onPriorityChange,
   tabCounts,
   onTabChange,
   filterText,
@@ -46,7 +44,6 @@ export function InboxListPane({
 }: {
   tab: InboxTab;
   priority: InboxPriority;
-  onPriorityChange: (priority: InboxPriority) => void;
   tabCounts: Record<InboxTab, number>;
   onTabChange: (tab: InboxTab) => void;
   filterText: string;
@@ -84,7 +81,6 @@ export function InboxListPane({
       onKeyDown={handleSectionKeyDown}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
     >
-      <InboxPriorityFilter value={priority} onChange={onPriorityChange} onFocusList={() => listRef.current?.focus()} />
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : isLoading ? (

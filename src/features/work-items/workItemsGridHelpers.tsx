@@ -6,6 +6,7 @@ import {
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { openExternalUrl } from '@/lib/openExternal';
+import { WorkItemStatePill } from './WorkItemBadges';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
@@ -209,10 +210,12 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
         </span>
       );
     case "state":
-      return (
-        <span className="truncate text-xs" title={item.state ?? undefined}>
-          {item.state ?? "—"}
+      return item.state ? (
+        <span className="flex min-w-0" title={item.state}>
+          <WorkItemStatePill state={item.state} />
         </span>
+      ) : (
+        <span className="truncate text-xs">—</span>
       );
     case "title":
       return (

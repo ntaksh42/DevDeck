@@ -1,6 +1,7 @@
 import { ChevronRight, PanelLeft, PanelLeftClose } from "lucide-react";
 import type { KeybindingMap } from "@/lib/keybindings";
 import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
+import { HeaderToolbarTarget } from "@/components/HeaderToolbarSlot";
 import type { View } from "./types";
 
 const VIEW_TITLES: Record<View, string> = {
@@ -76,7 +77,7 @@ export function AppHeader({
     : [VIEW_TITLES[activeView]];
 
   return (
-    <header className="flex h-9 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
+    <header className="flex h-9 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:px-5">
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
@@ -96,7 +97,7 @@ export function AppHeader({
             The visible breadcrumb is decorative (aria-hidden) so screen readers get a single,
             reliably space-separated name from aria-label instead of concatenated child text. */}
         <h1
-          className="flex min-w-0 items-center gap-1 text-base font-semibold"
+          className="flex shrink-0 items-center gap-1 text-base font-semibold"
           title={VIEW_DESCRIPTIONS[activeView]}
           aria-label={segments.join(" ")}
         >
@@ -113,7 +114,8 @@ export function AppHeader({
                   ) : null}
                   <span
                     className={
-                      isLast ? "truncate" : "shrink-0 font-normal text-muted-foreground"
+                      // The last segment (e.g. a long view name) is capped so a header toolbar keeps room.
+                      isLast ? "max-w-[16rem] truncate" : "shrink-0 font-normal text-muted-foreground"
                     }
                   >
                     {segment}
@@ -123,6 +125,7 @@ export function AppHeader({
             })}
           </span>
         </h1>
+        <HeaderToolbarTarget />
       </div>
       {organizationsLength > 0 && (
         <div className="flex items-center gap-2">

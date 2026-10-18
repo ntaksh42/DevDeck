@@ -1,10 +1,11 @@
 import type { InboxInsight } from "@/lib/azdoCommands";
 import { Kbd } from "./InboxPreviewPanels";
 
-const VERDICTS: Record<string, { label: string; className: string }> = {
-  reply: { label: "Reply", className: "border-sky-600/40 text-sky-700 dark:text-sky-300" },
-  fix: { label: "Fix first", className: "border-amber-600/40 text-amber-700 dark:text-amber-300" },
-  none: { label: "No action", className: "border-border text-muted-foreground" },
+/** `rowClassName` is the small pill on the list row. */
+export const VERDICTS: Record<string, { label: string; className: string; rowClassName: string }> = {
+  reply: { label: "Reply", rowClassName: "border-violet-600/40 bg-violet-500/10 text-violet-700 dark:text-violet-300", className: "border-sky-600/40 text-sky-700 dark:text-sky-300" },
+  fix: { label: "Fix first", rowClassName: "border-destructive/40 bg-destructive/10 text-destructive", className: "border-amber-600/40 text-amber-700 dark:text-amber-300" },
+  none: { label: "No action", rowClassName: "border-border text-muted-foreground", className: "border-border text-muted-foreground" },
 };
 
 /**

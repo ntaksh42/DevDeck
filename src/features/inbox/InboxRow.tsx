@@ -3,6 +3,7 @@ import { Check, ExternalLink, MessageSquare } from "lucide-react";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { gridRowStateClass } from "@/lib/gridRowState";
+import { VERDICTS } from "./InboxInsightPanel";
 import {
   formatSnoozeUntil,
   inboxKindLabel,
@@ -46,6 +47,7 @@ export const InboxRow = forwardRef<
 
   const rowTitle = inboxRowTitle(item);
   const location = inboxLocationLabel(item);
+  const verdict = item.insight?.status === "ready" && item.insight.verdict ? VERDICTS[item.insight.verdict] : undefined;
 
   return (
     <div
@@ -88,6 +90,14 @@ export const InboxRow = forwardRef<
           </span>
         ) : null}
       </span>
+      {verdict ? (
+        <span
+          className={`shrink-0 rounded border px-1 text-[10px] font-semibold leading-4 ${verdict.rowClassName}`}
+          title="Verdict by Claude"
+        >
+          {verdict.label}
+        </span>
+      ) : null}
       {item.hitCount > 1 ? (
         <span
           className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium tabular-nums text-muted-foreground"
