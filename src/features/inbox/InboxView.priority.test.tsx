@@ -12,6 +12,19 @@ afterEach(() => { cleanup(); resetAgentPanelState(); });
 const priorityButton = (name: string) => screen.getByRole("radio", { name });
 
 describe("Inbox priority", () => {
+  it("shows the counts in the tab strip and the Claude verdict on rows that have notes", async () => {
+    renderView();
+    const list = await openList();
+    expect(priorityButton("Priority").textContent).toBe("Priority 3");
+    expect(priorityButton("Other").textContent).toBe("Other 1");
+    expect(priorityButton("All").textContent).toBe("All 4");
+    expect(screen.queryByText(/direct PR \/ WI mentions/)).toBeNull();
+    expect(rowFor(list, "!42 azdo-dashboard").textContent).toContain("Fix first");
+    expect(rowFor(list, "#123").textContent).toContain("Reply");
+    expect(rowFor(list, "!103 api-gateway").querySelector('[title="Verdict by Claude"]')).toBeNull();
+    expect(rowFor(list, "#123").querySelector('[title="Verdict by Claude"]')?.textContent).toBe("Reply");
+  });
+
   it("classifies conversations by mentions, including a mention followed by a general reply", async () => {
     renderView();
     const list = await openList();

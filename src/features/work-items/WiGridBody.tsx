@@ -13,6 +13,7 @@ export function WiGridBody({
   sorted,
   displayed,
   emptyMessage,
+  emptyContent,
   clearAllFilters,
   firstVirtualRow,
   virtualRows,
@@ -40,6 +41,8 @@ export function WiGridBody({
   sorted: WorkItemSummary[];
   displayed: WorkItemSummary[];
   emptyMessage: string | undefined;
+  /** Replaces the default "Run a search" empty state (e.g. recent searches). */
+  emptyContent?: ReactNode;
   clearAllFilters: () => void;
   firstVirtualRow: number;
   virtualRows: WorkItemSummary[];
@@ -76,10 +79,12 @@ export function WiGridBody({
   }
   if (!searched) {
     return inPane(
-      <PreviewEmptyState
-        message={emptyMessage ?? "Run a search to load work items."}
-        hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
-      />,
+      emptyContent ?? (
+        <PreviewEmptyState
+          message={emptyMessage ?? "Run a search to load work items."}
+          hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
+        />
+      ),
     );
   }
   if (sorted.length === 0) {

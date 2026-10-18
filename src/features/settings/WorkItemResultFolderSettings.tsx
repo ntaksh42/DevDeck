@@ -7,6 +7,7 @@ import {
   updateAppSettings,
 } from '@/lib/azdoCommands';
 import { settingsInput } from './settingsHelpers';
+import { SettingsRow } from './SettingsRow';
 
 export function WorkItemResultFolderSettings() {
   const queryClient = useQueryClient();
@@ -35,22 +36,11 @@ export function WorkItemResultFolderSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <FileText className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Work item result previews</h2>
-            <p className="text-sm text-muted-foreground">
-              Local HTML files matched by work item id.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
+    <SettingsRow
+      title="Work item result previews"
+      description={<>Local HTML files matched by work item id.</>}
+    >
+      <form className="grid max-w-xl gap-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Work item folder path</span>
           <input
@@ -92,6 +82,6 @@ export function WorkItemResultFolderSettings() {
           </button>
         </div>
       </form>
-    </div>
+    </SettingsRow>
   );
 }

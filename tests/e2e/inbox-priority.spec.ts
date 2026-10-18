@@ -8,7 +8,12 @@ test("Inbox priority can be switched and processed entirely by keyboard", async 
   const rows = list.getByRole("option");
   await expect(rows).toHaveCount(4);
   await rows.first().click();
-  await page.keyboard.press("Shift+Tab");
+  // The priority switch sits in the tab band; Shift+Tab passes the panel's Move button first.
+  const backToPriority = async () => {
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Shift+Tab");
+  };
+  await backToPriority();
   await expect(page.getByRole("radio", { name: "All", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("radio", { name: "Priority", exact: true })).toBeFocused();
@@ -18,7 +23,7 @@ test("Inbox priority can be switched and processed entirely by keyboard", async 
   await page.keyboard.press("j");
   await expect(rows.nth(1)).toBeFocused();
   await page.keyboard.press("x");
-  await page.keyboard.press("Shift+Tab");
+  await backToPriority();
   await page.keyboard.press("ArrowRight");
   await expect(rows).toHaveCount(1);
   await expect(page.getByText(/marked \(Esc clears\)/)).toBeHidden();
@@ -33,7 +38,7 @@ test("Inbox priority can be switched and processed entirely by keyboard", async 
   await expect(rows.first()).toBeFocused();
   await page.keyboard.press("e");
   await expect(rows).toHaveCount(0);
-  await page.keyboard.press("Shift+Tab");
+  await backToPriority();
   await expect(page.getByRole("radio", { name: "Other", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(rows).toHaveCount(3);

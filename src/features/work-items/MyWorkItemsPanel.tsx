@@ -4,6 +4,7 @@ import { Plus, Star } from 'lucide-react';
 import { listMyWorkItems, listFollowedWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemFilterBar } from './WorkItemFilterBar';
@@ -52,7 +53,8 @@ export function MyWorkItemsPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <HeaderToolbarPortal>
+        <div className="flex shrink-0 items-center gap-2">
         <div
           role="group"
           aria-label="Work item scope"
@@ -99,12 +101,13 @@ export function MyWorkItemsPanel() {
             })
           }
         />
-        {createdStatus ? (
-          <span role="status" className="truncate text-[11px] text-muted-foreground">
-            {createdStatus}
-          </span>
-        ) : null}
-      </div>
+        </div>
+      </HeaderToolbarPortal>
+      {createdStatus ? (
+        <span role="status" className="shrink-0 truncate text-[11px] text-muted-foreground">
+          {createdStatus}
+        </span>
+      ) : null}
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : null}

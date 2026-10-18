@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Organization } from "@/lib/azdoCommands";
 import { focusFilterInput } from "@/lib/utils";
@@ -112,5 +112,41 @@ describe("OrganizationSettings", () => {
     fireEvent.click(advanced);
     expect(document.activeElement).toBe(screen.getByRole("region", { name: "Advanced" }));
     expect(advanced.getAttribute("aria-current")).toBe("true");
+  });
+});
+
+describe("Add connection form", () => {
+  it("is collapsed behind a button; opens focused and Escape/Cancel return focus", async () => {
+    renderSettings();
+    expect(screen.queryByPlaceholderText("contoso")).toBeNull();
+    const add = await screen.findByRole("button", { name: /Add connection/ });
+
+    fireEvent.click(add);
+    const orgInput = screen.getByPlaceholderText("contoso");
+    expect(document.activeElement).toBe(orgInput);
+
+    fireEvent.keyDown(orgInput, { key: "Escape" });
+    expect(screen.queryByPlaceholderText("contoso")).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /Add connection/ })),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Add connection/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByPlaceholderText("contoso")).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /Add connection/ })),
+    );
+  });
+
+  it("is expanded when there are no connections", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <OrganizationSettings organizations={[]} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByPlaceholderText("contoso")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 });

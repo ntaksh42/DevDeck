@@ -56,6 +56,7 @@ import {
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { AppSidebar, type AppSidebarHandle } from "./app/AppSidebar";
 import { AppHeader } from "./app/AppHeader";
+import { HeaderToolbarSlotProvider } from "./components/HeaderToolbarSlot";
 import { AppContent } from "./app/AppContent";
 import { useKeybindings } from "./app/useKeybindings";
 import { usePaletteSearch } from "./app/usePaletteSearch";
@@ -431,6 +432,7 @@ function AppShell() {
         className="flex h-screen flex-col lg:pl-[var(--sidebar-width)]"
         style={{ "--sidebar-width": `${sidebarCollapsed ? 0 : sidebarWidth}px` } as CSSProperties}
       >
+        <HeaderToolbarSlotProvider>
         <AppHeader
           activeView={activeView}
           sidebarCollapsed={sidebarCollapsed}
@@ -466,6 +468,7 @@ function AppShell() {
         </div>
         <AgentPanelHost />
         </div>
+        </HeaderToolbarSlotProvider>
       </main>
       <ToastHost />
       <WikiPreviewHost />

@@ -52,6 +52,9 @@ export function PipelinesView() {
     definitionId: number;
     buildId: number;
   } | null>(null);
+  // Run previewed while nothing is selected (reported by the board), so the
+  // preview is never blank when the list has runs.
+  const [defaultTarget, setDefaultTarget] = useState<NonNullable<typeof detailTarget> | null>(null);
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
     loadPipelineSubscriptions(),
   );
@@ -132,6 +135,8 @@ export function PipelinesView() {
     ],
     [definitionOptions],
   );
+
+  const previewTarget = detailTarget ?? defaultTarget;
 
   const canSubscribe = definitionId != null && !!selectedProject && !!selectedDefinition;
   const selectedIsSubscribed =
@@ -278,6 +283,28 @@ export function PipelinesView() {
               Queue run
             </button>
           </div>
+
+          <div className="min-w-[16rem] flex-1">
+          {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (
+            <PipelineApprovalsPanel
+              approvals={approvalsQuery.data ?? []}
+              pendingApprovalId={pendingApprovalId}
+              error={
+                approvalMutation.isError ? commandErrorMessage(approvalMutation.error) : null
+              }
+              expanded={approvalsOpen}
+              onExpandedChange={setApprovalsOpen}
+              onAct={(approvalId, status) =>
+                approvalMutation.mutate({
+                  organizationId: selectedOrganizationId,
+                  projectId,
+                  approvalId,
+                  status,
+                })
+              }
+            />
+          ) : null}
+          </div>
         </div>
 
         {queueOpen && canQueue ? (
@@ -291,26 +318,6 @@ export function PipelinesView() {
           <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{queueNotice}</p>
         ) : null}
       </div>
-
-      {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (
-        <PipelineApprovalsPanel
-          approvals={approvalsQuery.data ?? []}
-          pendingApprovalId={pendingApprovalId}
-          error={
-            approvalMutation.isError ? commandErrorMessage(approvalMutation.error) : null
-          }
-          expanded={approvalsOpen}
-          onExpandedChange={setApprovalsOpen}
-          onAct={(approvalId, status) =>
-            approvalMutation.mutate({
-              organizationId: selectedOrganizationId,
-              projectId,
-              approvalId,
-              status,
-            })
-          }
-        />
-      ) : null}
 
       <DockableWorkspace
         storageKey={`${PIPELINE_PREVIEW_WIDTH_STORAGE_KEY}:dockview:v1`}
@@ -347,6 +354,7 @@ export function PipelinesView() {
                   />
                 }
                 onSelectRun={(selection) => setDetailTarget(selection)}
+                onDefaultRunChange={setDefaultTarget}
                 onRemove={(removeProjectId, removeDefinitionId) => {
                   persistSubscriptions(
                     removeSubscription(
@@ -388,9 +396,9 @@ export function PipelinesView() {
                   />
                 ) : (
                   <PipelineRunDetailPanel
-                    organizationId={detailTarget?.organizationId ?? selectedOrganizationId}
-                    projectId={detailTarget?.projectId ?? projectId}
-                    buildId={detailTarget?.buildId ?? null}
+                    organizationId={previewTarget?.organizationId ?? selectedOrganizationId}
+                    projectId={previewTarget?.projectId ?? projectId}
+                    buildId={previewTarget?.buildId ?? null}
                   />
                 )}
               </PreviewToolbarSlotProvider>

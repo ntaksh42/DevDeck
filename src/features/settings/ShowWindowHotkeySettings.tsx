@@ -7,6 +7,7 @@ import {
   updateAppSettings,
 } from '@/lib/azdoCommands';
 import { settingsInput } from './settingsHelpers';
+import { SettingsRow } from './SettingsRow';
 
 export function ShowWindowHotkeySettings() {
   const queryClient = useQueryClient();
@@ -53,22 +54,11 @@ export function ShowWindowHotkeySettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Keyboard className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Show window hotkey</h2>
-            <p className="text-sm text-muted-foreground">
-              Bring DevDeck to the front from anywhere.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
+    <SettingsRow
+      title="Show window hotkey"
+      description={<>Bring DevDeck to the front from anywhere.</>}
+    >
+      <form className="grid max-w-xl gap-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Hotkey</span>
           <input
@@ -115,7 +105,7 @@ export function ShowWindowHotkeySettings() {
           </button>
         </div>
       </form>
-    </div>
+    </SettingsRow>
   );
 }
 

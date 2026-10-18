@@ -50,6 +50,7 @@ export function WorkItemsGrid({
   searched,
   autoFocus = false,
   emptyMessage,
+  emptyContent,
   dataUpdatedAt,
   isFetching = false,
   activeExternalFilterCount = 0,
@@ -73,6 +74,8 @@ export function WorkItemsGrid({
   searched: boolean;
   autoFocus?: boolean;
   emptyMessage?: string;
+  /** Replaces the default "Run a search" empty state before the first search. */
+  emptyContent?: ReactNode;
   dataUpdatedAt?: number;
   isFetching?: boolean;
   activeExternalFilterCount?: number;
@@ -195,6 +198,7 @@ export function WorkItemsGrid({
             sorted={g.sorted}
             displayed={g.displayed}
             emptyMessage={emptyMessage}
+            emptyContent={emptyContent}
             clearAllFilters={g.clearAllFilters}
             firstVirtualRow={g.firstVirtualRow}
             virtualRows={g.virtualRows}

@@ -131,6 +131,57 @@ describe("NotificationsView", () => {
   });
 });
 
+describe("NotificationsView toolbar and sections", () => {
+  it("shows category toggle buttons with counts and filters the list", async () => {
+    renderView();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+
+    const group = screen.getByRole("group", { name: "Filter by notification category" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      "All10",
+      "PR3",
+      "Work item3",
+      "Pipeline3",
+      "Sync1",
+    ]);
+
+    fireEvent.click(within(group).getByRole("button", { name: /^Sync/ }));
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(1));
+    expect(within(group).getByRole("button", { name: /^Sync/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("moves between category buttons with the arrow keys and returns to the list", async () => {
+    renderView();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+    const group = screen.getByRole("group", { name: "Filter by notification category" });
+    const [all, pr] = within(group).getAllByRole("button");
+
+    all.focus();
+    fireEvent.keyDown(all, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(pr);
+    fireEvent.keyDown(pr, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(all);
+    fireEvent.keyDown(all, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(within(grid).getAllByRole("row")[0]);
+  });
+
+  it("groups rows under section headers that j/k navigation skips", async () => {
+    renderView();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+
+    const headers = screen.getAllByTestId("notification-section-header");
+    expect(headers.length).toBeGreaterThan(0);
+    expect(headers[0].textContent).toMatch(/^(Today|Earlier) · \d+$/);
+    // Headers are not rows, so selection never lands on one.
+    expect(within(grid).getAllByRole("row")).toHaveLength(10);
+    expect(within(grid).getAllByTestId("notification-category-icon")).toHaveLength(10);
+  });
+});
+
 describe("NotificationsView Agent context", () => {
   function Probe() {
     const subject = useAgentSubject();

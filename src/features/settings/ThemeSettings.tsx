@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Monitor, Moon, Palette, Sun } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import {
   loadThemePreference,
   setThemePreference,
@@ -13,6 +13,7 @@ import {
   UI_SCALE_LEVELS,
   type UiScale,
 } from "@/lib/uiScale";
+import { SettingsRow } from './SettingsRow';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -49,22 +50,11 @@ export function ThemeSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Palette className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Appearance</h2>
-            <p className="text-sm text-muted-foreground">
-              Choose a theme and the app zoom. System follows your operating system setting.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-3">
+    <SettingsRow
+      title="Appearance"
+      description={<>Choose a theme and the app zoom. System follows your operating system setting.</>}
+    >
+      <div className="">
         <div
           role="radiogroup"
           aria-label="Theme"
@@ -118,6 +108,6 @@ export function ThemeSettings() {
           Ctrl+= / Ctrl+- zoom, Ctrl+0 resets.
         </p>
       </div>
-    </div>
+    </SettingsRow>
   );
 }

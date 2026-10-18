@@ -33,13 +33,23 @@ export function useInboxEntries({
     placeholderData: keepPreviousData,
   });
 
-  const entries = useMemo<InboxEntry[]>(
-    () => (listQuery.data ?? []).filter((entry) => matchesInboxFilter(entry, filterText) && matchesInboxPriority(entry, priority)),
-    [listQuery.data, filterText, priority],
+  const textMatches = useMemo<InboxEntry[]>(
+    () => (listQuery.data ?? []).filter((entry) => matchesInboxFilter(entry, filterText)),
+    [listQuery.data, filterText],
   );
+  const entries = useMemo(
+    () => textMatches.filter((entry) => matchesInboxPriority(entry, priority)),
+    [textMatches, priority],
+  );
+  /** Rows per priority tab for the current text filter. */
+  const priorityCounts = useMemo<Record<InboxPriority, number>>(() => {
+    const mentions = textMatches.filter((entry) => matchesInboxPriority(entry, "priority")).length;
+    return { priority: mentions, other: textMatches.length - mentions, all: textMatches.length };
+  }, [textMatches]);
 
   return {
     entries,
+    priorityCounts,
     isLoading: listQuery.isLoading,
     error: listQuery.isError ? listQuery.error : null,
     refetch: () => void listQuery.refetch(),

@@ -15,6 +15,8 @@ import { WorkItemsGrid } from "./WorkItemsGrid";
 import { WorkItemFilterBar } from "./WorkItemFilterBar";
 import { toMatchTarget } from "./workItemMatchTarget";
 import { workItemQueryKeys } from "./queryKeys";
+import { WiSearchHistory, summarizeWiSearchFilters, type WiSearchFilters } from "./WiSearchHistory";
+import { useSearchHistory } from "@/lib/searchHistory";
 
 const WORK_ITEM_STATE_OPTIONS = ["New", "Active", "Resolved", "Closed"].map(
   (value) => ({ value, label: value }),
@@ -52,6 +54,7 @@ export function WorkItemSearch({
   const [resultFilter, setResultFilter] = useState("");
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
+  const searchHistory = useSearchHistory<WiSearchFilters>("workItemSearch");
   const results = mutation.data ?? [];
   // Client-side smart filtering over the server results, matching My Work Items
   // (#1234, p:1, @user, s:active, t:bug). Empty filter keeps every row.
@@ -79,15 +82,32 @@ export function WorkItemSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSearch?.requestId]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  // Runs a search; `record: false` is for opening a recently viewed item, which
+  // is a lookup by id rather than a search worth remembering.
+  function runSearch(text: string, filters: WiSearchFilters, record = true) {
     mutation.mutate({
       organizationId,
-      query,
-      states: states.length > 0 ? states : undefined,
-      workItemTypes: workItemTypes.length > 0 ? workItemTypes : undefined,
-      projectIds: projectIds.length > 0 ? projectIds : undefined,
+      query: text,
+      states: filters.states.length > 0 ? filters.states : undefined,
+      workItemTypes: filters.workItemTypes.length > 0 ? filters.workItemTypes : undefined,
+      projectIds: filters.projectIds.length > 0 ? filters.projectIds : undefined,
     });
+    if (record) {
+      searchHistory.record({ organizationId, query: text, filters, summary: summarizeWiSearchFilters(filters) });
+    }
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    runSearch(query, { states, workItemTypes, projectIds });
+  }
+
+  function applyAndRun(text: string, filters: WiSearchFilters, record = true) {
+    setQuery(text);
+    setStates(filters.states);
+    setWorkItemTypes(filters.workItemTypes);
+    setProjectIds(filters.projectIds);
+    runSearch(text, filters, record);
   }
 
   return (
@@ -167,6 +187,15 @@ export function WorkItemSearch({
         loading={mutation.isPending}
         results={filteredResults}
         searched={mutation.isSuccess}
+        emptyContent={
+          <WiSearchHistory
+            organizationId={organizationId}
+            history={searchHistory}
+            onRun={applyAndRun}
+            // Searching by id shows the item selected in the preview.
+            onOpenItem={(item) => applyAndRun(String(item.id), { states: [], workItemTypes: [], projectIds: [] }, false)}
+          />
+        }
         filterBar={
           mutation.isSuccess ? (
             <WorkItemFilterBar value={resultFilter} onChange={setResultFilter} ariaLabel="Filter results" />

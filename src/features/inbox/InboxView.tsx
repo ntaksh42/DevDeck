@@ -80,7 +80,7 @@ export function InboxView() {
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
   const insightEnabled = settingsQuery.data?.inboxInsightEnabled ?? false;
 
-  const { entries: fetchedEntries, isLoading, error, refetch } = useInboxEntries({
+  const { entries: fetchedEntries, priorityCounts, isLoading, error, refetch } = useInboxEntries({
     tab,
     priority,
     organizationId,
@@ -274,6 +274,13 @@ export function InboxView() {
       minWidth: 340,
       headerActions: (
         <InboxListHeader
+          priority={priority}
+          priorityCounts={priorityCounts}
+          onPriorityChange={(value) => {
+            setPriority(value);
+            setSelectedIndex(0);
+          }}
+          onFocusList={() => listRef.current?.focus()}
           tab={tab}
           onLeaveTab={() => {
             switchTab("open");
@@ -298,10 +305,6 @@ export function InboxView() {
         <InboxListPane
           tab={tab}
           priority={priority}
-          onPriorityChange={(value) => {
-            setPriority(value);
-            setSelectedIndex(0);
-          }}
           tabCounts={tabCounts}
           onTabChange={switchTab}
           filterText={filterText}

@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, Eye, EyeOff, GitBranch, Loader2, Plus } from 'lucide-react';
 import {
@@ -7,11 +7,29 @@ import {
   addPatOrganization,
   commandErrorMessage,
 } from '@/lib/azdoCommands';
+import { isImeComposing } from '@/lib/utils';
+import { SettingsRow } from './SettingsRow';
 
 type ProviderKind = "azdo" | "github";
 
-export function SetupPanel({ compact = false }: { compact?: boolean }) {
+/**
+ * In compact mode (Settings > Accounts) the form hides behind an "Add connection"
+ * button once at least one connection exists (hasConnections).
+ */
+export function SetupPanel({
+  compact = false,
+  hasConnections = false,
+}: {
+  compact?: boolean;
+  hasConnections?: boolean;
+}) {
   const queryClient = useQueryClient();
+  const canCollapse = compact && hasConnections;
+  const [open, setOpen] = useState(false);
+  const expanded = open || !canCollapse;
+  const formRef = useRef<HTMLFormElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const focusFormOnOpen = useRef(false);
   const [provider, setProvider] = useState<ProviderKind>("azdo");
   const [organization, setOrganization] = useState("");
   const [pat, setPat] = useState("");
@@ -39,6 +57,35 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
     mutationFn: addGithubOrganization,
     onSuccess: onOrganizationConnected,
   });
+
+  useEffect(() => {
+    if (expanded && focusFormOnOpen.current) {
+      focusFormOnOpen.current = false;
+      formRef.current?.querySelector<HTMLElement>('input')?.focus();
+    }
+  }, [expanded]);
+
+  function openForm() {
+    focusFormOnOpen.current = true;
+    setOpen(true);
+  }
+
+  function closeForm() {
+    setOpen(false);
+    setOrganization('');
+    setPat('');
+    setValidationError(null);
+    resetMutations();
+    // The button mounts after this render; focus it once it exists.
+    requestAnimationFrame(() => addButtonRef.current?.focus());
+  }
+
+  function onFormKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (!canCollapse || event.key !== 'Escape' || isImeComposing(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeForm();
+  }
 
   function resetMutations() {
     patMutation.reset();
@@ -87,24 +134,12 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
   const isGithub = provider === "github";
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Plus className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">
-              {compact ? "Add connection" : isGithub ? "Connect GitHub" : "Connect Azure DevOps"}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Credentials are validated before they are saved.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
+    <SettingsRow
+      title={compact ? "Add connection" : isGithub ? "Connect GitHub" : "Connect Azure DevOps"}
+      description={<>Credentials are validated before they are saved.</>}
+    >
+      {expanded ? (
+      <form ref={formRef} className="grid max-w-xl gap-3" onSubmit={onSubmit} onKeyDown={onFormKeyDown}>
         <div
           role="radiogroup"
           aria-label="Platform"
@@ -236,9 +271,29 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
               Connect with Azure CLI
             </button>
           )}
+          {canCollapse ? (
+            <button
+              type="button"
+              onClick={closeForm}
+              className="inline-flex h-9 items-center rounded-md px-4 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
       </form>
-    </div>
+      ) : (
+        <button
+          ref={addButtonRef}
+          type="button"
+          onClick={openForm}
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium hover:bg-secondary"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Add connection…
+        </button>
+      )}
+    </SettingsRow>
   );
 }
 

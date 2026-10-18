@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { isEditableTarget, focusPrimaryPreview, markdownLink } from '@/lib/utils';
 import { readStoredJson, writeStoredJson } from '@/lib/storage';
@@ -19,6 +18,7 @@ import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
 import { myReviewsAgentList } from './prAgentList';
 import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsToggle } from './LinkedWorkItemsPanel';
+import { ReviewSectionHeader } from './ReviewSectionHeader';
 import { MemoReviewPrRow } from './MemoReviewPrRow';
 import { ReviewFilterBar } from './ReviewFilterBar';
 import { ReviewStatusBar } from './ReviewStatusBar';
@@ -347,17 +347,14 @@ export function MyReviewsGrid({
                       if (row.kind === 'header') {
                         const collapsed = g.collapsedSections.has(row.key);
                         return (
-                          <button
+                          <ReviewSectionHeader
                             key={`header:${row.key}`}
-                            type="button"
-                            onClick={() => g.toggleSection(row.key)}
-                            aria-expanded={!collapsed}
-                            className="flex h-[29px] w-full items-center gap-1 border-b border-border bg-muted/60 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
-                          >
-                            {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-                            {row.label}
-                            <span className="font-normal normal-case">({row.count})</span>
-                          </button>
+                            label={row.label}
+                            count={row.count}
+                            collapsed={collapsed}
+                            preview={row.preview}
+                            onToggle={() => g.toggleSection(row.key)}
+                          />
                         );
                       }
                       return (

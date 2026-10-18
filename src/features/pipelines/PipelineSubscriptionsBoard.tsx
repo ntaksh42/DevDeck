@@ -54,6 +54,7 @@ export function PipelineSubscriptionsBoard({
   approvalsOpen = false,
   emptyContent,
   onSelectRun,
+  onDefaultRunChange,
   onRemove,
   onToggleApprovals,
   toolbarSlot,
@@ -67,6 +68,8 @@ export function PipelineSubscriptionsBoard({
   /** Shown instead of the default hint when nothing is watched. */
   emptyContent?: ReactNode;
   onSelectRun: (selection: RunSelection) => void;
+  /** Reports the run to preview while nothing is selected: a running pipeline's latest run, else the first row's. */
+  onDefaultRunChange?: (selection: RunSelection | null) => void;
   onRemove: (projectId: string, definitionId: number) => void;
   onToggleApprovals?: () => void;
   /** Dock tab-band element that receives the Sort select and refresh button. */
@@ -163,6 +166,27 @@ export function PipelineSubscriptionsBoard({
     () => filterBoardRows(sortBoardRows(allRows, sort), statusFilter),
     [allRows, sort, statusFilter],
   );
+
+  const defaultRun = (boardRows.find(isRunningRow) ?? boardRows.find((row) => row.latest))?.latest;
+  const defaultOrganizationId = defaultRun?.organizationId;
+  const defaultProjectId = defaultRun?.projectId;
+  const defaultBuildId = defaultRun?.buildId;
+  const defaultDefinitionId = boardRows.find((row) => row.latest === defaultRun)?.sub.definitionId;
+  useEffect(() => {
+    onDefaultRunChange?.(
+      defaultOrganizationId != null &&
+        defaultProjectId != null &&
+        defaultBuildId != null &&
+        defaultDefinitionId != null
+        ? {
+            organizationId: defaultOrganizationId,
+            projectId: defaultProjectId,
+            definitionId: defaultDefinitionId,
+            buildId: defaultBuildId,
+          }
+        : null,
+    );
+  }, [defaultOrganizationId, defaultProjectId, defaultBuildId, defaultDefinitionId, onDefaultRunChange]);
 
   const lastUpdated = queries.reduce((latest, query) => Math.max(latest, query.dataUpdatedAt ?? 0), 0);
   const refreshing = queries.some((query) => query.isFetching);

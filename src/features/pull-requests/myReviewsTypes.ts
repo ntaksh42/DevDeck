@@ -45,7 +45,7 @@ export const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
 };
 
 export type ReviewRow =
-  | { kind: 'header'; key: ReviewSection; label: string; count: number }
+  | { kind: 'header'; key: ReviewSection; label: string; count: number; preview: string }
   | { kind: 'pr'; pr: ReviewPullRequestSummary; prIndex: number };
 
 // ── Sort ────────────────────────────────────────────────────────────────────

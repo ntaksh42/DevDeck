@@ -11,7 +11,6 @@ import {
   listRepositories,
   listRepoBranches,
   commandErrorMessage,
-  type SearchPullRequestsInput,
   type PullRequestSummary,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
@@ -28,6 +27,9 @@ import {
   searchBarRowClass,
 } from '@/components/SearchBar';
 import { PullRequestResults } from './PrSearchResults';
+import { PrSearchHistory } from './PrSearchHistory';
+import { type PrSearchFilters, summarizePrSearchFilters } from './prSearchHistoryHelpers';
+import { useSearchHistory } from '@/lib/searchHistory';
 import {
   PR_SEARCH_STATUS_OPTIONS,
   PR_SEARCH_STATUS_STORAGE_KEY,
@@ -133,6 +135,7 @@ export function PullRequestSearch({
   }
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
+  const searchHistory = useSearchHistory<PrSearchFilters>("prSearch");
   const results = mutation.data?.pullRequests ?? NO_RESULTS;
   const truncated = mutation.data?.truncated ?? false;
   const total = mutation.data?.total ?? 0;
@@ -148,18 +151,6 @@ export function PullRequestSearch({
     (targetBranches.length > 0 ? 1 : 0) +
     (fromDate ? 1 : 0) +
     (toDate ? 1 : 0);
-
-  // Bundles the advanced filter state shared by every search trigger.
-  function advancedFilters(): Partial<SearchPullRequestsInput> {
-    return {
-      targetBranches: targetBranches.length > 0 ? targetBranches : undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined,
-      dateBasis,
-      excludeDrafts: excludeDrafts || undefined,
-      sortBy,
-    };
-  }
 
   useEffect(() => {
     window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, JSON.stringify(statuses));
@@ -196,16 +187,47 @@ export function PullRequestSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSearch?.requestId]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  // Runs a search and records it in the recent list. Re-running a history entry
+  // restores its filters into the form first so the form matches the results.
+  function runSearch(text: string, filters: PrSearchFilters) {
     mutation.mutate({
       organizationId,
-      query,
-      statuses: statuses.length > 0 ? statuses : undefined,
-      projectIds: projectIds.length > 0 ? projectIds : undefined,
-      repositoryIds: repositoryIds.length > 0 ? repositoryIds : undefined,
-      ...advancedFilters(),
+      query: text,
+      statuses: filters.statuses.length > 0 ? filters.statuses : undefined,
+      projectIds: filters.projectIds.length > 0 ? filters.projectIds : undefined,
+      repositoryIds: filters.repositoryIds.length > 0 ? filters.repositoryIds : undefined,
+      targetBranches: filters.targetBranches.length > 0 ? filters.targetBranches : undefined,
+      fromDate: filters.fromDate || undefined,
+      toDate: filters.toDate || undefined,
+      dateBasis: filters.dateBasis,
+      excludeDrafts: filters.excludeDrafts || undefined,
+      sortBy: filters.sortBy,
     });
+    searchHistory.record({
+      organizationId,
+      query: text,
+      filters,
+      summary: summarizePrSearchFilters(filters),
+    });
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    runSearch(query, { statuses, projectIds, repositoryIds, targetBranches, fromDate, toDate, dateBasis, sortBy, excludeDrafts });
+  }
+
+  function rerunHistory(text: string, filters: PrSearchFilters) {
+    setQuery(text);
+    setStatuses(filters.statuses);
+    setProjectIds(filters.projectIds);
+    setRepositoryIds(filters.repositoryIds);
+    setTargetBranches(filters.targetBranches);
+    setFromDate(filters.fromDate);
+    setToDate(filters.toDate);
+    setDateBasis(filters.dateBasis);
+    setSortBy(filters.sortBy);
+    setExcludeDrafts(filters.excludeDrafts);
+    runSearch(text, filters);
   }
 
   function clearSearchFilters() {
@@ -382,6 +404,13 @@ export function PullRequestSearch({
         activeExternalFilterCount={activeSearchFilterCount}
         loading={mutation.isPending}
         onClearExternalFilters={clearSearchFilters}
+        emptyContent={
+          <PrSearchHistory
+            organizationId={organizationId}
+            history={searchHistory}
+            onRun={rerunHistory}
+          />
+        }
         results={results}
         searched={mutation.isSuccess}
         truncated={truncated}

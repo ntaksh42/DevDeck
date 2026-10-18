@@ -49,12 +49,12 @@ test.describe("browser preview", () => {
     // while the still-collapsed "Rejected" section keeps its PR hidden.
     await main.getByRole("button", { name: /Waiting for author/ }).click();
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
-    await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
+    await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
 
     await main.getByRole("button", { name: /Approved by you/ }).click();
     await expect(main.getByText("Dark mode support for settings screen")).toBeVisible();
     await expect(main.getByText("Add OpenTelemetry tracing support")).toBeVisible();
-    await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
+    await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
     await main.getByRole("button", { name: /Rejected by you/ }).click();
 
     // The filter is folded into the Reviews tab strip until opened.

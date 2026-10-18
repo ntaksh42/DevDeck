@@ -73,9 +73,37 @@ afterEach(() => {
 });
 
 describe("AnalyzeView", () => {
-  it("invites the user to add a group when none exist", async () => {
+  it("offers templates with a sample preview when no groups exist", async () => {
     renderView();
-    expect(await screen.findByText(/Add a group to track/)).toBeTruthy();
+    expect(await screen.findByText("Start from a template")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Stale work items" })).toBeTruthy();
+    expect(screen.getByText(/N to create an empty group/)).toBeTruthy();
+    expect(screen.getByText("Sample")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Bug backlog by state" })).toBeTruthy();
+
+    // Moving the focus changes the sample shown on the right.
+    const first = screen.getByRole("group", { name: "Bug backlog by state" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(screen.getByRole("heading", { name: "My team's WIP" })).toBeTruthy();
+  });
+
+  it("adds a template as a real group with Enter and focuses it", async () => {
+    renderView();
+    const row = await screen.findByRole("group", { name: "Bug backlog by state" });
+    row.focus();
+    fireEvent.keyDown(row, { key: "Enter" });
+
+    const saved = JSON.parse(window.localStorage.getItem("azdodeck:analyze:groups") ?? "[]");
+    expect(saved).toHaveLength(1);
+    expect(saved[0].name).toBe("Bug backlog by state");
+    expect(saved[0].queries).toHaveLength(3);
+    expect(saved[0].queries[0].wiql).toContain("'Bug'");
+    expect(saved[0].queries[0].wiql).not.toMatch(/asof/i);
+    expect(saved[0].rangeCount).toBe(30);
+
+    const groupRow = await screen.findByRole("button", { name: /Bug backlog by state/ });
+    await waitFor(() => expect(document.activeElement).toBe(groupRow));
   });
 
   it("shows the queries of the selected group", async () => {
@@ -155,7 +183,7 @@ describe("AnalyzeView", () => {
     const row = await screen.findByRole("button", { name: /Payments/ });
     fireEvent.keyDown(row, { key: "Delete" });
 
-    await waitFor(() => expect(screen.getByText(/Add a group to track/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Start from a template")).toBeTruthy());
     expect(window.localStorage.getItem("azdodeck:analyze:groups")).toBe("[]");
   });
 
@@ -177,7 +205,7 @@ describe("AnalyzeView", () => {
   it("opens the editor with N on the empty list and returns focus on Escape", async () => {
     renderView();
 
-    await screen.findByText("No groups yet.");
+    await screen.findByText("Start from a template");
     const list = document.querySelector<HTMLElement>('[data-primary-grid="true"]')!;
     list.focus();
     fireEvent.keyDown(list, { key: "n" });

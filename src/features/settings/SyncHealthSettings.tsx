@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import {
   commandErrorMessage,
   listSyncStates,
@@ -8,6 +8,7 @@ import {
   type SyncScope,
   type SyncState,
 } from '@/lib/azdoCommands';
+import { SettingsRow } from './SettingsRow';
 
 export function SyncHealthSettings({ organizations }: { organizations: Organization[] }) {
   const queryClient = useQueryClient();
@@ -33,22 +34,11 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Activity className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Sync health</h2>
-            <p className="text-sm text-muted-foreground">
-              Last successful background sync by cache scope.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-3">
+    <SettingsRow
+      title="Sync health"
+      description={<>Last successful background sync by cache scope.</>}
+    >
+      <div className="">
         {statesQuery.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -156,7 +146,7 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
           </p>
         ) : null}
       </div>
-    </div>
+    </SettingsRow>
   );
 }
 

@@ -57,7 +57,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
 }
 
-function loadRecentWorkItems(): RecentWorkItem[] {
+export function loadRecentWorkItems(): RecentWorkItem[] {
   return readStoredJson(
     RECENT_WORK_ITEMS_STORAGE_KEY,
     (raw) => {
