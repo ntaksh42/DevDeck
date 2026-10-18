@@ -23,6 +23,19 @@ describe('filterProjectQueries', () => {
     expect(filterProjectQueries(queries, 'sprint review').map((q) => q.id)).toEqual(['c']);
     expect(filterProjectQueries(queries, '')).toHaveLength(3);
   });
+
+  it('ranks name matches above folder-only matches', () => {
+    const ranked: ProjectQueryOption[] = [
+      { id: 'folder', name: 'Open items', folderPath: 'Shared Queries/Bugs', isPublic: true, wiql: null },
+      { id: 'contains', name: 'My Bugs', folderPath: 'My Queries', isPublic: false, wiql: null },
+      { id: 'prefix', name: 'Bugs by area', folderPath: 'Shared Queries', isPublic: true, wiql: null },
+    ];
+    expect(filterProjectQueries(ranked, 'bugs').map((q) => q.id)).toEqual([
+      'prefix',
+      'contains',
+      'folder',
+    ]);
+  });
 });
 
 describe('ProjectQueryPicker', () => {
@@ -43,6 +56,12 @@ describe('ProjectQueryPicker', () => {
     expect(onSelect).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onSelect).toHaveBeenCalledWith('b');
+  });
+
+  it('highlights the matched part of names', () => {
+    const { input } = setup();
+    fireEvent.change(input, { target: { value: 'bug' } });
+    expect(screen.getByRole('option').querySelector('mark')?.textContent).toBe('Bug');
   });
 
   it('clears the filter on the first Escape only', () => {

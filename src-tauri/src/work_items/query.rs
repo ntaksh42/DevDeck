@@ -53,6 +53,48 @@ pub(crate) const CLASSIFICATION_NODE_DEPTH: u32 = 10;
 // Azure DevOps caps the query hierarchy's `$depth` parameter at 2.
 pub(crate) const PROJECT_QUERY_DEPTH: u32 = 2;
 
+// Upper bound on extra folder requests made to reach queries nested below
+// `PROJECT_QUERY_DEPTH`, so a huge hierarchy cannot stall the picker.
+pub(crate) const MAX_QUERY_FOLDER_EXPANSIONS: usize = 100;
+
+/// Collects the ids of folders whose contents were cut off by `$depth`.
+pub(crate) fn collect_truncated_query_folders(item: &QueryHierarchyItem, out: &mut Vec<String>) {
+    if !item.is_folder {
+        return;
+    }
+    if item.has_children && item.children.is_empty() {
+        out.push(item.id.clone());
+    }
+    for child in &item.children {
+        collect_truncated_query_folders(child, out);
+    }
+}
+
+/// Replaces a truncated folder's contents with a separately fetched copy.
+/// The folder is marked as expanded even when the copy is empty, so it is
+/// never requested twice.
+pub(crate) fn graft_query_folder(items: &mut [QueryHierarchyItem], folder: QueryHierarchyItem) {
+    if let Some(node) = find_query_item_mut(items, &folder.id) {
+        node.children = folder.children;
+        node.has_children = !node.children.is_empty();
+    }
+}
+
+fn find_query_item_mut<'a>(
+    items: &'a mut [QueryHierarchyItem],
+    id: &str,
+) -> Option<&'a mut QueryHierarchyItem> {
+    for item in items {
+        if item.id == id {
+            return Some(item);
+        }
+        if let Some(found) = find_query_item_mut(&mut item.children, id) {
+            return Some(found);
+        }
+    }
+    None
+}
+
 /// Flattens a classification tree depth-first, building each node's field-ready
 /// path (`System.AreaPath` form) by backslash-joining ancestor names.
 pub(crate) fn flatten_classification_node(
