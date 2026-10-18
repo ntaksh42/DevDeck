@@ -401,6 +401,7 @@ export function PullRequestSearch({
       )}
 
       <PullRequestResults
+        filterResetKey={externalSearch?.requestId}
         activeExternalFilterCount={activeSearchFilterCount}
         loading={mutation.isPending}
         onClearExternalFilters={clearSearchFilters}

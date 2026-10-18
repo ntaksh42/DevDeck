@@ -185,6 +185,7 @@ export function WorkItemSearch({
       ) : null}
 
       <WorkItemsGrid
+        filterResetKey={externalSearch?.requestId}
         loading={mutation.isPending}
         results={filteredResults}
         searched={mutation.isSuccess}

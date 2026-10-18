@@ -712,7 +712,7 @@ PR Search / Work Item Search と、Pipelines (Project / Pipeline / Watch / Queue
 見出し行は出さない。Work Item Search / Views の空グリッドの案内文は、列グリッドの幅ではなくペインの可視幅の
 中央に置き、狭いペインでは折り返す。
 
-Work Item Search でパレット等から特定の項目を開く場合は、前の結果フィルターを解除し、その項目が古い絞り込みで隠れないようにする。
+PR Search / Work Item Search でパレット等から特定の項目を開く場合は、前の結果フィルター・列フィルター (Work Item の Stale only も含む) を解除し、その項目が古い絞り込みで隠れないようにする。
 
 空き領域には次の操作の候補を置く。
 - PR Search / Work Item Search: 検索前の一覧に「Recent searches」(実行した検索の直近 5 件。クエリ・フィルタ要約・

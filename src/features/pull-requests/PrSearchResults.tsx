@@ -61,6 +61,7 @@ export function PullRequestResults({
   searched,
   truncated = false,
   total = 0,
+  filterResetKey,
 }: {
   activeExternalFilterCount?: number;
   /** Replaces the default "Run a search" empty state (e.g. recent searches). */
@@ -71,6 +72,7 @@ export function PullRequestResults({
   searched: boolean;
   truncated?: boolean;
   total?: number;
+  filterResetKey?: number;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [columnFilters, setColumnFilters] = useState<Partial<Record<PrSearchFilterableColumn, Set<string>>>>({});
@@ -132,6 +134,10 @@ export function PullRequestResults({
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
+
+  useEffect(() => {
+    if (filterResetKey !== undefined) setColumnFilters({});
+  }, [filterResetKey]);
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));

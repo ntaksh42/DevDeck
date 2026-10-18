@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { focusPrimaryGrid, isEditableTarget } from '@/lib/utils';
 import { ListStateChip } from '@/components/ListStatusBar';
@@ -66,6 +66,7 @@ export function WorkItemsGrid({
   snoozeOrganizationId,
   filterBar,
   agentList,
+  filterResetKey,
 }: {
   /** Offered to the Agent panel as "This list" (the visible rows and these notes). */
   agentList?: WiAgentListInfo;
@@ -93,6 +94,7 @@ export function WorkItemsGrid({
   snoozeOrganizationId?: string;
   /** Rendered in the grid's dock tab strip (see `WorkItemFilterBar`). */
   filterBar?: ReactNode;
+  filterResetKey?: number;
 }) {
   const state = useWiGridState({
     storageKeyScope,
@@ -101,6 +103,11 @@ export function WorkItemsGrid({
     onSortChange,
     snoozeOrganizationId,
   });
+  useEffect(() => {
+    if (filterResetKey === undefined) return;
+    state.setColumnFilters({});
+    state.setStaleOnly(false);
+  }, [filterResetKey]);
 
   const g = useWiGridLogic(
     { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
