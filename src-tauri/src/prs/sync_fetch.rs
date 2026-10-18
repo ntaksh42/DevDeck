@@ -32,11 +32,13 @@ pub(crate) async fn fetch_active_prs_for_project(
 
     if !force_refresh {
         if let Some((cached, reviewers)) = read_active_prs_from_shared_cache(&org, &project) {
+            // A shared snapshot can be the previous capped API response too.
+            let capped = cached.len() >= PROJECT_PR_SYNC_TOP as usize;
             return PrProjectFetch {
                 project_id,
                 label,
                 result: Ok(cached),
-                capped: false,
+                capped,
                 reviewers,
             };
         }

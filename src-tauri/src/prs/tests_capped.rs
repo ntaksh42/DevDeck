@@ -56,6 +56,7 @@ fn old_pr(org_id: &str) -> CachedPr {
 
 async fn sync_with(
     returned: usize,
+    reuse_shared_cache: bool,
 ) -> (AppDatabase, String, Option<String>, tempfile::NamedTempFile) {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -73,6 +74,7 @@ async fn sync_with(
         .respond_with(
             ResponseTemplate::new(200).set_body_json(json!({ "count": prs.len(), "value": prs })),
         )
+        .expect(1)
         .mount(&server)
         .await;
 
@@ -106,12 +108,19 @@ async fn sync_with(
     let result = do_sync_prs(&db, &client, &org, &projects, &budget, true)
         .await
         .unwrap();
+    let result = if reuse_shared_cache {
+        do_sync_prs(&db, &client, &org, &projects, &budget, false)
+            .await
+            .unwrap()
+    } else {
+        result
+    };
     (db, org.id, result.warning, db_file)
 }
 
 #[tokio::test]
 async fn capped_project_keeps_cached_prs_outside_the_fetched_window() {
-    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize).await;
+    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, false).await;
 
     let titles: Vec<String> = db
         .search_pull_requests(&org_id, None, None, None)
@@ -126,8 +135,16 @@ async fn capped_project_keeps_cached_prs_outside_the_fetched_window() {
 }
 
 #[tokio::test]
+async fn capped_shared_snapshot_keeps_cached_prs_on_the_next_sync() {
+    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, true).await;
+    let prs = db.search_pull_requests(&org_id, None, None, None).unwrap();
+    assert!(prs.iter().any(|pr| pr.pull_request_id == 999_999));
+    assert!(warning.unwrap().contains("or more active PRs"));
+}
+
+#[tokio::test]
 async fn uncapped_project_still_drops_prs_that_are_no_longer_active() {
-    let (db, org_id, warning, _file) = sync_with(3).await;
+    let (db, org_id, warning, _file) = sync_with(3, false).await;
 
     let titles: Vec<String> = db
         .search_pull_requests(&org_id, None, None, None)
