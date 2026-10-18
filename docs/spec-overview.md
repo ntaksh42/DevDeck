@@ -94,6 +94,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 ### 横断機能
 
 - **コマンドパレット (`Ctrl+K`)**: コマンド実行 + 作業項目/アクティブ PR の横断検索。
+  候補へ直接フォーカスしている間は、候補の並び替え後もその行を選択・実行対象に保ち、上下キーではフォーカスも移動する。閉じるボタンの Enter はパレットを閉じ、候補を実行しない。
   接頭辞 `wi:` / `pr:` で種別を限定。`Enter` でアプリ内、`Ctrl+Enter` でブラウザ。
   `pr:` 検索時は各 PR に「Approve / Reject」アクション行を追加し、パレットから直接レビュー投票
   (`submit_pull_request_vote`) できる。

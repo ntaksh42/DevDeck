@@ -153,8 +153,9 @@ export function CommandPalette({
   }, [query]);
 
   useEffect(() => {
-    setActiveIndex((index) => Math.min(index, Math.max(rows.length - 1, 0)));
-  }, [rows.length]);
+    const focusedIndex = rowRefs.current.findIndex((row) => row === document.activeElement);
+    setActiveIndex((index) => focusedIndex >= 0 ? focusedIndex : Math.min(index, Math.max(rows.length - 1, 0)));
+  }, [rows]);
 
   useEffect(() => {
     rowRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest" });
@@ -170,6 +171,14 @@ export function CommandPalette({
     row.onRun();
   }
 
+  function moveActiveRow(delta: number) {
+    const next = Math.max(0, Math.min(activeIndex + delta, rows.length - 1));
+    setActiveIndex(next);
+    if (rowRefs.current.some((row) => row === document.activeElement)) {
+      rowRefs.current[next]?.focus();
+    }
+  }
+
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     // Enter/Escape/arrows during IME composition drive the IME, not the palette.
     if (event.nativeEvent.isComposing) return;
@@ -180,12 +189,12 @@ export function CommandPalette({
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index) => Math.min(index + 1, Math.max(rows.length - 1, 0)));
+      moveActiveRow(1);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((index) => Math.max(index - 1, 0));
+      moveActiveRow(-1);
       return;
     }
     if (event.key === "Enter") {
@@ -226,6 +235,7 @@ export function CommandPalette({
           <button
             type="button"
             aria-label="Close command palette"
+            onKeyDown={(event) => { if (event.key === "Enter") event.stopPropagation(); }}
             onClick={onClose}
             className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
