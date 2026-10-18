@@ -177,22 +177,31 @@ fn read_active_prs_from_shared_cache(
     let reviewers = shared_cache::read_reviewers(&conn, &org.name, &project.name).ok()?;
     let cached = rows
         .into_iter()
-        .map(|row| CachedPr {
-            org_id: org.id.clone(),
-            project_id: project.id.clone(),
-            project_name: project.name.clone(),
-            repository_id: row.repository_id,
-            repository_name: row.repository_name,
-            pull_request_id: row.pull_request_id,
-            title: row.title,
-            status: row.status,
-            created_by: row.created_by,
-            created_by_id: row.created_by_id,
-            creation_date: row.creation_date,
-            source_ref_name: row.source_ref_name,
-            target_ref_name: row.target_ref_name,
-            web_url: row.web_url,
-            is_draft: row.is_draft,
+        .map(|row| {
+            let web_url = format!(
+                "{}/{}/_git/{}/pullrequest/{}",
+                org.base_url,
+                encode_path_segment(&project.name),
+                encode_path_segment(&row.repository_name),
+                row.pull_request_id
+            );
+            CachedPr {
+                org_id: org.id.clone(),
+                project_id: project.id.clone(),
+                project_name: project.name.clone(),
+                repository_id: row.repository_id,
+                repository_name: row.repository_name,
+                pull_request_id: row.pull_request_id,
+                title: row.title,
+                status: row.status,
+                created_by: row.created_by,
+                created_by_id: row.created_by_id,
+                creation_date: row.creation_date,
+                source_ref_name: short_ref(&row.source_ref_name),
+                target_ref_name: short_ref(&row.target_ref_name),
+                web_url: Some(web_url),
+                is_draft: row.is_draft,
+            }
         })
         .collect();
     Some((cached, reviewers))

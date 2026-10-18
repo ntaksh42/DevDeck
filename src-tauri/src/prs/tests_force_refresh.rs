@@ -125,3 +125,23 @@ async fn forced_refresh_ignores_a_fresh_shared_cache() {
 
     assert_eq!(titles(fetch), vec!["Live PR"]);
 }
+
+#[tokio::test]
+async fn shared_prs_normalize_branches_and_rebuild_missing_web_links() {
+    let server = MockServer::start().await;
+    let client = client_with_live_pr(&server).await;
+    let (org, mut project) = (org(), project());
+    project.name = "Platform & Ops".to_string();
+    seed_fresh_shared_cache(&org, &project);
+
+    let fetch = fetch_active_prs_for_project(client, org, project, false).await;
+    let rows = fetch.result.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source_ref_name, "feature");
+    assert_eq!(rows[0].target_ref_name, "main");
+    assert_eq!(
+        rows[0].web_url.as_deref(),
+        Some("https://dev.azure.com/contoso/Platform%20%26%20Ops/_git/Repo/pullrequest/7")
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}

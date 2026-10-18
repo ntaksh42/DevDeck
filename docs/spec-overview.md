@@ -381,7 +381,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   Work Item を同期成功のたびに中立な第三の SQLite ファイル
   (`%APPDATA%\AzDoSharedCache\cache.db`) へ書き込む (`prs/sync_fetch.rs` /
   `work_items/sync.rs`)。Active PR の同期前にはこの共有キャッシュが直近 (waypoint 側で)
-  更新済みでないか確認し、更新済みならその内容を読んで自分の API 呼び出しをスキップする
+  更新済みでないか確認し、更新済みならその内容を読んで自分の API 呼び出しをスキップする。読み込み時は API 取得時と同じ短いブランチ名へ正規化し、PR の Web URL は組織・プロジェクト・リポジトリ名・PR 番号から再構築する
   (`shared_cache::is_fresh`)。ただしユーザーの明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン。`trigger_sync` の `force: true`) ではこのスキップを行わず必ず API を取りに行き、結果を共有キャッシュへ書き戻す (起動時・ウィンドウ復帰時の Hot 同期と定期同期は従来どおり共有キャッシュを優先)。共有スキーマは DevDeck 自身のテーブル形と無関係な独立の契約
   (Azure DevOps の生の事実のみ、is_mine 等の per-viewer 判断は持たない) なので、
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
