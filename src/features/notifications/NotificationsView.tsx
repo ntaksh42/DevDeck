@@ -229,6 +229,7 @@ export function NotificationsView({
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
     if (event.ctrlKey || event.metaKey) {
       if (event.key === "Enter") {
         event.preventDefault();

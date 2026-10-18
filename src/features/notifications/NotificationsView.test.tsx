@@ -5,6 +5,7 @@ import { AgentPanelHost } from "@/components/agent/AgentPanelHost";
 import { resetAgentPanelState } from "@/components/agent/agentPanelStore";
 import { useAgentSubject } from "@/components/agent/agentSubject";
 import { openExternalUrl } from "@/lib/openExternal";
+import * as commands from "@/lib/azdoCommands";
 import { NotificationsView } from "./NotificationsView";
 
 vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn() }));
@@ -32,6 +33,29 @@ function renderView(overrides?: {
 }
 
 describe("NotificationsView", () => {
+  it("leaves pagination keyboard events to the Load more button", async () => {
+    const page = await commands.listNotifications({ limit: 100 });
+    const list = vi.spyOn(commands, "listNotifications").mockResolvedValue({ ...page, hasMore: true });
+    try {
+      const { onOpenPullRequest, onOpenView } = renderView();
+      const button = await screen.findByRole("button", { name: "Load more" });
+      button.focus();
+      expect(fireEvent.keyDown(button, { key: "Enter" })).toBe(true);
+      expect(onOpenPullRequest).not.toHaveBeenCalled();
+      expect(onOpenView).not.toHaveBeenCalled();
+      const grid = screen.getByRole("grid", { name: "Notifications" });
+      fireEvent.keyDown(button, { key: "ArrowDown" });
+      expect(within(grid).getAllByRole("row")[0].getAttribute("aria-selected")).toBe("true");
+      expect(document.activeElement).toBe(button);
+      fireEvent.click(button);
+      await waitFor(() => expect(list).toHaveBeenCalledWith(
+        expect.objectContaining({ beforeId: page.items[page.items.length - 1]?.id }),
+      ));
+    } finally {
+      list.mockRestore();
+    }
+  });
+
   it("shows the seeded notification history", async () => {
     renderView();
     const grid = await screen.findByRole("grid", { name: "Notifications" });
