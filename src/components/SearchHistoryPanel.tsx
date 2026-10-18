@@ -49,7 +49,16 @@ export function SearchHistoryPanel({
 
   function focusRow(index: number) {
     const rows = rowEls();
-    rows[Math.max(0, Math.min(index, rows.length - 1))]?.focus();
+    const row = rows[Math.max(0, Math.min(index, rows.length - 1))];
+    if (row) row.focus();
+    else focusFilterInput();
+  }
+
+  function removeRow(kind: "recent" | "saved", id: string, row: HTMLElement) {
+    const index = rowEls().indexOf(row);
+    const hadFocus = row.contains(document.activeElement);
+    onRemove(kind, id);
+    if (hadFocus) requestAnimationFrame(() => focusRow(index));
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -79,9 +88,7 @@ export function SearchHistoryPanel({
       onPin(id);
     } else if (event.key === "Delete" && kind !== "viewed") {
       event.preventDefault();
-      onRemove(kind, id);
-      // The row unmounts; hand focus to its neighbour so keyboard use continues.
-      requestAnimationFrame(() => focusRow(index));
+      removeRow(kind, id, row);
     }
   }
 
@@ -142,7 +149,11 @@ export function SearchHistoryPanel({
                           title="Remove (Delete)"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onRemove(section.kind as "recent" | "saved", row.id);
+                            removeRow(
+                              section.kind as "recent" | "saved",
+                              row.id,
+                              e.currentTarget.closest<HTMLElement>("[data-history-row]")!,
+                            );
                           }}
                           className={iconButton}
                         >

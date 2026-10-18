@@ -716,7 +716,7 @@ PR Search / Work Item Search と、Pipelines (Project / Pipeline / Watch / Queue
 - PR Search / Work Item Search: 検索前の一覧に「Recent searches」(実行した検索の直近 5 件。クエリ・フィルタ要約・
   経過時間。同じ条件は 1 件にまとめ、接続ごとに絞る) を出す。PR Search は「Saved」(ピン留めした検索)、
   Work Item Search は「Recently viewed」(どの View からでもプレビューで開いた直近 5 件) も出す。`↑` / `↓` (`j` / `k`)
-  で移動、`Enter` で条件を戻して再実行、`S` でピン留め、`Delete` で削除、`/` で検索欄。履歴が無いときは従来の案内文。
+  で移動、`Enter` で条件を戻して再実行、`S` でピン留め、`Delete` で削除、`/` で検索欄。削除後は隣の行へ、履歴が空なら検索欄へフォーカスを戻す。履歴が無いときは従来の案内文。
   保存先は localStorage の `azdodeck:prSearch:searchHistory` / `azdodeck:workItemSearch:searchHistory`。
 - Pipelines: 何も選んでいないときは、実行中のパイプラインの最新 run (無ければ先頭行の最新 run) をプレビューに出す。
   フォーカスは一覧のまま動かさず、run を選んだ後はその選択を優先する。
