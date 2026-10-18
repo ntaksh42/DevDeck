@@ -71,6 +71,7 @@ export function WorkItemSearch({
     setStates([]);
     setWorkItemTypes([]);
     setProjectIds([]);
+    setResultFilter("");
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
