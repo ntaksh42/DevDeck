@@ -98,8 +98,8 @@ struct ProjectWorkItemFetch {
 ///
 /// `was_full_sync` decides how the "all" result is written to the shared
 /// cache (`shared_cache` module, read by waypoint): a full result replaces
-/// that project's rows outright, while a delta result only carries items
-/// that changed and must be upserted rather than replacing the snapshot.
+/// that project's rows outright unless the query hit its cap. Delta and capped
+/// results must be upserted rather than replacing the snapshot.
 #[allow(clippy::too_many_arguments)]
 async fn fetch_project_work_items(
     client: AdoClient,
@@ -135,7 +135,12 @@ async fn fetch_project_work_items(
         (Err(e), _) | (_, Err(e)) => Err(e),
         (Ok(None), _) | (_, Ok(None)) => Ok(None),
         (Ok(Some(all)), Ok(Some(my))) => {
-            write_all_work_items_to_shared_cache(&org, &project, &all.items, was_full_sync);
+            write_all_work_items_to_shared_cache(
+                &org,
+                &project,
+                &all.items,
+                was_full_sync && all.queried_count < SYNC_WORK_ITEM_QUERY_TOP,
+            );
             Ok(Some((all, my)))
         }
     };
@@ -155,7 +160,7 @@ fn write_all_work_items_to_shared_cache(
     org: &Organization,
     project: &TeamProject,
     items: &[CachedWorkItem],
-    was_full_sync: bool,
+    replace_snapshot: bool,
 ) {
     let rows: Vec<shared_cache::SharedWorkItem> = items
         .iter()
@@ -173,7 +178,7 @@ fn write_all_work_items_to_shared_cache(
         .collect();
     let outcome = (|| -> Result<()> {
         let mut conn = shared_cache::open()?;
-        if was_full_sync {
+        if replace_snapshot {
             shared_cache::write_work_items(&mut conn, &org.name, &project.name, &rows)?;
         } else {
             shared_cache::upsert_work_items(&mut conn, &org.name, &project.name, &rows)?;

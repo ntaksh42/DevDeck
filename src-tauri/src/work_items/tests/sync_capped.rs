@@ -102,6 +102,11 @@ async fn capped_full_sync_keeps_cached_rows_outside_the_fetched_window() {
     let old = cached(&org.id, 999_999, "Old but still valid");
     db.replace_work_items(&org.id, &["project-big"], std::slice::from_ref(&old), &[])
         .unwrap();
+    let shared = crate::shared_cache::open().unwrap();
+    shared.execute(
+        "INSERT INTO work_items (organization, project, id, title) VALUES (?1, 'Big', 999999, 'Old but still valid')",
+        [&org.name],
+    ).unwrap();
 
     let client = test_client(&server).await;
     let projects = client.list_projects().await.unwrap();
@@ -109,6 +114,19 @@ async fn capped_full_sync_keeps_cached_rows_outside_the_fetched_window() {
     sync_work_items_for_org(&db, &client, &org, &projects, &budget)
         .await
         .unwrap();
+
+    let shared_ids: Vec<i64> = shared
+        .prepare("SELECT id FROM work_items WHERE organization = ?1 AND project = 'Big'")
+        .unwrap()
+        .query_map([&org.name], |row| row.get(0))
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    assert!(
+        shared_ids.contains(&999_999),
+        "shared cache must retain rows outside the capped window"
+    );
+    assert!(shared_ids.contains(&1));
 
     // The list queries cap their result size, so look the old row up directly.
     let old_rows = db
