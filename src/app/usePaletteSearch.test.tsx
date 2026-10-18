@@ -9,6 +9,7 @@ const searchAll = vi.fn();
 const getActiveOrganization = vi.fn();
 const listActionInboxItems = vi.fn();
 const setActionInboxItemState = vi.fn();
+const setActiveOrganization = vi.fn();
 
 vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
@@ -17,6 +18,7 @@ vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   getActiveOrganization: () => getActiveOrganization(),
   listActionInboxItems: (...args: unknown[]) => listActionInboxItems(...args),
   setActionInboxItemState: (...args: unknown[]) => setActionInboxItemState(...args),
+  setActiveOrganization: (...args: unknown[]) => setActiveOrganization(...args),
 }));
 
 import { usePaletteSearch } from "./usePaletteSearch";
@@ -135,6 +137,65 @@ describe("usePaletteSearch pasted links", () => {
       expect.objectContaining({ query: "123", organizationId: "org-1" }),
     );
     expect(callbacks.setView).toHaveBeenCalledWith("pullRequestSearch");
+  });
+});
+
+describe("usePaletteSearch cross-organization targets", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    getActiveOrganization.mockResolvedValue(organizations[0]);
+    setActiveOrganization.mockReset().mockImplementation(async () => {
+      getActiveOrganization.mockResolvedValue(organizations[1]);
+      return organizations[1];
+    });
+    searchAll.mockResolvedValue({
+      workItems: [{ id: 42, organizationId: "org-2", title: "Target item" }],
+      pullRequests: [{ pullRequestId: 42, organizationId: "org-2", repositoryId: "repo", title: "Target PR" }],
+      totals: { workItems: 1, pullRequests: 1 },
+    });
+  });
+  afterEach(cleanup);
+
+  it.each([0, 1])("switches connections before opening search result %i", async (index) => {
+    const { result } = renderHook(() => usePaletteSearch(true, organizations, callbacks), { wrapper });
+    act(() => result.current.setPaletteSearchText("target"));
+    await waitFor(() => expect(result.current.paletteSearchItems).toHaveLength(2));
+    act(() => result.current.paletteSearchItems[index].run());
+    await waitFor(() => expect(setActiveOrganization).toHaveBeenCalledWith("org-2"));
+    await waitFor(() => expect(callbacks.setView).toHaveBeenCalledWith(index === 0 ? "workItems" : "pullRequestSearch"));
+    expect(await getActiveOrganization()).toEqual(organizations[1]);
+  });
+
+  it("switches connections before reopening a recent work item", async () => {
+    window.localStorage.setItem("azdodeck:workItems:recent", JSON.stringify([{
+      key: "org-2:p:42", id: 42, organizationId: "org-2", projectId: "p", projectName: "Project",
+      title: "Target", viewedAt: new Date().toISOString(), webUrl: null,
+    }]));
+    const { result } = renderHook(() => usePaletteSearch(true, organizations, callbacks), { wrapper });
+    await waitFor(() => expect(getActiveOrganization).toHaveBeenCalled());
+    act(() => result.current.paletteRecentItems[0].run());
+    await waitFor(() => expect(setActiveOrganization).toHaveBeenCalledWith("org-2"));
+    await waitFor(() => expect(callbacks.setWorkItemSearchRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: "org-2", query: "42" }),
+    ));
+  });
+
+  it("does not open a pasted link when switching connections fails", async () => {
+    setActiveOrganization.mockRejectedValue(new Error("switch failed"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const linked = [{ ...organizations[1], baseUrl: "https://dev.azure.com/second" }];
+      const { result } = renderHook(() => usePaletteSearch(true, linked, callbacks), { wrapper });
+      act(() => result.current.setPaletteSearchText("https://dev.azure.com/second/P/_workitems/edit/42"));
+      await waitFor(() => expect(result.current.paletteSearchItems).toHaveLength(1));
+      act(() => result.current.paletteSearchItems[0].run());
+      await waitFor(() => expect(log).toHaveBeenCalled());
+      expect(callbacks.setWorkItemSearchRequest).not.toHaveBeenCalled();
+      expect(callbacks.setView).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
   });
 });
 

@@ -129,8 +129,8 @@ export function usePaletteSearch(
     }
   }
 
-  // The search views read the active connection, so a link to another registered
-  // organization switches to it first (as the cross-org summary does).
+  // The search views read the active connection, so targets in another
+  // organization switch to it before opening the search view.
   function openLinkedItem(
     kind: "workItems" | "pullRequests",
     query: string,
@@ -142,8 +142,8 @@ export function usePaletteSearch(
     }
     setActiveOrganization(organizationId)
       .then(() => queryClient.invalidateQueries())
-      .catch((error) => console.error("Failed to switch connection for a pasted link", error))
-      .finally(() => openSearchTarget(kind, query, organizationId));
+      .then(() => openSearchTarget(kind, query, organizationId))
+      .catch((error) => console.error("Failed to switch connection for a palette item", error));
   }
 
   // Cast a review vote on a PR directly from the command palette (E-36). The
@@ -270,7 +270,7 @@ export function usePaletteSearch(
             .filter(Boolean)
             .join(" · "),
           run: () => {
-            openSearchTarget("workItems", String(item.id), item.organizationId);
+            openLinkedItem("workItems", String(item.id), item.organizationId);
           },
           runAlt: item.webUrl
             ? () => {
@@ -301,7 +301,7 @@ export function usePaletteSearch(
             .filter(Boolean)
             .join(" · "),
           run: () => {
-            openSearchTarget("pullRequests", String(pr.pullRequestId), pr.organizationId);
+            openLinkedItem("pullRequests", String(pr.pullRequestId), pr.organizationId);
           },
           runAlt: pr.webUrl
             ? () => {
@@ -382,7 +382,7 @@ export function usePaletteSearch(
       label: entry.label,
       detail: entry.detail,
       run: () => {
-        openSearchTarget(entry.kind, entry.query, entry.organizationId);
+        openLinkedItem(entry.kind, entry.query, entry.organizationId);
       },
       runAlt: entry.webUrl
         ? () => {
@@ -396,6 +396,7 @@ export function usePaletteSearch(
     organizations.length,
     paletteSearch.kind,
     paletteSearchEnabled,
+    activeOrganizationId,
   ]);
 
   return {
