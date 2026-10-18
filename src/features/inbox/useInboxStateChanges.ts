@@ -47,6 +47,7 @@ export function useInboxStateChanges({
   const [undo, setUndo] = useState<InboxUndo | null>(null);
   const [reselectId, setReselectId] = useState<number | null>(null);
   const undoTimer = useRef<number | null>(null);
+  const pendingChange = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => () => {
     if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
@@ -74,7 +75,7 @@ export function useInboxStateChanges({
   // fire for the latest call, and E pressed on several rows in a row must
   // unhide each one once its own refetch lands.
   function send(ids: number[], state: InboxTab, snoozedUntil: string | undefined, onFailure: () => void) {
-    void setActionInboxItemState({ ids, state, snoozedUntil })
+    return setActionInboxItemState({ ids, state, snoozedUntil })
       .catch((error: unknown) => {
         onFailure();
         pushToast(`Could not update the Inbox item: ${commandErrorMessage(error)}`);
@@ -109,7 +110,7 @@ export function useInboxStateChanges({
       label: changeLabel(state, options.resolved ?? false, targets.length),
     };
     if (state !== tab) ids.forEach((id) => hide(id, true));
-    send(ids, state, snoozedUntil, () => {
+    pendingChange.current = send(ids, state, snoozedUntil, () => {
       ids.forEach((id) => hide(id, false));
       setUndo((current) => (current === record ? null : current));
     });
@@ -130,12 +131,14 @@ export function useInboxStateChanges({
     // Items that had different wake times go back in one request per wake time.
     const byWakeTime = new Map<string | null, number[]>();
     for (const { id, previousSnoozedUntil } of record.items) {
-      hide(id, false);
       byWakeTime.set(previousSnoozedUntil, [...(byWakeTime.get(previousSnoozedUntil) ?? []), id]);
     }
-    for (const [wakeTime, ids] of byWakeTime) {
-      send(ids, record.previous, wakeTime ?? undefined, () => setReselectId(null));
-    }
+    // The original write must settle before its inverse can reach the backend.
+    void pendingChange.current.then(() => {
+      for (const [wakeTime, ids] of byWakeTime) {
+        void send(ids, record.previous, wakeTime ?? undefined, () => setReselectId(null));
+      }
+    });
     return true;
   }
 
