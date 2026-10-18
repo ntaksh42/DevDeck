@@ -1,16 +1,63 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ProjectQueryOption } from '@/lib/azdoCommands';
+
+function splitTerms(filter: string): string[] {
+  return filter.toLowerCase().split(/[\s　]+/).filter(Boolean);
+}
+
+// Lower is better: name starts with the first term, then every term in the
+// name, then matches that needed the folder path.
+function matchRank(query: ProjectQueryOption, terms: string[]): number {
+  const name = query.name.toLowerCase();
+  if (name.startsWith(terms[0])) return 0;
+  return terms.every((term) => name.includes(term)) ? 1 : 2;
+}
 
 export function filterProjectQueries(
   queries: ProjectQueryOption[],
   filter: string,
 ): ProjectQueryOption[] {
-  const terms = filter.toLowerCase().split(/[\s　]+/).filter(Boolean);
+  const terms = splitTerms(filter);
   if (terms.length === 0) return queries;
-  return queries.filter((query) => {
-    const haystack = `${query.folderPath}/${query.name}`.toLowerCase();
-    return terms.every((term) => haystack.includes(term));
-  });
+  return queries
+    .filter((query) => {
+      const haystack = `${query.folderPath}/${query.name}`.toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    })
+    .map((query) => ({ query, rank: matchRank(query, terms) }))
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ query }) => query);
+}
+
+/** Wraps each occurrence of the filter terms in `<mark>`. */
+export function highlightTerms(text: string, terms: string[]): ReactNode {
+  const lower = text.toLowerCase();
+  // Case folding that changes length (rare) would shift offsets; skip it.
+  if (terms.length === 0 || lower.length !== text.length) return text;
+  const marked = new Array<boolean>(text.length).fill(false);
+  for (const term of terms) {
+    for (let at = lower.indexOf(term); at !== -1; at = lower.indexOf(term, at + 1)) {
+      marked.fill(true, at, at + term.length);
+    }
+  }
+  const parts: ReactNode[] = [];
+  let start = 0;
+  for (let i = 1; i <= text.length; i++) {
+    if (i === text.length || marked[i] !== marked[start]) {
+      const chunk = text.slice(start, i);
+      parts.push(
+        marked[start] ? (
+          <mark key={start} className="rounded-sm bg-yellow-200/70 text-inherit dark:bg-yellow-500/30">
+            {chunk}
+          </mark>
+        ) : (
+          chunk
+        ),
+      );
+      start = i;
+    }
+  }
+  return parts;
 }
 
 type ProjectQueryPickerProps = {
@@ -32,6 +79,7 @@ export function ProjectQueryPicker({
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
   const filtered = useMemo(() => filterProjectQueries(queries, filter), [queries, filter]);
+  const terms = useMemo(() => splitTerms(filter), [filter]);
   const disabled = !hasProject || loading;
 
   useEffect(() => {
@@ -104,7 +152,7 @@ export function ProjectQueryPicker({
           id="view-project-query-list"
           role="listbox"
           aria-label="Azure DevOps queries"
-          className="max-h-40 overflow-y-auto rounded-md border border-border bg-background text-sm"
+          className="max-h-72 overflow-y-auto rounded-md border border-border bg-background text-sm"
         >
           {filtered.length === 0 ? (
             <li className="px-3 py-1.5 text-xs text-muted-foreground">No matching queries</li>
@@ -121,9 +169,9 @@ export function ProjectQueryPicker({
                   index === activeIndex ? 'bg-secondary' : ''
                 }`}
               >
-                <span className="truncate">{query.name}</span>
+                <span className="truncate">{highlightTerms(query.name, terms)}</span>
                 <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
-                  {query.folderPath}
+                  {highlightTerms(query.folderPath, terms)}
                 </span>
               </li>
             ))

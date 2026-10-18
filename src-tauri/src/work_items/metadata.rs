@@ -87,9 +87,10 @@ impl WorkItemService {
     ) -> Result<Vec<ProjectQueryOption>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let roots = client
+        let mut roots = client
             .list_queries(&input.project_id, PROJECT_QUERY_DEPTH)
             .await?;
+        expand_truncated_query_folders(&client, &input.project_id, &mut roots).await;
         let mut queries = Vec::new();
         for root in &roots {
             flatten_query_hierarchy(root, "", &mut queries);
@@ -122,5 +123,46 @@ impl WorkItemService {
         let mut iterations = Vec::new();
         flatten_classification_node(&iterations_root, None, 0, &mut iterations);
         Ok(ClassificationNodesResult { areas, iterations })
+    }
+}
+
+/// `$depth` stops at 2, so queries in deeper folders (e.g.
+/// `Shared Queries/Team/Sub/Query`) are missing from `list_queries`. Fetch each
+/// cut-off folder level by level until the whole tree is loaded. A folder that
+/// fails to load is skipped so the rest of the picker still works.
+pub(super) async fn expand_truncated_query_folders(
+    client: &AdoClient,
+    project_id: &str,
+    roots: &mut [azdo_client::QueryHierarchyItem],
+) {
+    let mut attempted = HashSet::new();
+    loop {
+        let mut pending = Vec::new();
+        for root in roots.iter() {
+            collect_truncated_query_folders(root, &mut pending);
+        }
+        pending.retain(|id| !attempted.contains(id));
+        pending.truncate(MAX_QUERY_FOLDER_EXPANSIONS - attempted.len());
+        if pending.is_empty() {
+            return;
+        }
+        attempted.extend(pending.iter().cloned());
+        let mut tasks = JoinSet::new();
+        for folder_id in pending {
+            let client = client.clone();
+            let project_id = project_id.to_string();
+            tasks.spawn(async move {
+                client
+                    .get_query_folder(&project_id, &folder_id, PROJECT_QUERY_DEPTH)
+                    .await
+            });
+        }
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok(Ok(folder)) => graft_query_folder(roots, folder),
+                Ok(Err(error)) => tracing::warn!(%error, "failed to expand query folder"),
+                Err(error) => tracing::warn!(%error, "query folder task failed"),
+            }
+        }
     }
 }

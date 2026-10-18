@@ -228,6 +228,10 @@ pub struct QueryHierarchyItem {
     pub is_public: bool,
     #[serde(default)]
     pub wiql: Option<String>,
+    /// True for a folder that has contents even when `children` is empty
+    /// because the request's `$depth` stopped above them.
+    #[serde(default)]
+    pub has_children: bool,
     #[serde(default)]
     pub children: Vec<QueryHierarchyItem>,
 }

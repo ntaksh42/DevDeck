@@ -553,6 +553,27 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Fetches one query folder with up to `depth` levels of its contents, for
+    /// expanding folders that `list_queries` returned without their children.
+    pub async fn get_query_folder(
+        &self,
+        project_id: &str,
+        folder_id: &str,
+        depth: u32,
+    ) -> Result<QueryHierarchyItem> {
+        let path = format!("{project_id}/_apis/wit/queries/{folder_id}");
+        let depth_string = depth.to_string();
+        self.get_json(
+            &path,
+            &[
+                ("api-version", "7.1"),
+                ("$depth", depth_string.as_str()),
+                ("$expand", "wiql"),
+            ],
+        )
+        .await
+    }
+
     /// Fetches an area or iteration classification tree for a project.
     /// `structure_group` is `"areas"` or `"iterations"`; `depth` expands nested
     /// child nodes in a single request.

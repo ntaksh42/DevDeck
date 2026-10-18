@@ -11,6 +11,7 @@ mod candidates;
 mod conversions;
 mod mutations;
 mod pull_request_links;
+mod query_folders;
 mod sync;
 mod sync_capped;
 
