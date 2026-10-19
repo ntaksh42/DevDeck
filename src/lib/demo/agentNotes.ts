@@ -209,6 +209,21 @@ export function demoReplyAgentNote(input: ReplyAgentNoteInput): AgentNote {
   });
 }
 
+/** Marks a proposed comment as posted, as the desktop app does after it posts it. */
+export function demoPostAgentComment(input: AgentNoteItem & { noteId: string; replyIndex: number }): void {
+  if (input.target === "ask") throw new Error("agent comments can only be posted to a work item or pull request");
+  const current = find(input);
+  const reply = current.replies[input.replyIndex];
+  if (!reply || reply.kind !== "post") throw new Error("no proposed comment at that position");
+  if (reply.postedAt) throw new Error("this comment was already posted");
+  const replies = current.replies.map((r, i) =>
+    i === input.replyIndex
+      ? { ...r, postedAt: now(), postedRef: input.target === "pull-request" ? "thread-1" : "comment-1" }
+      : r,
+  );
+  replace(input, { ...current, modifiedAt: now(), replies });
+}
+
 export function demoUpdateAgentNote(input: UpdateAgentNoteInput): AgentNote {
   const current = find(input);
   let next = { ...current, modifiedAt: now() };

@@ -18,7 +18,14 @@ const noteReplySchema = z.object({
   author: z.string(),
   createdAt: z.string(),
   body: z.string(),
+  /** `post`: a comment the agent proposes to leave on the item; DevDeck posts it, signed. */
+  kind: z.enum(["reply", "post"]).catch("reply").optional(),
+  /** Set once DevDeck posted a `post` reply: when, and where (`thread-12` / `comment-34`). */
+  postedAt: z.string().nullable().optional(),
+  postedRef: z.string().nullable().optional(),
 });
+
+export type NoteReply = z.infer<typeof noteReplySchema>;
 
 const agentNoteSchema = z.object({
   id: z.string(),
@@ -176,4 +183,27 @@ export type AgentAsk = z.infer<typeof agentAskSchema>;
 export async function listAgentAsks(): Promise<AgentAsk[]> {
   const result = await invokeCommand("list_agent_asks", {});
   return z.array(agentAskSchema).parse(result);
+}
+
+export type PostAgentCommentInput = AgentNoteItem & {
+  noteId: string;
+  /** Index of the proposal among the note's replies. */
+  replyIndex: number;
+  /** DevDeck posts it without the user approving this comment (Settings must allow it). */
+  auto?: boolean;
+  organizationId?: string | null;
+  projectId: string;
+  /** Pull request notes. */
+  repositoryId?: string | null;
+  /** Pull request notes: reply in this thread instead of opening one. */
+  threadId?: number | null;
+};
+
+/**
+ * Posts a comment the agent proposed in a note to its work item / pull
+ * request, signed with the agent's name. The backend refuses a proposal that
+ * was posted already.
+ */
+export async function postAgentComment(input: PostAgentCommentInput): Promise<void> {
+  await invokeCommand("post_agent_comment", { input });
 }

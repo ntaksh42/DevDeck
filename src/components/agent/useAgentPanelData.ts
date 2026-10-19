@@ -204,6 +204,7 @@ export function useAgentPanelData(
       itemNotesQuery.error ?? asksQuery.error ?? setStatus.error ?? remove.error ?? undoDelete.error ?? submitDrafts.error ?? null,
     send,
     readOnly,
+    autoPost: settingsQuery.data?.agentAutoPostEnabled ?? false,
     defaultAgent,
     agent: runWith,
     model,

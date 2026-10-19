@@ -165,6 +165,7 @@ fn app_settings_can_be_saved_and_cleared() {
             agent_command: None,
             codex_command: Some("codex exec {notes}".to_string()),
             default_agent: Some("codex".to_string()),
+            agent_auto_post_enabled: true,
             claude_model: Some("opus".to_string()),
             codex_model: None,
             claude_model_choices: None,

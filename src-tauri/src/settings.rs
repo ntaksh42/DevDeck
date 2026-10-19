@@ -33,6 +33,8 @@ pub struct UpdateAppSettingsInput {
     #[serde(default)]
     pub default_agent: Option<String>,
     #[serde(default)]
+    pub agent_auto_post_enabled: Option<bool>,
+    #[serde(default)]
     pub claude_model: Option<String>,
     #[serde(default)]
     pub codex_model: Option<String>,
@@ -233,6 +235,7 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .default_agent
             .filter(|agent| agent == "codex")
             .map(|_| "codex".to_string()),
+        agent_auto_post_enabled: input.agent_auto_post_enabled.unwrap_or(false),
         agent_workspace_path: normalize_path(input.agent_workspace_path),
         inbox_insight_enabled: input.inbox_insight_enabled.unwrap_or(false),
         inbox_insight_model: normalize_path(input.inbox_insight_model),

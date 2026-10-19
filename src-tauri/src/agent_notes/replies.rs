@@ -30,32 +30,66 @@ pub struct NoteReply {
     pub author: String,
     pub created_at: String,
     pub body: String,
+    /// `reply`, or `post` for a comment the agent proposes to leave on the
+    /// work item / pull request (written after a `<!-- post ... -->` marker).
+    pub kind: String,
+    /// When DevDeck posted a `post` reply, and where it landed (`thread-12`).
+    pub posted_at: Option<String>,
+    pub posted_ref: Option<String>,
 }
 
-fn parse_marker(line: &str) -> Option<(String, String)> {
+enum Marker {
+    Reply {
+        kind: &'static str,
+        author: String,
+        created_at: String,
+    },
+    Posted {
+        at: String,
+        reference: String,
+    },
+}
+
+fn parse_marker(line: &str) -> Option<Marker> {
     let inner = line
         .trim()
         .strip_prefix("<!--")?
         .strip_suffix("-->")?
         .trim();
     let mut words = inner.split_whitespace();
-    if words.next()? != "reply" {
-        return None;
-    }
+    let kind = match words.next()? {
+        "reply" => "reply",
+        "post" => "post",
+        "posted" => {
+            let at = words.next().unwrap_or_default().to_string();
+            let reference = words.next().unwrap_or_default().to_string();
+            return Some(Marker::Posted { at, reference });
+        }
+        _ => return None,
+    };
     let author = words.next().unwrap_or("agent").to_string();
     let created_at = words.next().unwrap_or_default().to_string();
-    Some((author, created_at))
+    Some(Marker::Reply {
+        kind,
+        author,
+        created_at,
+    })
 }
 
 pub(crate) fn is_marker(line: &str) -> bool {
     parse_marker(line).is_some()
 }
 
+/// A line that starts a reply (`reply` or `post`), as opposed to a `posted` record.
+pub(crate) fn is_reply_marker(line: &str) -> bool {
+    matches!(parse_marker(line), Some(Marker::Reply { .. }))
+}
+
 /// A marker line in user text would split it into a fake reply when read back.
 pub(crate) fn reject_markers(body: &str) -> Result<()> {
     if body.lines().any(|line| parse_marker(line).is_some()) {
         return Err(AppError::InvalidInput(
-            "text must not contain a `<!-- reply ... -->` line".to_string(),
+            "text must not contain a `<!-- reply|post|posted ... -->` line".to_string(),
         ));
     }
     Ok(())
@@ -66,13 +100,33 @@ pub(crate) fn split_replies(text: &str) -> (String, Vec<NoteReply>) {
     let mut body = String::new();
     let mut replies: Vec<NoteReply> = Vec::new();
     for line in text.split_inclusive('\n') {
-        if let Some((author, created_at)) = parse_marker(line) {
-            replies.push(NoteReply {
+        match parse_marker(line) {
+            Some(Marker::Reply {
+                kind,
                 author,
                 created_at,
-                body: String::new(),
-            });
-        } else if let Some(reply) = replies.last_mut() {
+            }) => {
+                replies.push(NoteReply {
+                    author,
+                    created_at,
+                    body: String::new(),
+                    kind: kind.to_string(),
+                    posted_at: None,
+                    posted_ref: None,
+                });
+                continue;
+            }
+            // Only a `post` reply can carry a `posted` record (DevDeck writes it).
+            Some(Marker::Posted { at, reference }) => {
+                if let Some(reply) = replies.last_mut().filter(|r| r.kind == "post") {
+                    reply.posted_at = Some(at);
+                    reply.posted_ref = Some(reference);
+                    continue;
+                }
+            }
+            None => {}
+        }
+        if let Some(reply) = replies.last_mut() {
             reply.body.push_str(line);
         } else {
             body.push_str(line);

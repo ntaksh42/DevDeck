@@ -51,6 +51,9 @@ pub struct AppSettings {
     /// Agent a request goes to unless the composer picks another: `codex`, or
     /// unset for Claude Code.
     pub default_agent: Option<String>,
+    /// Lets DevDeck post the (signed) comments an agent proposes without the
+    /// user approving each one.
+    pub agent_auto_post_enabled: bool,
     /// Model each agent starts with (unset: the agent's own setting), and the
     /// extra models the Agent panel offers, comma-separated.
     pub claude_model: Option<String>,
@@ -113,6 +116,7 @@ impl Default for AppSettings {
             agent_command: None,
             codex_command: None,
             default_agent: None,
+            agent_auto_post_enabled: false,
             claude_model: None,
             codex_model: None,
             claude_model_choices: None,
@@ -181,6 +185,7 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         claude_model_choices: get_setting(conn, "claude_model_choices")?,
         codex_model_choices: get_setting(conn, "codex_model_choices")?,
         agent_workspace_path: get_setting(conn, "agent_workspace_path")?,
+        agent_auto_post_enabled: get_bool_setting(conn, "agent_auto_post_enabled", false)?,
         inbox_insight_enabled: get_bool_setting(conn, "inbox_insight_enabled", false)?,
         inbox_insight_model: get_setting(conn, "inbox_insight_model")?,
         read_only_validation_mode_enabled: get_bool_setting(
@@ -308,6 +313,11 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         conn,
         "agent_workspace_path",
         settings.agent_workspace_path.as_deref(),
+    )?;
+    set_bool_setting(
+        conn,
+        "agent_auto_post_enabled",
+        settings.agent_auto_post_enabled,
     )?;
     set_bool_setting(
         conn,
