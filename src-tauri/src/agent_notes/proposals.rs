@@ -165,7 +165,7 @@ impl AgentNoteService {
     }
 }
 
-fn prepare_post_in(
+pub(super) fn prepare_post_in(
     root: &Path,
     input: PostAgentProposalInput,
     auto_enabled: bool,
@@ -263,7 +263,7 @@ fn prepare_post_in(
     })
 }
 
-fn record_posted_in(
+pub(super) fn record_posted_in(
     root: &Path,
     prepared: PreparedPost,
     reference: &str,
