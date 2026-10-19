@@ -173,6 +173,7 @@ pub fn run() {
             commands::agent_notes::submit_agent_note_drafts,
             commands::agent_notes::summarize_agent_notes,
             commands::agent_notes::run_agent,
+            commands::agent_notes::post_agent_comment,
             commands::agent_notes::list_agent_asks,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,

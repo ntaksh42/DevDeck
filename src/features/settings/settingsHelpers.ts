@@ -16,6 +16,7 @@ export function settingsInput(
     agentCommand: settings?.agentCommand ?? null,
     codexCommand: settings?.codexCommand ?? null,
     defaultAgent: settings?.defaultAgent ?? null,
+    agentAutoPostEnabled: settings?.agentAutoPostEnabled ?? false,
     claudeModel: settings?.claudeModel ?? null,
     codexModel: settings?.codexModel ?? null,
     claudeModelChoices: settings?.claudeModelChoices ?? null,

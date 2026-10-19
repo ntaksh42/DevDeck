@@ -21,6 +21,8 @@ import {
 } from "./agentSubject";
 import { consumeAgentFocusRequest, focusAgentComposer, type SubjectOverride } from "./agentPanelStore";
 import { useAgentPanelData, type AgentChoice, type Conversation } from "./useAgentPanelData";
+import { pendingProposals } from "./agentProposals";
+import { useAgentProposals } from "./useAgentProposals";
 
 /**
  * The app-wide Agent panel (Ctrl+J): asks the external agent to investigate,
@@ -69,6 +71,7 @@ export function AgentPanel({
   const resetChoice = () => setChoice({ agent: null, model: null });
   const data = useAgentPanelData(subject, true, attachedList, choice);
   const { conversations } = data;
+  const proposals = useAgentProposals(subject, conversations, { autoPost: data.autoPost, readOnly: data.readOnly });
 
   const [help, setHelp] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -171,6 +174,9 @@ export function AgentPanel({
         ? [{ label: c.note.status === "done" ? "Reopen" : "Resolve", keys: "X", run: () => data.setStatus.mutate(c) }]
         : []),
       ...(c.note.status !== "done" ? [{ label: "Delete", keys: "Del", run: () => deleteConversation(c) }] : []),
+      ...(c.section === "item" && pendingProposals(c.note)[0]
+        ? [{ label: "Post comment", keys: "C", run: () => proposals.post(c, pendingProposals(c.note)[0].index) }]
+        : []),
     ];
   }
 
@@ -244,6 +250,8 @@ export function AgentPanel({
         ? action("Show in result")
         : plain && lower === "l"
           ? action("Re-attach")
+          : plain && lower === "c"
+            ? action("Post comment")
           : plain && lower === "x"
             ? (action("Resolve") ?? action("Reopen"))
             : event.key === "Delete"
@@ -370,6 +378,10 @@ export function AgentPanel({
               resetChoice();
             }}
             onReplyCollapse={() => headerRefs.current.get(c.key)?.focus()}
+            onPostProposal={c.section === "item" ? (replyIndex) => proposals.post(c, replyIndex) : null}
+            postBusy={proposals.busy}
+            postError={proposals.errorFor(c.key)}
+            autoPost={data.autoPost}
           />
         ))}
         {data.deleted ? (
@@ -394,6 +406,7 @@ export function AgentPanel({
                 { keys: "R", label: "reply" },
                 { keys: "M", label: "ask" },
                 { keys: "X", label: "resolve" },
+                { keys: "C", label: "post comment" },
                 { keys: "⇧Enter", label: "run now" },
                 { keys: "P", label: "pin" },
                 { keys: "⇧Tab", label: "agent / context (from the input)" },

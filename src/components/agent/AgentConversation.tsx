@@ -5,6 +5,7 @@ import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { CommentAvatar } from "@/features/pull-requests/PrThreadCard";
 import { formatRelativeDate } from "@/lib/utils";
+import { AgentProposal } from "./AgentProposal";
 
 const KIND_LABELS: Record<string, string> = {
   investigate: "Investigate",
@@ -97,9 +98,29 @@ export const AgentConversation = forwardRef<
     replyRef: (el: HTMLDivElement | null) => void;
     /** Esc in an empty reply box: back to this conversation's header. */
     onReplyCollapse: () => void;
+    /** Posts the proposed comment at this reply index; null where nothing can be posted. */
+    onPostProposal?: ((replyIndex: number) => void) | null;
+    postBusy?: boolean;
+    postError?: string | null;
+    autoPost?: boolean;
   }
 >(function AgentConversation(
-  { note, expanded, selected, onToggle, onFocus, actions = [], onReply, replyBusy, replyRef, onReplyCollapse },
+  {
+    note,
+    expanded,
+    selected,
+    onToggle,
+    onFocus,
+    actions = [],
+    onReply,
+    replyBusy,
+    replyRef,
+    onReplyCollapse,
+    onPostProposal = null,
+    postBusy = false,
+    postError = null,
+    autoPost = false,
+  },
   ref,
 ) {
   const Chevron = expanded ? ChevronDown : ChevronRight;
@@ -151,9 +172,20 @@ export const AgentConversation = forwardRef<
       {expanded ? (
         <div className="space-y-1.5 px-2 pb-2">
           <AgentMessage author="user" when={note.createdAt} text={note.body} quote={note.quote} hideMeta />
-          {note.replies.map((reply, index) => (
-            <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />
-          ))}
+          {note.replies.map((reply, index) =>
+            reply.kind === "post" ? (
+              <AgentProposal
+                key={`${note.id}-${index}`}
+                reply={reply}
+                onPost={onPostProposal ? () => onPostProposal(index) : null}
+                busy={postBusy}
+                autoPost={autoPost}
+                error={postError}
+              />
+            ) : (
+              <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />
+            ),
+          )}
           {done && note.resolved ? <p className="pl-[26px] text-[11px] text-muted-foreground">✓ {note.resolved}</p> : null}
           {selected && actions.length ? (
             <div className="flex flex-wrap gap-x-3 pl-[26px] text-[11px]">

@@ -29,6 +29,7 @@ mod guide;
 pub(crate) mod launch;
 mod migrate;
 mod ops;
+mod proposals;
 mod replies;
 mod skill;
 mod summary;
@@ -40,6 +41,7 @@ pub use ops::{
     RestoreAgentNoteInput, SetAgentNoteStatusInput, SubmitAgentNoteDraftsInput,
     UpdateAgentNoteInput,
 };
+pub use proposals::PostAgentProposalInput;
 pub use replies::{NoteReply, ReplyAgentNoteInput};
 pub(crate) use skill::ensure_skills;
 pub use summary::{AgentNoteSummary, SummarizeAgentNotesInput};
@@ -432,3 +434,5 @@ fn validate_note_id(note_id: &str) -> Result<()> {
 mod tests;
 #[cfg(test)]
 mod tests_ops;
+#[cfg(test)]
+mod tests_proposals;

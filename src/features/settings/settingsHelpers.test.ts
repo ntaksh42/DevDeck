@@ -23,6 +23,7 @@ function nonDefaultSettings(): AppSettings {
     agentCommand: "agent --target {target} --id {id}",
     codexCommand: "codex exec {notes}",
     defaultAgent: "codex",
+    agentAutoPostEnabled: true,
     claudeModel: "opus",
     codexModel: "gpt-5.1",
     claudeModelChoices: "claude-opus-4-1",

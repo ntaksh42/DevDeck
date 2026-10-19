@@ -49,6 +49,7 @@ import {
   demoSetAgentNoteStatus,
   demoSubmitAgentNoteDrafts,
   demoSummarizeAgentNotes,
+  demoPostAgentComment,
   demoUpdateAgentNote,
 } from "@/lib/demo/agentNotes";
 
@@ -228,6 +229,12 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: ReplyAgentNoteInput } | undefined)?.input;
       if (!input) throw new Error("missing input");
       return demoReplyAgentNote(input);
+    }
+    case "post_agent_comment": {
+      const input = (args as { input?: AgentNoteItem & { noteId: string; replyIndex: number } } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      demoPostAgentComment(input);
+      return null;
     }
     case "update_agent_note": {
       const input = (args as { input?: UpdateAgentNoteInput } | undefined)?.input;

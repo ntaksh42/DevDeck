@@ -39,6 +39,7 @@ export function AgentCommandSettings() {
   const [codexCommand, setCodexCommand] = useState("");
   const [defaultAgent, setDefaultAgent] = useState<AgentKind>("claude");
   const [workspace, setWorkspace] = useState("");
+  const [autoPost, setAutoPost] = useState(false);
   const [insightEnabled, setInsightEnabled] = useState(false);
   const [insightModel, setInsightModel] = useState("");
   const [models, setModels] = useState<Record<ModelKey, string>>({
@@ -57,6 +58,9 @@ export function AgentCommandSettings() {
   useEffect(() => {
     setDefaultAgent(settingsQuery.data?.defaultAgent === "codex" ? "codex" : "claude");
   }, [settingsQuery.data?.defaultAgent]);
+  useEffect(() => {
+    setAutoPost(settingsQuery.data?.agentAutoPostEnabled ?? false);
+  }, [settingsQuery.data?.agentAutoPostEnabled]);
   useEffect(() => {
     setWorkspace(settingsQuery.data?.agentWorkspacePath ?? "");
   }, [settingsQuery.data?.agentWorkspacePath]);
@@ -86,6 +90,7 @@ export function AgentCommandSettings() {
         agentCommand: command,
         codexCommand,
         defaultAgent: defaultAgent === "codex" ? "codex" : null,
+        agentAutoPostEnabled: autoPost,
         agentWorkspacePath: workspace,
         inboxInsightEnabled: insightEnabled,
         inboxInsightModel: insightModel,
@@ -179,6 +184,27 @@ export function AgentCommandSettings() {
             folder.
           </span>
         </label>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoPost}
+              onChange={(event) => setAutoPost(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Post the comments agents propose without asking each time
+          </label>
+          <span className="text-xs text-muted-foreground">
+            An agent has no Azure DevOps access; it writes a proposed comment into the note and
+            DevDeck posts it with your account. Every posted comment ends with a signature naming
+            the agent ("— 🤖 Posted by Claude (via DevDeck)"), added by DevDeck. Off: you post
+            each one with C in the Agent panel. On: comments are posted as they appear for the
+            work item / pull request the panel is showing, at most 3 per item and 10 per hour,
+            never the same text twice; a comment with a link or @mention still waits for you.
+            Read-only validation mode never posts.
+          </span>
+        </div>
 
         <div className="grid gap-2">
           <label className="flex items-center gap-2 text-sm font-medium">

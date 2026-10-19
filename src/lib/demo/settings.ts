@@ -69,6 +69,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   agentCommand: null,
   codexCommand: null,
   defaultAgent: null,
+  agentAutoPostEnabled: false,
   claudeModel: null,
   codexModel: null,
   claudeModelChoices: null,
@@ -147,6 +148,10 @@ export function applyDemoSettingsUpdate(
       input && "defaultAgent" in input
         ? input.defaultAgent === "codex" ? "codex" : null
         : current.defaultAgent,
+    agentAutoPostEnabled:
+      input && "agentAutoPostEnabled" in input
+        ? input.agentAutoPostEnabled === true
+        : current.agentAutoPostEnabled,
     claudeModel:
       input && "claudeModel" in input
         ? input.claudeModel?.trim() || null

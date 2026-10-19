@@ -45,6 +45,7 @@ export const appSettingsSchema = z.object({
   agentCommand: z.string().nullable().default(null),
   codexCommand: z.string().nullable().default(null),
   defaultAgent: z.enum(["codex"]).nullable().catch(null).default(null),
+  agentAutoPostEnabled: z.boolean().default(false),
   claudeModel: z.string().nullable().default(null),
   codexModel: z.string().nullable().default(null),
   claudeModelChoices: z.string().nullable().default(null),
@@ -202,6 +203,7 @@ export type UpdateAppSettingsInput = {
   agentCommand?: string | null;
   codexCommand?: string | null;
   defaultAgent?: "codex" | null;
+  agentAutoPostEnabled?: boolean;
   claudeModel?: string | null;
   codexModel?: string | null;
   claudeModelChoices?: string | null;
