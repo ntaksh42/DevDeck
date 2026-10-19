@@ -122,7 +122,7 @@ PR に貼る文面そのもの
 
 ## 守ること
 
-- Azure DevOps には直接書き込まない (投稿は提案として DevDeck に任せる)。`az` CLI は使えない (DevDeck が未ログインの状態で起動する)。
+- Azure DevOps には書き込まない (コメントは上の提案として DevDeck に任せる)。`az` CLI は使えない (DevDeck が未ログインの状態で起動する)。
 - `git push` しない (DevDeck が push 先を無効にして起動する)。fetch や手元での commit はしてよい。
 - 必要な情報は `context_file` と手元のファイル (クローン・結果 HTML) から得る。足りなければ、何が要るかを返信で聞く。
 - 秘密情報 (PAT・トークン) を Note・返信・結果 HTML に書かない。
