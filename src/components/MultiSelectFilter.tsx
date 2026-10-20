@@ -123,10 +123,14 @@ export function MultiSelectFilter({
       e.preventDefault();
       e.stopPropagation();
       moveRow(-1);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.stopPropagation();
+      if (e.key === "Enter" && e.target instanceof HTMLInputElement) e.preventDefault();
     }
   }
 
   function onTriggerKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       setOpen(true);
@@ -220,6 +224,7 @@ export function MultiSelectFilter({
                     data-msf-row="true"
                     onClick={() => toggle(option.value)}
                     onKeyDown={(e) => {
+                      if (isImeComposing(e)) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         e.stopPropagation();

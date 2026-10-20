@@ -732,6 +732,7 @@ PR Search / Work Item Search と、Pipelines (Project / Pipeline / Watch / Queue
 中央に置き、狭いペインでは折り返す。
 
 PR Search / Work Item Search でパレット等から特定の項目を開く場合は、前の結果フィルター・列フィルター (Work Item の Stale only も含む) を解除し、その項目が古い絞り込みで隠れないようにする。
+複数選択フィルターの候補検索欄の Enter は親フォームを送信しない。IME 変換確定の Enter でポップオーバーを開いたり、候補を選択したりしない。
 
 空き領域には次の操作の候補を置く。
 - PR Search / Work Item Search: 検索前の一覧に「Recent searches」(実行した検索の直近 5 件。クエリ・フィルタ要約・
