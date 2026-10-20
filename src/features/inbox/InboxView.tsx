@@ -16,7 +16,10 @@ import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 import { useDockFilter } from "@/components/DockFilterBar";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { ColumnFilterDropdown } from "@/components/ColumnFilterDropdown";
 import { SnoozeMenu } from "@/components/SnoozeMenu";
+import { toggleColumnFilterValue } from "@/lib/columnFilters";
+import type { InboxFilterColumn } from "./inboxColumnFilters";
 import { usePublishAgentListScope } from "@/components/agent/agentListScope";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { inboxListKeyHandler } from "./inboxListKeyHandler";
@@ -52,6 +55,10 @@ export function InboxView() {
   const [priority, setPriority] = useState<InboxPriority>("all");
   const [organizationId, setOrganizationId] = useState("");
   const [filterText, setFilterText] = useState("");
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<InboxFilterColumn, Set<string>>>>({});
+  const [openFilterCol, setOpenFilterCol] = useState<InboxFilterColumn | null>(null);
+  const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const filterButtonRef = useRef<HTMLElement | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [snoozeAnchor, setSnoozeAnchor] = useState<DOMRect | null>(null);
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number }>();
@@ -80,11 +87,12 @@ export function InboxView() {
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
   const insightEnabled = settingsQuery.data?.inboxInsightEnabled ?? false;
 
-  const { entries: fetchedEntries, priorityCounts, isLoading, error, refetch } = useInboxEntries({
+  const { entries: fetchedEntries, priorityCounts, columnUniqueValues, isLoading, error, refetch } = useInboxEntries({
     tab,
     priority,
     organizationId,
     filterText,
+    columnFilters,
   });
   const stateChanges = useInboxStateChanges({
     entries: fetchedEntries,
@@ -247,6 +255,23 @@ export function InboxView() {
     if (anchor) setSnoozeAnchor(anchor.getBoundingClientRect());
   }
 
+  function openColumnFilter(column: InboxFilterColumn, anchorEl: HTMLButtonElement) {
+    filterButtonRef.current = anchorEl;
+    setFilterAnchorRect(anchorEl.getBoundingClientRect());
+    setOpenFilterCol(column);
+  }
+
+  function closeColumnFilter() {
+    setOpenFilterCol(null);
+    setFilterAnchorRect(null);
+  }
+
+  /** Every column-filter change narrows the list, so the selection restarts at the top. */
+  function updateColumnFilters(update: (prev: typeof columnFilters) => typeof columnFilters) {
+    setColumnFilters(update);
+    setSelectedIndex(0);
+  }
+
   function switchTab(next: InboxTab) {
     setTab(next);
     setSelectedIndex(0);
@@ -308,6 +333,9 @@ export function InboxView() {
           tabCounts={tabCounts}
           onTabChange={switchTab}
           filterText={filterText}
+          columnFilters={columnFilters}
+          onOpenColumnFilter={openColumnFilter}
+          onClearColumnFilters={() => updateColumnFilters(() => ({}))}
           listRef={listRef}
           focusHandlers={listFocus}
           onFocusList={() => focusRow(index)}
@@ -401,6 +429,28 @@ export function InboxView() {
       }}
     >
       <DockableWorkspace storageKey={LAYOUT_STORAGE_KEY} panels={panels} activatePanel={activateRequest} />
+
+      {openFilterCol && filterAnchorRect ? (
+        <ColumnFilterDropdown
+          anchorRect={filterAnchorRect}
+          allValues={columnUniqueValues[openFilterCol] ?? []}
+          activeValues={columnFilters[openFilterCol]}
+          onToggle={(value) =>
+            updateColumnFilters((prev) =>
+              toggleColumnFilterValue(prev, openFilterCol, value, columnUniqueValues[openFilterCol] ?? []),
+            )
+          }
+          onClearAll={() =>
+            updateColumnFilters((prev) => {
+              const { [openFilterCol]: _, ...rest } = prev;
+              return rest;
+            })
+          }
+          onUncheckAll={() => updateColumnFilters((prev) => ({ ...prev, [openFilterCol]: new Set<string>() }))}
+          restoreFocusRef={filterButtonRef}
+          onClose={closeColumnFilter}
+        />
+      ) : null}
 
       {snoozeAnchor && selected ? (
         <SnoozeMenu

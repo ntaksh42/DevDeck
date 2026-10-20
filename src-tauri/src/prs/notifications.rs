@@ -5,10 +5,10 @@ use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::sync::{PrNotificationItem, PrNotificationKind, SyncBudget};
 
 // Threads are only fetched for the most recently created review PRs each sync.
-pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 50;
+pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 100;
 // ...and for the user's own most recent active PRs (Inbox only), so replies to
 // the user's PRs show up without listing them live on every sync.
-pub(crate) const AUTHORED_PR_SCAN_LIMIT: usize = 30;
+pub(crate) const AUTHORED_PR_SCAN_LIMIT: usize = 60;
 // Concurrent thread fetches, mirroring CI_FETCH_CONCURRENCY so the comment scan
 // does not serialize up to 50 network round-trips and block the sync loop.
 const PR_COMMENT_FETCH_CONCURRENCY: usize = 6;

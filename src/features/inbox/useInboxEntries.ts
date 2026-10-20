@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getActionInboxCounts, listActionInboxItems } from "@/lib/azdoCommands";
+import { applyColumnFilters, columnFilterUniqueValues } from "@/lib/columnFilters";
+import { INBOX_FILTERABLE_COLUMNS, type InboxFilterColumn } from "./inboxColumnFilters";
 import { matchesInboxFilter, matchesInboxPriority, type InboxEntry, type InboxPriority, type InboxTab } from "./inboxPresentation";
 
 /** Sidebar badge: the number of open Inbox items, the same count the Inbox lists. */
@@ -18,11 +20,13 @@ export function useInboxEntries({
   tab,
   organizationId,
   filterText,
+  columnFilters,
   priority,
 }: {
   tab: InboxTab;
   organizationId: string;
   filterText: string;
+  columnFilters: Partial<Record<InboxFilterColumn, Set<string>>>;
   priority: InboxPriority;
 }) {
   const listQuery = useQuery({
@@ -33,9 +37,18 @@ export function useInboxEntries({
     placeholderData: keepPreviousData,
   });
 
-  const textMatches = useMemo<InboxEntry[]>(
+  const searchMatches = useMemo<InboxEntry[]>(
     () => (listQuery.data ?? []).filter((entry) => matchesInboxFilter(entry, filterText)),
     [listQuery.data, filterText],
+  );
+  /** Values each column filter offers: those present once the text filter has applied. */
+  const columnUniqueValues = useMemo(
+    () => columnFilterUniqueValues(searchMatches, INBOX_FILTERABLE_COLUMNS),
+    [searchMatches],
+  );
+  const textMatches = useMemo(
+    () => applyColumnFilters(searchMatches, columnFilters, INBOX_FILTERABLE_COLUMNS),
+    [searchMatches, columnFilters],
   );
   const entries = useMemo(
     () => textMatches.filter((entry) => matchesInboxPriority(entry, priority)),
@@ -50,6 +63,7 @@ export function useInboxEntries({
   return {
     entries,
     priorityCounts,
+    columnUniqueValues,
     isLoading: listQuery.isLoading,
     error: listQuery.isError ? listQuery.error : null,
     refetch: () => void listQuery.refetch(),

@@ -1,7 +1,10 @@
 import type { KeyboardEvent, RefObject } from "react";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
+import { activeColumnFilterCount } from "@/lib/columnFilters";
 import { isEditableTarget } from "@/lib/utils";
+import { InboxColumnFilterBar } from "./InboxColumnFilterBar";
+import type { InboxFilterColumn } from "./inboxColumnFilters";
 import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
@@ -25,6 +28,9 @@ export function InboxListPane({
   tabCounts,
   onTabChange,
   filterText,
+  columnFilters,
+  onOpenColumnFilter,
+  onClearColumnFilters,
   listRef,
   focusHandlers,
   onFocusList,
@@ -47,6 +53,9 @@ export function InboxListPane({
   tabCounts: Record<InboxTab, number>;
   onTabChange: (tab: InboxTab) => void;
   filterText: string;
+  columnFilters: Partial<Record<InboxFilterColumn, Set<string>>>;
+  onOpenColumnFilter: (column: InboxFilterColumn, anchorEl: HTMLButtonElement) => void;
+  onClearColumnFilters: () => void;
   listRef: RefObject<HTMLDivElement | null>;
   focusHandlers: ReturnType<typeof useInboxListFocus>;
   onFocusList: () => void;
@@ -81,6 +90,11 @@ export function InboxListPane({
       onKeyDown={handleSectionKeyDown}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
     >
+      <InboxColumnFilterBar
+        columnFilters={columnFilters}
+        onOpenFilter={onOpenColumnFilter}
+        onClear={onClearColumnFilters}
+      />
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : isLoading ? (
@@ -103,7 +117,7 @@ export function InboxListPane({
         >
           {entries.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {filterText.trim() || priority !== "all" ? "No items match the filter." : EMPTY_MESSAGE[tab]}
+              {filterText.trim() || priority !== "all" || activeColumnFilterCount(columnFilters) > 0 ? "No items match the filter." : EMPTY_MESSAGE[tab]}
             </div>
           ) : (
             <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto">

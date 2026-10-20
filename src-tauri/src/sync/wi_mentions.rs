@@ -25,12 +25,12 @@ const MENTION_WIQLS: [&str; 2] = [
     "SELECT [System.Id] FROM WorkItems WHERE [System.Id] IN @RecentMentions \
      ORDER BY [System.ChangedDate] DESC",
 ];
-const MENTION_QUERY_TOP: usize = 50;
+const MENTION_QUERY_TOP: usize = 100;
 /// Upper bound of comment fetches per sync pass.
-const MAX_COMMENT_FETCHES: usize = 25;
-const COMMENTS_PER_ITEM: u32 = 50;
+const MAX_COMMENT_FETCHES: usize = 50;
+const COMMENTS_PER_ITEM: u32 = 100;
 /// How many assigned items the fallback looks at.
-const FALLBACK_ITEMS: usize = 15;
+const FALLBACK_ITEMS: usize = 30;
 const SNIPPET_CHARS: usize = 140;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
