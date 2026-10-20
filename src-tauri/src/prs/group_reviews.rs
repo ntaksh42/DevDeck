@@ -60,12 +60,27 @@ pub(crate) async fn member_group_ids(
         }
         Err(e) => {
             tracing::warn!(org = %org.name, error = %e, "sync: failed to list group memberships");
-            (
-                HashSet::new(),
-                Some(format!(
-                    "Reviews requested from your groups/teams are not included: {e}."
-                )),
-            )
+            // Group membership rarely changes, so an expired lookup still beats
+            // dropping every team review until the next successful lookup.
+            let stale = entries()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .get(&key)
+                .map(|(_, ids)| ids.clone());
+            match stale {
+                Some(ids) => (
+                    ids.into_iter().collect(),
+                    Some(format!(
+                        "Group membership lookup failed; using the previous group list: {e}."
+                    )),
+                ),
+                None => (
+                    HashSet::new(),
+                    Some(format!(
+                        "Reviews requested from your groups/teams are not included: {e}."
+                    )),
+                ),
+            }
         }
     }
 }
