@@ -1,10 +1,8 @@
 //! Starts the user's agent command (Settings) for one item's notes, so a note
 //! can be handed over without switching to a terminal.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 
@@ -127,13 +125,6 @@ pub(crate) fn is_plain_folder_name(name: &str) -> bool {
         && !name.chars().any(char::is_control)
 }
 
-/// Folders an agent was started in and has not exited yet: two agents editing
-/// the same working tree would collide.
-fn running_dirs() -> &'static Mutex<HashSet<PathBuf>> {
-    static RUNNING: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
-    RUNNING.get_or_init(|| Mutex::new(HashSet::new()))
-}
-
 /// Placeholders in the command: `{target}` (`work-item` / `pull-request`),
 /// `{id}` (item id), `{notes}` (the item's notes folder), `{workspace}` (the
 /// workspace folder, empty when unset), `{repo}` (the repository name, empty
@@ -149,18 +140,6 @@ pub(crate) fn run_agent(
 ) -> Result<()> {
     let command = expand(agent, command, launch, target, item_id)?;
     let work_dir = launch.work_dir();
-
-    {
-        let mut running = running_dirs()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if !running.insert(work_dir.clone()) {
-            return Err(AppError::InvalidInput(format!(
-                "An agent is already running in {}",
-                work_dir.display()
-            )));
-        }
-    }
 
     let az_dir = launch.notes_root.join(ISOLATED_AZ_DIR);
     std::fs::create_dir_all(&az_dir)?;
@@ -178,33 +157,17 @@ pub(crate) fn run_agent(
     for var in AZURE_TOKEN_VARS {
         cmd.env_remove(var);
     }
-    let spawned = cmd
+    let mut child = cmd
         .current_dir(&work_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn();
-    match spawned {
-        Ok(mut child) => {
-            // The command is not waited on by the request, but something has
-            // to reap it and free the folder once it exits.
-            std::thread::spawn(move || {
-                let _ = child.wait();
-                running_dirs()
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .remove(&work_dir);
-            });
-            Ok(())
-        }
-        Err(e) => {
-            running_dirs()
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .remove(&work_dir);
-            Err(e.into())
-        }
-    }
+        .spawn()?;
+    // The command is not waited on by the request, but something has to reap it.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 /// The system shell running `command`. On Windows the string is handed to

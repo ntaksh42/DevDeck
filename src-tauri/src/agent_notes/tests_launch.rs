@@ -244,33 +244,18 @@ fn the_agent_cannot_push_with_git() {
 }
 
 #[test]
-fn a_second_agent_in_the_same_folder_is_refused_until_the_first_exits() {
+fn agents_can_run_in_the_same_folder_at_once() {
     let root = tempfile::tempdir().unwrap();
     let result = root.path().join("results");
     std::fs::create_dir_all(&result).unwrap();
     let ctx = launch(&result, None, None);
 
-    // A long-lived command keeps the folder busy.
+    // A long-lived command keeps the first agent running.
     #[cfg(windows)]
     let slow = "ping -n 4 127.0.0.1 > NUL";
     #[cfg(not(windows))]
     let slow = "sleep 3";
 
     run_agent(&ctx, AgentKind::Claude, Some(slow), NoteTarget::WorkItem, 1).unwrap();
-    let second = run_agent(&ctx, AgentKind::Claude, Some(slow), NoteTarget::WorkItem, 2);
-    assert!(
-        matches!(second, Err(AppError::InvalidInput(message)) if message.contains("already running"))
-    );
-
-    // Another folder is independent.
-    let other = root.path().join("other");
-    std::fs::create_dir_all(&other).unwrap();
-    run_agent(
-        &launch(&other, None, None),
-        AgentKind::Claude,
-        Some(slow),
-        NoteTarget::WorkItem,
-        3,
-    )
-    .unwrap();
+    run_agent(&ctx, AgentKind::Claude, Some(slow), NoteTarget::WorkItem, 2).unwrap();
 }
