@@ -251,6 +251,7 @@ export function WorkItemsGrid({
         setStaleOnly={state.setStaleOnly}
         staleCount={g.staleCount}
         staleThresholdDays={g.staleThresholdDays}
+        fitWidths={{ auto: state.autoColumnWidths, onFit: state.resetColumnWidths }}
         setColumnMenuRect={state.setColumnMenuRect}
       />
     </div>
@@ -442,7 +443,6 @@ export function WorkItemsGrid({
           requiredColumns={WI_GRID_REQUIRED_COLUMNS}
           onToggle={state.toggleColumnVisibility}
           onReset={state.resetColumnVisibility}
-          onAutoFitWidths={state.resetColumnWidths}
           onClose={() => state.setColumnMenuRect(null)}
         >
           {fieldColumnsSource && onExtraColumnsChange ? (

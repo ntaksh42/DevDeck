@@ -23,7 +23,7 @@ type StateToggle = { count: number; active: boolean; onToggle: () => void };
 /**
  * The status bar under a docked list pane. Left: `N items` plus view-specific
  * extras joined with " · ". Right, always in this order and omitted when a view
- * has none of it: filters, Done, Snoozed, Stale, Columns, then `?` (opens Help
+ * has none of it: filters, Done, Snoozed, Stale, Fit, Columns, then `?` (opens Help
  * at the view's section).
  */
 export function ListStatusBar({
@@ -33,6 +33,7 @@ export function ListStatusBar({
   done,
   snoozed,
   stale,
+  fitWidths,
   onColumns,
   helpSection,
 }: {
@@ -44,6 +45,8 @@ export function ListStatusBar({
   done?: StateToggle;
   snoozed?: StateToggle;
   stale?: StateToggle & { thresholdDays: number };
+  /** Re-fits the grid's column widths to content; `auto` = widths already follow content. */
+  fitWidths?: { auto: boolean; onFit: () => void };
   onColumns?: (rect: DOMRect) => void;
   helpSection?: HelpSection;
 }) {
@@ -99,6 +102,20 @@ export function ListStatusBar({
           >
             <AlertTriangle className="h-3 w-3" aria-hidden="true" />
             Stale {stale.count}
+          </button>
+        ) : null}
+        {fitWidths ? (
+          <button
+            type="button"
+            title={
+              fitWidths.auto
+                ? "Column widths follow content (click to re-fit)"
+                : "Fit column widths to content (widths were resized by hand)"
+            }
+            onClick={fitWidths.onFit}
+            className={`${BUTTON} ${fitWidths.auto ? EMPTY : IDLE}`}
+          >
+            Fit
           </button>
         ) : null}
         {onColumns ? (

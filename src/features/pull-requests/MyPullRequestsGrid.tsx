@@ -146,6 +146,7 @@ export function MyPullRequestsGrid() {
   const {
     template,
     minWidth: gridMinWidth,
+    autoWidths,
     resetWidths,
     gridRef,
     resizeProps: columnResizeProps,
@@ -439,6 +440,7 @@ export function MyPullRequestsGrid() {
           selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null,
           query.isFetching ? "refreshing…" : null,
         ]}
+        fitWidths={{ auto: autoWidths, onFit: resetWidths }}
         onColumns={setColumnMenuRect}
         helpSection="reviews"
       />
@@ -489,7 +491,6 @@ export function MyPullRequestsGrid() {
             resetColumns();
             resetWidths();
           }}
-          onAutoFitWidths={resetWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

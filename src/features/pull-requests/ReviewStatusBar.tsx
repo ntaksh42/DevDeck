@@ -26,6 +26,7 @@ type ReviewStatusBarProps = {
   onToggleShowDone: () => void;
   onToggleShowSnoozed: () => void;
   onClearAllFilters: () => void;
+  fitWidths: { auto: boolean; onFit: () => void };
   onOpenColumnMenu: (rect: DOMRect) => void;
   onSnoozeSelected: (rect: DOMRect) => void;
 };
@@ -51,6 +52,7 @@ export function ReviewStatusBar({
   onToggleShowDone,
   onToggleShowSnoozed,
   onClearAllFilters,
+  fitWidths,
   onOpenColumnMenu,
   onSnoozeSelected,
 }: ReviewStatusBarProps) {
@@ -80,6 +82,7 @@ export function ReviewStatusBar({
       }
       done={{ count: archivedKeys.size, active: showDone, onToggle: onToggleShowDone }}
       snoozed={{ count: snoozedCount, active: showSnoozed, onToggle: onToggleShowSnoozed }}
+      fitWidths={fitWidths}
       onColumns={onOpenColumnMenu}
       helpSection="reviews"
     >

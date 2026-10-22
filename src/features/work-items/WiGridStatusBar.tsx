@@ -25,6 +25,7 @@ export function WiGridStatusBar({
   setStaleOnly,
   staleCount,
   staleThresholdDays,
+  fitWidths,
   setColumnMenuRect,
 }: {
   loading: boolean;
@@ -48,6 +49,7 @@ export function WiGridStatusBar({
   setStaleOnly: React.Dispatch<React.SetStateAction<boolean>>;
   staleCount: number;
   staleThresholdDays: number;
+  fitWidths: { auto: boolean; onFit: () => void };
   setColumnMenuRect: React.Dispatch<React.SetStateAction<DOMRect | null>>;
 }) {
   const count = loading
@@ -89,6 +91,7 @@ export function WiGridStatusBar({
             }
           : undefined
       }
+      fitWidths={fitWidths}
       onColumns={(rect) => setColumnMenuRect(rect)}
       helpSection="work-items"
     />

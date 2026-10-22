@@ -87,7 +87,7 @@ export function PullRequestResults({
   });
   const {
     template: columnTemplate,
-    minWidth: gridMinWidth,
+    minWidth: gridMinWidth, autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
     gridRef,
     resizeProps: columnResizeProps,
@@ -434,6 +434,7 @@ export function PullRequestResults({
       <ListStatusBar
         summary={[countLabel, selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null]}
         filters={<ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />}
+        fitWidths={{ auto: autoColumnWidths, onFit: resetColumnWidths }}
         onColumns={setColumnMenuRect}
         helpSection="pr-search"
       />
@@ -491,7 +492,6 @@ export function PullRequestResults({
           requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
           onToggle={toggleColumn}
           onReset={resetColumns}
-          onAutoFitWidths={resetColumnWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

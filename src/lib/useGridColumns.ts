@@ -24,7 +24,7 @@ export type ColumnResizeProps = {
 /**
  * Whether a grid's widths are auto-managed. Grids start in auto mode, and so
  * do users whose stored widths are still the untouched defaults; a manual
- * resize switches to manual until "Auto-fit widths" is chosen again.
+ * resize switches to manual until the status bar's "Fit" is chosen again.
  */
 function readAutoMode(storageKey: string, defaults: number[]): boolean {
   const mode = localStorage.getItem(`${storageKey}:mode`);
@@ -69,6 +69,8 @@ export function useGridColumns<K extends string>(options: {
   setWidths: Dispatch<SetStateAction<number[]>>;
   template: string;
   minWidth: number;
+  /** True while widths follow the content (no manual resize since the last fit). */
+  autoWidths: boolean;
   /** Returns to auto mode and re-fits the columns to their content. */
   resetWidths: () => void;
   gridRef: (element: HTMLElement | null) => void;
@@ -241,6 +243,7 @@ export function useGridColumns<K extends string>(options: {
     setWidths,
     template,
     minWidth,
+    autoWidths: autoMode,
     resetWidths: () => {
       setWidths([...defaults]);
       setAutoMode(true);

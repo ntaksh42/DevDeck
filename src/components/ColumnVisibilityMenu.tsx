@@ -20,7 +20,6 @@ export function ColumnVisibilityMenu<K extends string>({
   requiredColumns,
   onToggle,
   onReset,
-  onAutoFitWidths,
   onClose,
   children,
 }: {
@@ -30,8 +29,6 @@ export function ColumnVisibilityMenu<K extends string>({
   requiredColumns: K[];
   onToggle: (key: K) => void;
   onReset: () => void;
-  /** Re-enables automatic, content-based column widths. */
-  onAutoFitWidths?: () => void;
   onClose: () => void;
   children?: ReactNode;
 }) {
@@ -164,16 +161,6 @@ export function ColumnVisibilityMenu<K extends string>({
         >
           Show all
         </button>
-        {onAutoFitWidths ? (
-          <button
-            type="button"
-            data-colvis-item="true"
-            onClick={onAutoFitWidths}
-            className="w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            Auto-fit widths
-          </button>
-        ) : null}
       </div>
     </div>
   );

@@ -60,6 +60,7 @@ export function useWiGridState({
   const {
     template: wiColTemplate,
     minWidth: gridMinWidth,
+    autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
     gridRef,
     resizeProps: columnResizeProps,
@@ -204,7 +205,7 @@ export function useWiGridState({
     sort, setWiSort, applyWiSort,
     visibleColumns, setVisibleColumns,
     toggleColumnVisibility, resetColumnVisibility,
-    wiColTemplate, gridMinWidth, resetColumnWidths, gridRef, columnResizeProps,
+    wiColTemplate, gridMinWidth, autoColumnWidths, resetColumnWidths, gridRef, columnResizeProps,
     copyToast, setCopyToast,
     checkedIds, setCheckedIds,
     lastCheckedIndex, setLastCheckedIndex,

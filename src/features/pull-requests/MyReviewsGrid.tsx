@@ -403,6 +403,7 @@ export function MyReviewsGrid({
             onToggleShowDone={() => { g.setShowDone((v) => !v); }}
             onToggleShowSnoozed={() => g.setShowSnoozed((v) => !v)}
             onClearAllFilters={g.clearAllFilters}
+            fitWidths={{ auto: g.autoColumnWidths, onFit: g.resetColumnWidths }}
             onOpenColumnMenu={(rect) => g.setColumnMenuRect(rect)}
             onSnoozeSelected={(rect) => {
               g.snoozeTargetRef.current = [...g.selectedPrs];
@@ -458,7 +459,6 @@ export function MyReviewsGrid({
           requiredColumns={PR_GRID_REQUIRED_COLUMNS}
           onToggle={g.toggleColumn}
           onReset={g.resetColumns}
-          onAutoFitWidths={g.resetColumnWidths}
           onClose={() => g.setColumnMenuRect(null)}
         />
       ) : null}

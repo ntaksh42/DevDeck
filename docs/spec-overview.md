@@ -587,7 +587,7 @@ Work Item Search は以前 `I` だったが、Inbox の追加で `F` (Find) へ�
 ドックの一覧ペイン (My Reviews / My Pull Requests / PR Search の結果 / Work Items 系グリッド (My Items・Views・WI Search) / Inbox / Pipelines の Watched board) の下端は、共通コンポーネント `ListStatusBar` (`src/components/ListStatusBar.tsx`) で同じ書式にする。
 
 - 左: `N items` + View 固有の補足を ` · ` で区切る (例: `6 items · 2 not voted · 3 changed files`、`5 items · updated just now`、PR Search の検索前は `No search yet`)。複数選択の件数・衝突リスクなどの操作ボタンも左に置く。
-- 右 (この順で固定、持たない View は出さない): 有効フィルタ数と Clear filters → `Done N` → `Snoozed N` → `Stale N` → `Columns` → `?`。
+- 右 (この順で固定、持たない View は出さない): 有効フィルタ数と Clear filters → `Done N` → `Snoozed N` → `Stale N` → `Fit` → `Columns` → `?`。
 - `Done N` / `Snoozed N` / `Stale N` は件数が 0 で押されていない間、枠を消した薄い文字にする (押せる操作は変わらない)。
 - `Done N` / `Snoozed N` は一覧をその状態に切り替えるトグル (`aria-pressed`)。有効な間はタブ帯に解除チップを出し、チップの ✕ か一覧上の `Esc` で Open の一覧へ戻る (フォーカスはグリッドへ戻す)。件数は Done がローカルのトリアージ件数、Snoozed が有効なスヌーズ件数 (`useSnoozedCount`)。
 - `?` (aria-label「Show keyboard shortcuts for this view」) は window イベント `azdodeck:help:open` (`src/lib/helpEvents.ts`) で App に Help を開かせ、その View のキー一覧の節 (reviews / pr-search / work-items / pipelines / inbox) へスクロールして見出しを強調する。押す前にグリッドへフォーカスを移すので、Help を閉じるとグリッドに戻る。
@@ -935,7 +935,8 @@ format!(
   グリッドが空になる (再検索など) か表示列が変わると再計測する。(b) 列境界のダブルクリックでその列を内容幅に合わせる。
   (c) ペインが列幅の合計より狭いときは、余白列以外を最小幅まで縮めてから余白列を縮め、それでも足りない分だけ横スクロールにする
   (保存幅は変えない表示上の調整)。ドラッグかダブルクリックで手動モードになり (`<storageKey>:mode` に保存)、
-  Columns メニューの「Auto-fit widths」で自動モードに戻る。
+  ステータスバーの `Fit` ボタン (Columns の左) で自動モードに戻り、全列を再計測する。`Fit` は手動モード中だけ枠付きで表示し、
+  自動モード中は控えめな文字表示にして現在のモードを示す。
   検索画面 (PR Search / Work Items) の条件欄は `src/components/SearchBar.tsx` の部品で揃え、ラベルなしの
   1 行 (検索ボックス・スコープ選択・Filters 開閉ボタン〔設定済み件数バッジ〕・Search ボタン) に並べ、頻度の低い条件は
   Filters で開く 2 行目に置く。ネイティブ `<select>` は `NativeSelect` でカスタムドロップダウンと同じ枠・矢印に揃える。
