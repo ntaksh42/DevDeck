@@ -38,7 +38,6 @@ scripts/*
 .claude/skills/*
 !.claude/skills/close-rejected-issues/
 !.claude/skills/release-azdo-dashboard/
-!.claude/skills/review-loop/
 entity_id
 local_id
 origin_id
