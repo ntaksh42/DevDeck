@@ -311,8 +311,8 @@ export function MyReviewsGrid({
                   className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                   style={{ gridTemplateColumns: g.COLS }}
                 >
-                  {g.visibleColumns.map((col, i) => {
-                    const isLast = i === g.visibleColumns.length - 1;
+                  {g.shownColumns.map((col, i) => {
+                    const isLast = i === g.shownColumns.length - 1;
                     return (
                       <SortHeaderButton
                         key={col}
@@ -366,7 +366,7 @@ export function MyReviewsGrid({
                           selected={row.prIndex === g.selectedIndex}
                           inMultiSelection={g.selectedKeys.has(reviewTriageKey(row.pr))}
                           returned={g.returnedKeys.has(reviewTriageKey(row.pr))}
-                          visibleColumns={g.visibleColumns}
+                          visibleColumns={g.shownColumns}
                           staleThresholdDays={g.staleThresholdDays}
                           rowRefs={g.rowRefs}
                           setSelectedIndex={g.setSelectedIndex}

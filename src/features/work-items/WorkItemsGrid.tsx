@@ -190,7 +190,7 @@ export function WorkItemsGrid({
             setCheckedIds={state.setCheckedIds}
             setLastCheckedIndex={state.setLastCheckedIndex}
             wiColTemplate={state.wiColTemplate}
-            visibleColumns={state.visibleColumns}
+            visibleColumns={state.shownColumns}
             sort={state.sort}
             onSort={state.applyWiSort}
             columnFilters={state.columnFilters}
@@ -213,7 +213,7 @@ export function WorkItemsGrid({
             checkedIds={state.checkedIds}
             unreadKeys={g.unreadKeys}
             wiColTemplate={state.wiColTemplate}
-            visibleColumns={state.visibleColumns}
+            visibleColumns={state.shownColumns}
             extraColumns={extraColumns}
             staleThresholdDays={g.staleThresholdDays}
             rowColorRules={g.rowColorRules}

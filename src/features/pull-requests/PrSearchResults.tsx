@@ -89,12 +89,12 @@ export function PullRequestResults({
     template: columnTemplate,
     minWidth: gridMinWidth, autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_SEARCH_KEYS,
     visibleColumns,
-    flexibleKey: "title",
+    flexibleKey: "title", autoHide: ["branch", "date"],
     defaults: DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
     min: PR_SEARCH_COLUMN_MIN_WIDTHS,
     max: PR_SEARCH_COLUMN_MAX_WIDTHS,
@@ -360,9 +360,9 @@ export function PullRequestResults({
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: columnTemplate }}
           >
-            {visibleColumns.map((key, i) => {
+            {shownColumns.map((key, i) => {
               const filterKey = PR_SEARCH_COLUMN_FILTER_KEY[key];
-              const isLast = i === visibleColumns.length - 1;
+              const isLast = i === shownColumns.length - 1;
               return (
                 <div key={key} role="columnheader" className="relative min-w-0 px-1">
                   <div className="flex min-w-0 items-center">
@@ -417,7 +417,7 @@ export function PullRequestResults({
                       `${pr.repositoryId}:${pr.pullRequestId}`,
                     )}
                     columnTemplate={columnTemplate}
-                    visibleColumns={visibleColumns}
+                    visibleColumns={shownColumns}
                     rowRefs={rowRefs}
                     handleRowClick={selection.handleRowClick}
                     setSelectedIndex={setSelectedIndex}

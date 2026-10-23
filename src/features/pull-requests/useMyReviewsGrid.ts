@@ -138,12 +138,13 @@ export function useMyReviewsGrid({
     minWidth: gridMinWidth,
     autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_GRID_KEYS,
     visibleColumns,
     flexibleKey: 'title',
+    autoHide: ['targetRefName', 'myIsRequired', 'creationDate', 'reviewAge'],
     defaults: DEFAULT_PR_GRID_COLUMN_WIDTHS,
     min: PR_GRID_COLUMN_MIN_WIDTHS,
     max: PR_GRID_COLUMN_MAX_WIDTHS,
@@ -446,7 +447,7 @@ export function useMyReviewsGrid({
     filterButtonRef, filterInputRef,
     showDone, setShowDone, showSnoozed, setShowSnoozed, snoozedCount, leaveStateView,
     // columns
-    visibleColumns, toggleColumn, resetColumns,
+    visibleColumns, shownColumns, toggleColumn, resetColumns,
     // data
     allPrs, sortedPrs, filterSuggestionPool, columnUniqueValues,
     returnedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,

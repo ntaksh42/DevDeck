@@ -148,12 +148,12 @@ export function MyPullRequestsGrid() {
     minWidth: gridMinWidth,
     autoWidths,
     resetWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: GRID_KEYS,
     visibleColumns,
-    flexibleKey: "title",
+    flexibleKey: "title", autoHide: ["targetRefName", "creationDate"],
     defaults: DEFAULT_COLUMN_WIDTHS,
     min: COLUMN_MIN_WIDTHS,
     max: COLUMN_MAX_WIDTHS,
@@ -391,14 +391,14 @@ export function MyPullRequestsGrid() {
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: template }}
             >
-              {visibleColumns.map((col, i) => (
+              {shownColumns.map((col, i) => (
                 <SortHeaderButton
                   key={col}
                   column={col}
                   sort={sort}
                   onSort={applySort}
                   resizeHandle={
-                    i === visibleColumns.length - 1 ? undefined : (
+                    i === shownColumns.length - 1 ? undefined : (
                       <ColumnResizeHandle {...columnResizeProps(col)} />
                     )
                   }
@@ -418,7 +418,7 @@ export function MyPullRequestsGrid() {
                     index={index}
                     pr={pr}
                     columnTemplate={template}
-                    visibleColumns={visibleColumns}
+                    visibleColumns={shownColumns}
                     selected={index === selectedIndex}
                     inMultiSelection={selection.selectedKeys.has(
                       `${pr.repositoryId}:${pr.pullRequestId}`,

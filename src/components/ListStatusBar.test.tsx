@@ -19,7 +19,7 @@ describe("ListStatusBar", () => {
         done={{ count: 2, active: false, onToggle: () => undefined }}
         snoozed={{ count: 0, active: true, onToggle: () => undefined }}
         stale={{ count: 3, active: false, onToggle: () => undefined, thresholdDays: 14 }}
-        fitWidths={{ auto: true, onFit: () => undefined }}
+        fitWidths={{ auto: false, onFit: () => undefined }}
         onColumns={() => undefined}
       />,
     );
@@ -33,17 +33,14 @@ describe("ListStatusBar", () => {
     expect(screen.getByText("1 item")).toBeTruthy();
   });
 
-  it("re-fits column widths from Fit and frames it only after a manual resize", () => {
+  it("shows Fit only after a manual resize and re-fits from it", () => {
     const onFit = vi.fn();
     const { rerender } = render(<ListStatusBar summary={["1 item"]} fitWidths={{ auto: true, onFit }} />);
-    const fit = screen.getByRole("button", { name: "Fit" });
-    expect(fit.className).toContain("border-transparent");
-
-    fireEvent.click(fit);
-    expect(onFit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Fit" })).toBeNull();
 
     rerender(<ListStatusBar summary={["1 item"]} fitWidths={{ auto: false, onFit }} />);
-    expect(screen.getByRole("button", { name: "Fit" }).className).toContain("border-border");
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    expect(onFit).toHaveBeenCalledTimes(1);
   });
 
   it("asks the app to open Help at the view's section from the ? button", () => {
