@@ -417,7 +417,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   PR コメント通知のスレッド取得も同じ共有セマフォを通る。
   同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 12) で上限を設け、
   ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。
-- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録する。
+- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録し、以前取得できたグループ一覧が残っていればそれで続行する。active PR 一覧が上限 (`PROJECT_PR_SYNC_TOP`) に達したプロジェクトでは一覧が欠けるため、グループ ID ごとに `searchCriteria.reviewerId` で取得してレビュー対象を補完する (`prs/group_reviews_capped.rs`。1 件でも失敗したプロジェクトは前回の行を保持して警告に記録する)。`reviewerId` / `creatorId` の `$skip` ページングは、サーバーが `$top` より少なく返しても打ち切らず、空ページまで進める (`$skip` は実際に返った件数ぶん進め、重複は除く)。
   レビューキャッシュはプロジェクト単位で置換し、取得に失敗したプロジェクトだけ前回の行を保持する (1 プロジェクトの失敗で一覧全体が古いままにならない)。保持上限は 5000 件。
   ドラフトは既定で非表示だが、件数をタブ帯の Show Drafts チェックボックスに出し、チェックで表示する。
 - PR 同期: active PR とレビュー対象 PR の取得を重ね合わせ、CI ステータスは最新 50 件を後段で付与。

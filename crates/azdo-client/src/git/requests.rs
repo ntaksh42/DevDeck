@@ -286,6 +286,57 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Pages through the active PRs matching one `searchCriteria.*` filter.
+    ///
+    /// The server may return fewer than `$top` items per page (it applies its own
+    /// cap), so a short page does not mean the end: paging continues, advancing
+    /// `$skip` by what was actually returned, until an empty page. Duplicates from
+    /// a shifting result set are dropped.
+    async fn list_active_pull_requests_paged(
+        &self,
+        filter_key: &str,
+        filter_value: &str,
+        project_id: &str,
+        page_size: u32,
+    ) -> Result<Vec<GitPullRequest>> {
+        // Safety net against a server that never returns an empty page.
+        const MAX_PAGES: u32 = 200;
+        let path = format!("{project_id}/_apis/git/pullrequests");
+        let top_str = page_size.max(1).to_string();
+        let mut all: Vec<GitPullRequest> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut skip: u32 = 0;
+        for _ in 0..MAX_PAGES {
+            let skip_str = skip.to_string();
+            let response: ListResponse<GitPullRequest> = self
+                .get_json(
+                    &path,
+                    &[
+                        ("api-version", "7.1-preview"),
+                        (filter_key, filter_value),
+                        ("searchCriteria.status", "active"),
+                        ("$top", &top_str),
+                        ("$skip", &skip_str),
+                    ],
+                )
+                .await?;
+            if response.value.is_empty() {
+                break;
+            }
+            skip += response.value.len() as u32;
+            for pr in response.value {
+                let key = (
+                    pr.pull_request_id,
+                    pr.repository.as_ref().map(|r| r.id.clone()),
+                );
+                if seen.insert(key) {
+                    all.push(pr);
+                }
+            }
+        }
+        Ok(all)
+    }
+
     /// Lists every active PR where `reviewer_id` is a reviewer, paging through
     /// the result set with `$skip`/`$top` so projects with more reviewer PRs
     /// than a single page (`page_size`) are returned in full rather than being
@@ -296,34 +347,13 @@ impl AdoClient {
         reviewer_id: &str,
         page_size: u32,
     ) -> Result<Vec<GitPullRequest>> {
-        let path = format!("{project_id}/_apis/git/pullrequests");
-        let page_size = page_size.max(1);
-        let top_str = page_size.to_string();
-        let mut all = Vec::new();
-        let mut skip: u32 = 0;
-        loop {
-            let skip_str = skip.to_string();
-            let response: ListResponse<GitPullRequest> = self
-                .get_json(
-                    &path,
-                    &[
-                        ("api-version", "7.1-preview"),
-                        ("searchCriteria.reviewerId", reviewer_id),
-                        ("searchCriteria.status", "active"),
-                        ("$top", &top_str),
-                        ("$skip", &skip_str),
-                    ],
-                )
-                .await?;
-            let page_len = response.value.len() as u32;
-            all.extend(response.value);
-            // A short page means the server has no more results to return.
-            if page_len < page_size {
-                break;
-            }
-            skip += page_size;
-        }
-        Ok(all)
+        self.list_active_pull_requests_paged(
+            "searchCriteria.reviewerId",
+            reviewer_id,
+            project_id,
+            page_size,
+        )
+        .await
     }
 
     /// Lists every active PR where `creator_id` is the author, paging through the
@@ -337,34 +367,13 @@ impl AdoClient {
         creator_id: &str,
         page_size: u32,
     ) -> Result<Vec<GitPullRequest>> {
-        let path = format!("{project_id}/_apis/git/pullrequests");
-        let page_size = page_size.max(1);
-        let top_str = page_size.to_string();
-        let mut all = Vec::new();
-        let mut skip: u32 = 0;
-        loop {
-            let skip_str = skip.to_string();
-            let response: ListResponse<GitPullRequest> = self
-                .get_json(
-                    &path,
-                    &[
-                        ("api-version", "7.1-preview"),
-                        ("searchCriteria.creatorId", creator_id),
-                        ("searchCriteria.status", "active"),
-                        ("$top", &top_str),
-                        ("$skip", &skip_str),
-                    ],
-                )
-                .await?;
-            let page_len = response.value.len() as u32;
-            all.extend(response.value);
-            // A short page means the server has no more results to return.
-            if page_len < page_size {
-                break;
-            }
-            skip += page_size;
-        }
-        Ok(all)
+        self.list_active_pull_requests_paged(
+            "searchCriteria.creatorId",
+            creator_id,
+            project_id,
+            page_size,
+        )
+        .await
     }
 
     /// Lists pull requests across a project filtered server-side by their CLOSED

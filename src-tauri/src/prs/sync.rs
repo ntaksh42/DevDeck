@@ -9,6 +9,7 @@ use crate::shared_cache::SharedReviewer;
 use crate::sync::SyncBudget;
 
 use super::group_reviews::{group_review_prs, member_group_ids};
+use super::group_reviews_capped::fetch_capped_group_reviews;
 
 // ── Cache sync ────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,7 @@ pub(crate) async fn do_sync_prs(
         Some(review) => {
             let mut review = review?;
             let mut synced = std::mem::take(&mut review.synced_project_ids);
+            let review_synced: std::collections::HashSet<String> = synced.iter().cloned().collect();
             if !group_ids.is_empty() {
                 // Group reviews come from the active list, so a project is only
                 // replaced when that list was complete for it too; otherwise its
@@ -211,6 +213,49 @@ pub(crate) async fn do_sync_prs(
                         .into_iter()
                         .filter(|pr| synced.contains(&pr.project_id)),
                 );
+                // The active list is truncated in a capped project, so its group
+                // reviews are queried per group instead.
+                let capped_projects: Vec<TeamProject> = projects
+                    .iter()
+                    .filter(|p| active.capped.contains(&p.name))
+                    .cloned()
+                    .collect();
+                if !capped_projects.is_empty() {
+                    let capped = fetch_capped_group_reviews(
+                        client,
+                        org,
+                        &capped_projects,
+                        &group_ids,
+                        review_user.as_deref().unwrap_or_default(),
+                        budget,
+                    )
+                    .await?;
+                    // A project whose direct review query failed was not marked
+                    // synced above and must keep its previous rows.
+                    let direct_ok = &review_synced;
+                    let known: std::collections::HashSet<(String, i64)> = review
+                        .cached_reviews
+                        .iter()
+                        .map(|pr| (pr.repository_id.clone(), pr.pull_request_id))
+                        .collect();
+                    review
+                        .cached_reviews
+                        .extend(capped.reviews.into_iter().filter(|pr| {
+                            !known.contains(&(pr.repository_id.clone(), pr.pull_request_id))
+                        }));
+                    synced.extend(
+                        capped
+                            .synced_project_ids
+                            .into_iter()
+                            .filter(|id| direct_ok.contains(id)),
+                    );
+                    if !capped.failed_projects.is_empty() {
+                        warning_parts.push(format!(
+                            "Group/team reviews were not refreshed for project(s) whose query failed: {}.",
+                            capped.failed_projects.join(", ")
+                        ));
+                    }
+                }
             }
             if !review.failed_projects.is_empty() {
                 // Only the failed projects keep their previous rows; every other

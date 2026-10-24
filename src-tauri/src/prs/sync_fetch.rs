@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
-use azdo_client::{AdoClient, PullRequestStatus, TeamProject};
+use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus, TeamProject};
 
 use super::*;
 use crate::db::{CachedPr, CachedReviewPr, Organization};
@@ -261,11 +262,29 @@ pub(crate) async fn fetch_review_prs_for_project(
     user_id: String,
 ) -> (String, Result<Vec<CachedReviewPr>>) {
     let project_name = project.name.clone();
-    let prs = match client
-        .list_pull_requests_by_reviewer(&project.id, &user_id, 200)
+    match list_reviews_of(&client, &org, &project, &user_id, 200).await {
+        Ok(prs) => (
+            project_name,
+            Ok(review_prs_to_cached(prs, &org, &project, &user_id, None)),
+        ),
+        Err(e) => (project_name, Err(e)),
+    }
+}
+
+/// Active PRs of `project` that name `reviewer_id` as a reviewer. A 404 means the
+/// project is gone and counts as an empty result.
+pub(crate) async fn list_reviews_of(
+    client: &AdoClient,
+    org: &Organization,
+    project: &TeamProject,
+    reviewer_id: &str,
+    page_size: u32,
+) -> Result<Vec<GitPullRequest>> {
+    match client
+        .list_pull_requests_by_reviewer(&project.id, reviewer_id, page_size)
         .await
     {
-        Ok(prs) => prs,
+        Ok(prs) => Ok(prs),
         Err(e) if is_ado_not_found(&e) => {
             tracing::warn!(
                 org = %org.name,
@@ -273,16 +292,32 @@ pub(crate) async fn fetch_review_prs_for_project(
                 error = %e,
                 "review pull request list returned 404, skipping project"
             );
-            return (project_name, Ok(Vec::new()));
+            Ok(Vec::new())
         }
-        Err(e) => return (project_name, Err(e.into())),
-    };
+        Err(e) => Err(e.into()),
+    }
+}
 
+/// Maps reviewer-filtered PRs to My Reviews rows. With `group_ids` the PRs were
+/// found through a group the user belongs to: the user's own PRs are dropped and
+/// `my_is_required` also follows the matching group reviewers.
+pub(crate) fn review_prs_to_cached(
+    prs: Vec<GitPullRequest>,
+    org: &Organization,
+    project: &TeamProject,
+    user_id: &str,
+    group_ids: Option<&HashSet<String>>,
+) -> Vec<CachedReviewPr> {
     let mut cached_reviews = Vec::new();
     for pr in prs {
         let Some(repo) = &pr.repository else {
             continue;
         };
+        if group_ids.is_some()
+            && pr.created_by.as_ref().and_then(|u| u.id.as_deref()) == Some(user_id)
+        {
+            continue;
+        }
         let repo_id = repo.id.clone();
         let repo_name = repo.name.clone();
         let (proj_id, proj_name) = repo
@@ -291,8 +326,13 @@ pub(crate) async fn fetch_review_prs_for_project(
             .map(|p| (p.id.clone(), p.name.clone()))
             .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
 
-        let (my_vote, my_is_required) =
-            resolve_reviewer_vote(pr.reviewers.as_deref().unwrap_or(&[]), &user_id);
+        let reviewers = pr.reviewers.as_deref().unwrap_or(&[]);
+        let (my_vote, mut my_is_required) = resolve_reviewer_vote(reviewers, user_id);
+        if let Some(group_ids) = group_ids {
+            my_is_required |= reviewers
+                .iter()
+                .any(|r| r.is_required && r.id.as_ref().is_some_and(|id| group_ids.contains(id)));
+        }
 
         let web_url = format!(
             "{}/{}/_git/{}/pullrequest/{}",
@@ -326,5 +366,5 @@ pub(crate) async fn fetch_review_prs_for_project(
             ci_check_count: 0,
         });
     }
-    (project_name, Ok(cached_reviews))
+    cached_reviews
 }
