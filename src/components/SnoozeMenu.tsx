@@ -151,7 +151,7 @@ export function SnoozeMenu({
             aria-keyshortcuts={String(presetIndex + 1)}
             className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary"
           >
-            <kbd className="w-3 shrink-0 font-mono text-[11px] text-muted-foreground">{presetIndex + 1}</kbd>
+            <kbd className="w-3 shrink-0 font-mono text-2xs text-muted-foreground">{presetIndex + 1}</kbd>
             <span className="min-w-0 flex-1">{preset.label}</span>
           </button>
         ))}

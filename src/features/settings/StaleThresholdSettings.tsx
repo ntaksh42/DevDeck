@@ -73,7 +73,7 @@ export function ReviewStaleThresholdSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">
+          <p className="text-sm text-success">
             Stale review threshold saved.
           </p>
         ) : null}
@@ -143,7 +143,7 @@ export function WorkItemStaleThresholdSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">
+          <p className="text-sm text-success">
             Stale work item threshold saved.
           </p>
         ) : null}

@@ -73,27 +73,27 @@ export function PrPreviewSection({
   return (
     <section className={`min-w-0 ${className}`}>
       <div className="sticky top-0 z-10 mb-0.5 bg-card/95 pt-0.5 backdrop-blur-sm">
-        <div className="flex items-center gap-1 rounded border-l-4 border-l-primary bg-blue-50 dark:bg-blue-950">
+        <div className="flex items-center gap-1 rounded border-l-4 border-l-primary bg-info/10">
           {collapseId ? (
             <button
               type="button"
               aria-expanded={!collapsed}
               onClick={toggleCollapsed}
               onKeyDown={handleHeaderKeyDown}
-              className="flex min-w-0 flex-1 items-center gap-1 rounded px-1.5 py-0.5 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:hover:bg-blue-900"
+              className="flex min-w-0 flex-1 items-center gap-1 rounded px-1.5 py-0.5 text-left hover:bg-info/20 focus:outline-none focus:ring-1 focus:ring-ring"
             >
               <ChevronRight
-                className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
+                className={`h-3 w-3 shrink-0 text-info transition-transform ${
                   collapsed ? "" : "rotate-90"
                 }`}
                 aria-hidden="true"
               />
-              <h3 className="truncate text-[11px] font-semibold uppercase tracking-wide leading-4 text-blue-900 dark:text-blue-100">
+              <h3 className="truncate text-2xs font-semibold uppercase tracking-wide leading-4 text-foreground">
                 {title}
               </h3>
             </button>
           ) : (
-            <h3 className="min-w-0 flex-1 truncate px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide leading-4 text-blue-900 dark:text-blue-100">
+            <h3 className="min-w-0 flex-1 truncate px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide leading-4 text-foreground">
               {title}
             </h3>
           )}

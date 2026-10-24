@@ -10,7 +10,7 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 210 84% 57%;
+    --primary: 210 84% 46%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -18,14 +18,21 @@
     --muted-foreground: 215 20% 38%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
     --border: 214 28% 84%;
     --input: 214 28% 84%;
     --ring: 210 84% 57%;
-    /* Text-only link blue. \`primary\` stays the brighter fill color for
-       buttons; as small text it is only 3.27:1 on white, this is 5.38:1. */
+    /* Text-only link blue. primary is the fill color for buttons (white text on
+       it is 4.6:1); link is a notch darker for small text on tinted rows
+       (5.38:1 on white). */
     --link: 210 80% 42%;
+    /* Status tones. Like --link they are text-safe (>= 4.5:1 on the page and
+       on their own 10% tint), so one token serves as text, border (/30) and
+       surface (/10) -- no per-site light/dark palette pairs. */
+    --success: 142 72% 26%;
+    --warning: 30 95% 30%;
+    --info: 214 85% 40%;
     --radius: 0.5rem;
     color-scheme: light;
   }
@@ -45,12 +52,15 @@
     --muted-foreground: 215 22% 72%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 68%;
+    --destructive-foreground: 222.2 47% 11%;
     --border: 217 28% 26%;
     --input: 217 28% 26%;
     --ring: 210 90% 70%;
     --link: 210 95% 76%;
+    --success: 142 65% 58%;
+    --warning: 38 92% 62%;
+    --info: 210 95% 76%;
     color-scheme: dark;
   }
 }
@@ -80,6 +90,15 @@
 
   * {
     @apply border-border;
+  }
+
+  /* Fallback keyboard focus ring in the theme color. Controls that style their
+     own focus (focus:outline-none + ring-*) override it, since :where() adds no
+     specificity; it only replaces the browser's default ring, which is
+     near-invisible on the dark theme. */
+  :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
   }
 
   body {
@@ -163,4 +182,20 @@
    sashes would otherwise compete with it the same way. */
 .dv-sash {
   pointer-events: none;
+}
+
+/* Honor the OS "reduce motion" setting: no fades/slides, no pulsing or pinging
+   indicators. Spinners keep rotating so a pending state still reads as busy. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-ping,
+  .animate-pulse {
+    animation: none;
+  }
 }

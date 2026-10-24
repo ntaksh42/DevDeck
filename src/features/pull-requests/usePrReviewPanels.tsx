@@ -234,7 +234,7 @@ export function usePrReviewPanels({
           compact={compactHeader}
         />
         {reviewerError ? (
-          <div className="shrink-0 border-b border-border bg-red-50 px-3 py-1 text-xs text-destructive dark:bg-red-950/40">
+          <div className="shrink-0 border-b border-border bg-destructive/10 px-3 py-1 text-xs text-destructive">
             {reviewerError}
           </div>
         ) : null}

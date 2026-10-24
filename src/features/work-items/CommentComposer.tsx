@@ -222,7 +222,7 @@ export function CommentComposer({
         showActions={active}
         status={
           commentMutation.isSuccess ? (
-            <span className="text-[11px] text-muted-foreground">Comment posted</span>
+            <span className="text-2xs text-muted-foreground">Comment posted</span>
           ) : null
         }
         submitLabel="Comment"

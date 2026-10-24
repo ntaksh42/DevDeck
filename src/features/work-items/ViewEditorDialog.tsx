@@ -149,7 +149,7 @@ export function ViewEditorDialog({
               <p
                 className={`text-xs ${
                   urlStatus.severity === "success"
-                    ? "text-green-700 dark:text-green-400"
+                    ? "text-success"
                     : urlStatus.severity === "error"
                       ? "text-destructive"
                       : "text-muted-foreground"
@@ -253,7 +253,7 @@ export function ViewEditorDialog({
                     key={macro}
                     type="button"
                     onClick={() => onInsertWiqlText(macro)}
-                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] hover:bg-secondary"
+                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs hover:bg-secondary"
                   >
                     {macro}
                   </button>
@@ -280,7 +280,7 @@ export function ViewEditorDialog({
                   <p key={error} className="text-destructive">{error}</p>
                 ))}
                 {wiqlValidation.warnings.map((warning) => (
-                  <p key={warning} className="text-amber-700 dark:text-amber-400">{warning}</p>
+                  <p key={warning} className="text-warning">{warning}</p>
                 ))}
               </div>
             ) : null}
@@ -291,7 +291,7 @@ export function ViewEditorDialog({
                   testResult.status === "error"
                     ? "border-destructive/40 bg-destructive/10 text-destructive"
                     : testResult.status === "ok"
-                      ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
+                      ? "border-success/40 bg-success/10 text-success"
                       : "border-border bg-muted text-muted-foreground"
                 }`}
               >
@@ -327,7 +327,7 @@ export function ViewEditorDialog({
                 {draftExtraColumns.map((referenceName) => (
                   <span
                     key={referenceName}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px]"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-2xs"
                     title={referenceName}
                   >
                     {referenceName}

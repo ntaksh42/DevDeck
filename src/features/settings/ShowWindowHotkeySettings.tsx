@@ -87,7 +87,7 @@ export function ShowWindowHotkeySettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Show window hotkey saved.</p>
+          <p className="text-sm text-success">Show window hotkey saved.</p>
         ) : null}
 
         <div>

@@ -246,7 +246,7 @@ export function AgentCommandSettings() {
           </p>
         ) : null}
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Agent command saved.</p>
+          <p className="text-sm text-success">Agent command saved.</p>
         ) : null}
 
         <div>

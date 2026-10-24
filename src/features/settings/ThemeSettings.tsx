@@ -54,11 +54,11 @@ export function ThemeSettings() {
       title="Appearance"
       description={<>Choose a theme and the app zoom. System follows your operating system setting.</>}
     >
-      <div className="">
+      <div>
         <div
           role="radiogroup"
           aria-label="Theme"
-          className="inline-flex gap-1 rounded-md border border-border bg-muted p-0.5"
+          className="flex w-fit gap-1 rounded-md border border-border bg-muted p-0.5"
         >
           {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
             const selected = preference === value;
@@ -69,7 +69,7 @@ export function ThemeSettings() {
                 role="radio"
                 aria-checked={selected}
                 onClick={() => selectTheme(value)}
-                className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium ${
+                className={`inline-flex h-8 items-center gap-1.5 rounded px-3 text-sm font-medium ${
                   selected
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -85,7 +85,7 @@ export function ThemeSettings() {
         <div
           role="radiogroup"
           aria-label="UI scale"
-          className="mt-3 inline-flex gap-1 rounded-md border border-border bg-muted p-0.5"
+          className="mt-3 flex w-fit gap-1 rounded-md border border-border bg-muted p-0.5"
         >
           {UI_SCALE_LEVELS.map((level) => (
             <button
@@ -94,7 +94,7 @@ export function ThemeSettings() {
               role="radio"
               aria-checked={scale === level}
               onClick={() => setUiScale(level)}
-              className={`rounded px-3 py-1.5 text-sm font-medium ${
+              className={`inline-flex h-8 items-center rounded px-3 text-sm font-medium ${
                 scale === level
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground"

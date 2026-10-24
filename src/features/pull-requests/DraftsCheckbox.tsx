@@ -15,7 +15,7 @@ export function DraftsCheckbox({
   title?: string;
 }) {
   return (
-    <label title={title} className="flex shrink-0 cursor-pointer items-center gap-1 pr-1 text-[11px] text-muted-foreground">
+    <label title={title} className="flex shrink-0 cursor-pointer items-center gap-1 pr-1 text-2xs text-muted-foreground">
       <input
         type="checkbox"
         checked={checked}

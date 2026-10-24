@@ -164,7 +164,7 @@ export function KeyboardShortcutSettings() {
           </p>
         ) : null}
         {saved ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Keyboard shortcuts saved.</p>
+          <p className="text-sm text-success">Keyboard shortcuts saved.</p>
         ) : null}
 
         <div className="flex items-center gap-2">

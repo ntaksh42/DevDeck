@@ -20,10 +20,10 @@ function LinkChip({ link, number, onOpen }: { link: InboxLink; number: number; o
       className="inline-flex min-w-0 max-w-[22rem] items-center gap-1 rounded text-link hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
     >
       {number <= 9 ? <Kbd>{String(number)}</Kbd> : null}
-      <span className="text-[10px] font-semibold text-muted-foreground">{KIND_BADGE[link.kind]}</span>
+      <span className="text-3xs font-semibold text-muted-foreground">{KIND_BADGE[link.kind]}</span>
       <span className="shrink-0">{link.label}</span>
       {link.title ? <span className="min-w-0 truncate text-foreground">{link.title}</span> : null}
-      {link.detail ? <span className="shrink-0 text-[11px] text-muted-foreground">({link.detail})</span> : null}
+      {link.detail ? <span className="shrink-0 text-2xs text-muted-foreground">({link.detail})</span> : null}
       {link.kind === "external" ? <span aria-hidden="true">↗</span> : null}
     </button>
   );
@@ -45,7 +45,7 @@ export function InboxRelatedLinks({ links, onOpen }: { links: InboxLink[]; onOpe
         if (group.length === 0) return null;
         return (
           <div key={origin} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <span className="w-[5.5rem] shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="w-[5.5rem] shrink-0 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
               {label}
             </span>
             {group.map(({ link, number }) => (

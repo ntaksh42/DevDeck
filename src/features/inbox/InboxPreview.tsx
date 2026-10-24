@@ -122,7 +122,7 @@ export function InboxPreview({
           {item.projectName}
           {item.repositoryName ? ` / ${item.repositoryName}` : ""}
         </span>
-        {branches ? <span className="font-mono text-[11px]">{branches}</span> : null}
+        {branches ? <span className="font-mono text-2xs">{branches}</span> : null}
         <span title={formatDate(item.detectedAt)}>
           {item.author ? `${item.author} · ` : ""}
           {formatRelativeDate(item.detectedAt)}
@@ -180,7 +180,7 @@ export function InboxPreview({
 
       {!detail.isLoading ? <InboxRelatedLinks links={links} onOpen={onOpenLink} /> : null}
 
-      <h3 className="mt-2 border-b border-border pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="mt-2 border-b border-border pb-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
         {bandTitle(item)}
       </h3>
       {detail.isLoading ? (

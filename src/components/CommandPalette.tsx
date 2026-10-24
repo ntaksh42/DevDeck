@@ -254,7 +254,7 @@ export function CommandPalette({
               return (
                 <div key={row.id}>
                   {showGroup ? (
-                    <div className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase text-muted-foreground">
+                    <div className="px-2 pb-1 pt-2 text-2xs font-semibold uppercase text-muted-foreground">
                       {row.group}
                     </div>
                   ) : null}
@@ -286,7 +286,7 @@ export function CommandPalette({
                       ) : null}
                     </span>
                     {row.shortcut ? (
-                      <kbd className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                      <kbd className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
                         {row.shortcut}
                       </kbd>
                     ) : null}
@@ -297,7 +297,7 @@ export function CommandPalette({
           )}
         </div>
         {search ? (
-          <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+          <div className="border-t border-border px-3 py-1.5 text-2xs text-muted-foreground">
             Search work items, PRs, wiki, and Inbox — filter with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">wi:</kbd>{" "}
             <kbd className="rounded bg-muted px-1 font-mono">pr:</kbd>{" "}

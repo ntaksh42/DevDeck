@@ -104,7 +104,7 @@ export function MyWorkItemsPanel() {
         </div>
       </HeaderToolbarPortal>
       {createdStatus ? (
-        <span role="status" className="shrink-0 truncate text-[11px] text-muted-foreground">
+        <span role="status" className="shrink-0 truncate text-2xs text-muted-foreground">
           {createdStatus}
         </span>
       ) : null}

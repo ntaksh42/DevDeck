@@ -63,18 +63,18 @@ export function WorkItemCommentsSection({
 
   return preview.comments.length > 0 ? (
     <PreviewSection
-      accentColor="border-l-slate-400 dark:border-l-slate-500"
+      accentColor="border-l-muted-foreground"
       className={className}
       collapseId="comments"
       title={`Comments (${preview.comments.length})`}
     >
       {deleteCommentError ? (
-        <p className="mb-1 text-[11px] leading-4 text-destructive">
+        <p className="mb-1 text-2xs leading-4 text-destructive">
           {deleteCommentError}
         </p>
       ) : null}
       {editCommentError ? (
-        <p className="mb-1 text-[11px] leading-4 text-destructive">
+        <p className="mb-1 text-2xs leading-4 text-destructive">
           {editCommentError}
         </p>
       ) : null}
@@ -122,7 +122,7 @@ export function WorkItemCommentsSection({
           <button
             type="button"
             onClick={() => setShowAllComments(true)}
-            className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="w-full rounded border border-dashed border-border px-2 py-1 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
           </button>
@@ -131,12 +131,12 @@ export function WorkItemCommentsSection({
     </PreviewSection>
   ) : preview.commentsUnavailable ? (
     <PreviewSection
-      accentColor="border-l-slate-400 dark:border-l-slate-500"
+      accentColor="border-l-muted-foreground"
       className={className}
       collapseId="comments"
       title="Comments"
     >
-      <p className="text-[11px] leading-4 text-destructive">
+      <p className="text-2xs leading-4 text-destructive">
         Comments could not be loaded. Try refreshing.
       </p>
     </PreviewSection>

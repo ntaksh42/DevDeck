@@ -40,7 +40,7 @@ const LOG_REFRESH_INTERVAL_MS = 15_000;
 const NO_LINES: string[] = [];
 
 const BAND_BUTTON =
-  "inline-flex h-5 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-medium normal-case tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-5 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs font-medium normal-case tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 type PendingConfirm = "rerun" | "cancel" | null;
 
@@ -361,7 +361,7 @@ export function PipelineRunDetailPanel({
             <div ref={timelineRef} className="border-b border-border">
               {tree.length === 0 ? (
                 detail?.timelineUnavailable ? (
-                  <p className="px-3 py-3 text-xs text-amber-700 dark:text-amber-400">
+                  <p className="px-3 py-3 text-xs text-warning">
                     Failed to load the timeline. It may be a transient error — try refreshing.
                   </p>
                 ) : (
@@ -395,7 +395,7 @@ export function PipelineRunDetailPanel({
                           }}
                           title={`Download ${artifact.name}`}
                           aria-label={`Download artifact ${artifact.name}`}
-                          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+                          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-2xs text-primary hover:bg-secondary"
                         >
                           <ExternalLink className="h-3 w-3" aria-hidden="true" /> Download
                         </button>

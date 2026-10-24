@@ -370,7 +370,7 @@ export function CreateWorkItemDialog({
           ) : null}
 
           <div className="flex items-center justify-end gap-2 pt-1">
-            <span className="mr-auto text-[11px] text-muted-foreground">
+            <span className="mr-auto text-2xs text-muted-foreground">
               Ctrl+Enter to create
             </span>
             <button

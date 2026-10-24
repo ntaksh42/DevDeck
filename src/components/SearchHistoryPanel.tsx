@@ -102,7 +102,7 @@ export function SearchHistoryPanel({
       <div className="mx-auto flex max-w-xl flex-col gap-4">
         {visible.map((section) => (
           <section key={section.kind} aria-label={section.title}>
-            <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
               {section.title}
             </h3>
             <ul>

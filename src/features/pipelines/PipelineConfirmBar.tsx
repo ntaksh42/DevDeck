@@ -37,7 +37,7 @@ export function PipelineConfirmBar({
       role="alertdialog"
       aria-label={message}
       onKeyDown={handleKeyDown}
-      className="flex items-center gap-2 border-y border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
+      className="flex items-center gap-2 border-y border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
     >
       <span className="min-w-0 flex-1">{message}</span>
       <button

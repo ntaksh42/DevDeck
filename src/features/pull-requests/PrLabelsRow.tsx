@@ -3,7 +3,7 @@ import { Plus, X } from "lucide-react";
 import type { PrLabel } from "@/lib/azdoCommands";
 
 const CHIP_BUTTON =
-  "inline-flex items-center gap-0.5 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50";
+  "inline-flex items-center gap-0.5 rounded border border-border bg-card px-1.5 py-0.5 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50";
 
 // The pull request's labels as chips, with an inline "Label" box to add one
 // (Enter adds, Esc cancels and hands focus back to the button) and an X on each
@@ -58,7 +58,7 @@ export function PrLabelsRow({
         {labels.map((label) => (
           <span
             key={label.id}
-            className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground [overflow-wrap:anywhere]"
+            className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-2xs text-foreground [overflow-wrap:anywhere]"
           >
             {label.name}
             <button
@@ -86,7 +86,7 @@ export function PrLabelsRow({
             }}
             aria-label="New label name"
             placeholder="Label, Enter to add"
-            className="w-36 rounded border border-input bg-background px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-36 rounded border border-input bg-background px-1.5 py-0.5 text-2xs focus:outline-none focus:ring-2 focus:ring-ring"
           />
         ) : (
           <button

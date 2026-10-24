@@ -8,7 +8,7 @@ const CELL_CLASS: Record<RunTone, string> = {
   warning: "bg-amber-500",
   active: "animate-pulse bg-blue-500",
   canceled: "bg-zinc-400",
-  neutral: "bg-zinc-300 dark:bg-zinc-600",
+  neutral: "bg-muted-foreground/30",
 };
 
 // Recent runs as small colored cells (oldest left, newest right), so repeated

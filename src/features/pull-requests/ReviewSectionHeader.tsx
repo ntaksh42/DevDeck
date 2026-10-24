@@ -15,7 +15,7 @@ export function ReviewSectionHeader({ label, count, collapsed, preview, onToggle
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className="flex h-[29px] w-full items-center gap-1 border-b border-border bg-muted/60 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
+      className="flex h-[29px] w-full items-center gap-1 border-b border-border bg-muted/60 px-2 text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
     >
       {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
       {label}
