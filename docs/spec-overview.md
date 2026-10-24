@@ -63,6 +63,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 サイドバーのナビには件数バッジを表示する: My Reviews (未投票=要レビューの件数)、
 My Items (割当件数)、ピン留めした Work Item View (最後に取得した件数)、
 Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非表示。
+下部固定の「Agent」ボタン (`Ctrl+J` と同じく Agent パネルを開閉) には、返信待ち (Needs you) の会話数を全 View 共通のバッジで出す (PR / Work Item のメモと依頼 `ask` の合計。ノートの要約と依頼一覧を 5 秒間隔で読み直す。結果フォルダ未設定などで取得できない分は数えない)。Agent パネルの上端には、今表示している対象・依頼以外で返信待ちの会話を「Waiting for you elsewhere」としてチップで並べる (PR / Work Item / 依頼ごとに待ち件数つき。PR・Work Item を選ぶと該当項目へ移動してパネルが追従し、依頼は `askId` 付きでパネルをその会話に開いて返信欄にフォーカスする。タイトルは要約に無いため ID だけを出す)。
 
 最上位ナビ項目 (Pull Requests / Work Items / Pipelines / Analyze) はドラッグ&ドロップ
 またはキーボード (`Alt+↑` / `Alt+↓`) で並べ替えできる。順序は localStorage
