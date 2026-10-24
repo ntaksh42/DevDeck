@@ -52,7 +52,7 @@ export function PipelineTestResultsPanel({
                     </span>
                   ) : null}
                 </summary>
-                <pre className="mb-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 text-[11px] text-foreground">
+                <pre className="mb-1 ml-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 text-2xs text-foreground">
                   {test.errorMessage ?? "No error message."}
                 </pre>
               </details>
@@ -61,7 +61,7 @@ export function PipelineTestResultsPanel({
         </ul>
       ) : null}
       {results.truncated ? (
-        <p className="px-3 pt-1 text-[11px] text-muted-foreground">
+        <p className="px-3 pt-1 text-2xs text-muted-foreground">
           Showing the first {results.failedTests.length} of {results.failed} failed tests.
         </p>
       ) : null}

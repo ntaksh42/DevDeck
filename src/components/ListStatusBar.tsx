@@ -151,7 +151,7 @@ export function ListStateChip({ label, onClear }: { label: string; onClear: () =
   return (
     <span
       title={`Showing ${label.toLowerCase()} items (Esc to go back)`}
-      className="inline-flex h-4 shrink-0 items-center rounded-full bg-primary/10 text-[11px] text-link"
+      className="inline-flex h-4 shrink-0 items-center rounded-full bg-primary/10 text-2xs text-link"
     >
       <span className="pl-2 pr-1">{label}</span>
       <button

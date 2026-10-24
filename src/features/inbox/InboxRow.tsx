@@ -70,7 +70,7 @@ export const InboxRow = forwardRef<
           {inboxSubjectLabel(item)}
         </span>
         {location ? (
-          <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted-foreground" title={item.filePath ?? undefined}>
+          <span className="shrink-0 whitespace-nowrap font-mono text-2xs text-muted-foreground" title={item.filePath ?? undefined}>
             {location}
           </span>
         ) : null}
@@ -92,7 +92,7 @@ export const InboxRow = forwardRef<
       </span>
       {verdict ? (
         <span
-          className={`shrink-0 rounded border px-1 text-[10px] font-semibold leading-4 ${verdict.rowClassName}`}
+          className={`shrink-0 rounded border px-1 text-3xs font-semibold leading-4 ${verdict.rowClassName}`}
           title="Verdict by Claude"
         >
           {verdict.label}
@@ -100,7 +100,7 @@ export const InboxRow = forwardRef<
       ) : null}
       {item.hitCount > 1 ? (
         <span
-          className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium tabular-nums text-muted-foreground"
+          className="inline-flex shrink-0 items-center gap-0.5 text-2xs font-medium tabular-nums text-muted-foreground"
           title={`${item.hitCount} comments waiting in this conversation`}
         >
           <MessageSquare className="h-3 w-3" aria-hidden="true" />
@@ -124,7 +124,7 @@ export const InboxRow = forwardRef<
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       ) : null}
-      <span className="w-14 shrink-0 text-right text-[11px] text-muted-foreground" title={timeTitle}>
+      <span className="w-14 shrink-0 text-right text-2xs text-muted-foreground" title={timeTitle}>
         {timeLabel}
       </span>
     </div>

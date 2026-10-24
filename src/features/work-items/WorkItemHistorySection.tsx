@@ -43,7 +43,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
           }`}
           aria-hidden="true"
         />
-        <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:text-blue-100">
+        <h3 className="text-2xs font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:text-blue-100">
           History
         </h3>
         {open && updatesQuery.isFetching ? (
@@ -53,11 +53,11 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
       </button>
       {open ? (
         updatesQuery.isError ? (
-          <p className="mt-1 text-[11px] text-destructive">
+          <p className="mt-1 text-2xs text-destructive">
             {commandErrorMessage(updatesQuery.error)}
           </p>
         ) : updates.length === 0 && !updatesQuery.isFetching ? (
-          <p className="mt-1 text-[11px] text-muted-foreground">No field changes recorded.</p>
+          <p className="mt-1 text-2xs text-muted-foreground">No field changes recorded.</p>
         ) : (
           <div className="mt-1 space-y-1.5">
             {updates.map((update) => (
@@ -65,7 +65,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
                 key={update.id}
                 className="min-w-0 rounded border border-border bg-card px-1.5 py-1"
               >
-                <div className="flex min-w-0 items-baseline gap-1.5 text-[11px]">
+                <div className="flex min-w-0 items-baseline gap-1.5 text-2xs">
                   <span className="min-w-0 truncate font-semibold">
                     {update.revisedBy ?? "Unknown"}
                   </span>
@@ -82,7 +82,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
                   {update.changes.map((change) => (
                     <li
                       key={change.referenceName}
-                      className="flex min-w-0 flex-wrap items-baseline gap-1 text-[11px] leading-4"
+                      className="flex min-w-0 flex-wrap items-baseline gap-1 text-2xs leading-4"
                       title={change.referenceName}
                     >
                       <span className="text-muted-foreground">

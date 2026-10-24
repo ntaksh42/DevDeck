@@ -214,7 +214,7 @@ export function ReviewTab({
       </div>
 
       {actionError ? (
-        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs text-destructive">
+        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
           {actionError}
         </div>
       ) : null}
@@ -247,7 +247,7 @@ export function ReviewTab({
           {editingDetails ? (
             <div className="grid gap-2 pb-2">
               <label className="grid gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Title
                 </span>
                 <input
@@ -268,7 +268,7 @@ export function ReviewTab({
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Description
                 </span>
                 <textarea
@@ -306,7 +306,7 @@ export function ReviewTab({
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                   Cancel
                 </button>
-                <span className="text-[11px] text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
+                <span className="text-2xs text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
               </div>
             </div>
           ) : (
@@ -340,7 +340,7 @@ export function ReviewTab({
                   onClick={() =>
                     navigateToWorkItem({ organizationId: pr.organizationId, workItemId: id })
                   }
-                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
                   title={`Open work item ${id} in Work Items`}
                 >
                   AB#{id}

@@ -142,7 +142,7 @@ export function FieldConfigMenu({
           ref={fieldMenuPopoverRef}
           className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
         >
-          <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+          <div className="px-2 py-1 text-2xs font-semibold text-muted-foreground">
             Show attributes
           </div>
           <div className="max-h-64 overflow-auto">
@@ -159,7 +159,7 @@ export function FieldConfigMenu({
                 />
                 <span className="min-w-0 flex-1 truncate">{field.label}</span>
                 {field.editable ? (
-                  <span className="rounded border border-border bg-background px-1 text-[11px] text-muted-foreground">
+                  <span className="rounded border border-border bg-background px-1 text-2xs text-muted-foreground">
                     editable
                   </span>
                 ) : null}
@@ -167,23 +167,23 @@ export function FieldConfigMenu({
             ))}
           </div>
           <div className="mt-1 border-t border-border px-2 py-1.5">
-            <div className="mb-1 text-[11px] font-semibold text-muted-foreground">
+            <div className="mb-1 text-2xs font-semibold text-muted-foreground">
               Custom attributes
             </div>
             <input
               value={customFieldSearch}
               onChange={(event) => setCustomFieldSearch(event.target.value)}
               placeholder="Search fields from Azure DevOps"
-              className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+              className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-2xs outline-none focus:ring-2 focus:ring-ring"
             />
             <div className="mb-1.5 max-h-28 overflow-auto rounded border border-border bg-muted">
               {fieldOptionsQuery.isFetching ? (
-                <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-1.5 px-2 py-1.5 text-2xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                   Loading fields...
                 </div>
               ) : fieldOptionsQuery.isError ? (
-                <div className="px-2 py-1.5 text-[11px] text-destructive">
+                <div className="px-2 py-1.5 text-2xs text-destructive">
                   {commandErrorMessage(fieldOptionsQuery.error)}
                 </div>
               ) : customFieldOptions.length > 0 ? (
@@ -192,21 +192,21 @@ export function FieldConfigMenu({
                     key={field.referenceName}
                     type="button"
                     onClick={() => addCustomFieldOption(field)}
-                    className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-accent"
+                    className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left text-2xs hover:bg-accent"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{field.name}</span>
-                      <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                      <span className="block truncate font-mono text-2xs text-muted-foreground">
                         {field.referenceName}
                       </span>
                     </span>
-                    <span className="shrink-0 rounded border border-border bg-card px-1 text-[11px] text-muted-foreground">
+                    <span className="shrink-0 rounded border border-border bg-card px-1 text-2xs text-muted-foreground">
                       {field.fieldType}
                     </span>
                   </button>
                 ))
               ) : (
-                <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                <div className="px-2 py-1.5 text-2xs text-muted-foreground">
                   {fieldOptionsQuery.isSuccess ? "No matching fields" : "Open to load fields"}
                 </div>
               )}
@@ -218,7 +218,7 @@ export function FieldConfigMenu({
                     key={field.referenceName}
                     className="flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-1"
                   >
-                    <span className="min-w-0 flex-1 truncate text-[11px]" title={field.referenceName}>
+                    <span className="min-w-0 flex-1 truncate text-2xs" title={field.referenceName}>
                       {field.label}
                     </span>
                     <button
@@ -242,14 +242,14 @@ export function FieldConfigMenu({
                   setCustomFieldError(null);
                 }}
                 placeholder="Custom.ReleaseTrain"
-                className="h-7 rounded border border-input bg-background px-2 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                className="h-7 rounded border border-input bg-background px-2 font-mono text-2xs outline-none focus:ring-2 focus:ring-ring"
               />
               <div className="flex items-center gap-1">
                 <input
                   value={customFieldLabel}
                   onChange={(event) => setCustomFieldLabel(event.target.value)}
                   placeholder="Label"
-                  className="h-7 min-w-0 flex-1 rounded border border-input bg-background px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                  className="h-7 min-w-0 flex-1 rounded border border-input bg-background px-2 text-2xs outline-none focus:ring-2 focus:ring-ring"
                 />
                 <button
                   type="submit"
@@ -261,7 +261,7 @@ export function FieldConfigMenu({
                 </button>
               </div>
               {customFieldError ? (
-                <p className="text-[11px] leading-3 text-destructive">{customFieldError}</p>
+                <p className="text-2xs leading-3 text-destructive">{customFieldError}</p>
               ) : null}
             </form>
           </div>
@@ -269,14 +269,14 @@ export function FieldConfigMenu({
             <button
               type="button"
               onClick={() => onSelectedFieldKeysChange(DEFAULT_PREVIEW_FIELD_KEYS)}
-              className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="rounded px-2 py-1 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
               Reset
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+              className="rounded bg-primary px-2 py-1 text-2xs font-medium text-primary-foreground hover:bg-primary/90"
             >
               Done
             </button>

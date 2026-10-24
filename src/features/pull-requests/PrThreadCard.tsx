@@ -32,7 +32,7 @@ export function CommentAvatar({ name }: { name: string | null | undefined }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${colorClass}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold ${colorClass}`}
     >
       {authorInitials(name)}
     </span>
@@ -73,7 +73,7 @@ function ThreadStatusDropdown({
         aria-expanded={open}
         disabled={busy}
         onClick={() => setOpen((value) => !value)}
-        className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-[11px] font-medium disabled:opacity-50 ${
+        className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-2xs font-medium disabled:opacity-50 ${
           resolved
             ? "border-border bg-muted text-muted-foreground"
             : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
@@ -264,7 +264,7 @@ export function PrThreadCard({
         <span className="truncate font-medium text-foreground">{comment.author ?? "Unknown"}</span>
         {comment.publishedDate ? (
           <span
-            className="shrink-0 text-[11px] text-muted-foreground"
+            className="shrink-0 text-2xs text-muted-foreground"
             title={formatDate(comment.publishedDate)}
           >
             {formatRelativeDate(comment.publishedDate)}
@@ -278,7 +278,7 @@ export function PrThreadCard({
               <button
                 type="button"
                 onClick={() => setEditingId(comment.id)}
-                className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="rounded px-1 py-px text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 Edit
               </button>
@@ -296,7 +296,7 @@ export function PrThreadCard({
                     onConfirm: () => void onDeleteComment(comment.id),
                   })
                 }
-                className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                className="rounded px-1 py-px text-2xs text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
               >
                 Delete
               </button>
@@ -318,7 +318,7 @@ export function PrThreadCard({
       <div className="group/comment flex min-w-0 items-center gap-1.5 text-xs">
         {filePath ? (
           <span
-            className="min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground"
+            className="min-w-0 shrink truncate font-mono text-2xs text-muted-foreground"
             title={`${filePath}${thread.rightLine ? `:${thread.rightLine}` : ""}`}
           >
             {/* Folded to one line, the file name leaves room for the comment. */}
@@ -337,7 +337,7 @@ export function PrThreadCard({
             </span>
             {visibleComments.length > 1 ? (
               <span
-                className="shrink-0 text-[11px] text-muted-foreground"
+                className="shrink-0 text-2xs text-muted-foreground"
                 title={`${visibleComments.length} comments`}
               >
                 {visibleComments.length}

@@ -22,7 +22,7 @@ export function StagedStatusChip({
     <>
       {stagedEntries.length > 0 ? (
         <span
-          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-0.5 text-[11px] dark:border-amber-800 dark:bg-amber-950/50"
+          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-0.5 text-2xs dark:border-amber-800 dark:bg-amber-950/50"
           title={stagedEntries
             .map((entry) => `${entry.label}: ${entry.from} → ${entry.to}`)
             .join("\n")}
@@ -51,7 +51,7 @@ export function StagedStatusChip({
         </span>
       ) : null}
       {undoState && stagedEntries.length === 0 ? (
-        <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 py-0.5 pl-2 pr-0.5 text-[11px] dark:border-emerald-800 dark:bg-emerald-950/50">
+        <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 py-0.5 pl-2 pr-0.5 text-2xs dark:border-emerald-800 dark:bg-emerald-950/50">
           <span className="text-emerald-900 dark:text-emerald-200">Applied {undoState.count}</span>
           <button
             type="button"
@@ -67,7 +67,7 @@ export function StagedStatusChip({
       ) : null}
       {applyError ? (
         <span
-          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-[11px] text-destructive"
+          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-2xs text-destructive"
           title={applyError}
         >
           {applyError}

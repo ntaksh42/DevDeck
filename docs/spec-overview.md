@@ -878,6 +878,16 @@ format!(
 
 ## 9. 制約・方針
 
+- **デザイントークン (配色・文字サイズ・フォーカス)**: 色は `src/index.css` の CSS 変数
+  (ライト/ダーク) と `tailwind.config.ts` の色名で一元管理する。`destructive` /
+  `success` / `warning` / `info` は **文字色としてそのまま使える明度** (ページ背景および自身の
+  10% 透過面の上で 4.5:1 以上) に調整してあり、ステータス表示は `border-warning/30
+  bg-warning/10 text-warning` のように 1 トークン + 透過度で書く (`bg-red-50 dark:bg-red-950`
+  のようなライト/ダークの手書きペアは新規に増やさない)。`primary` は塗り色 (白文字で 4.5:1 以上)、
+  `link` は小さな文字用の青。小さな文字は `text-[11px]` ではなく `text-2xs` (11px) /
+  `text-3xs` (10px) を使う。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
+  `index.css` の `:focus-visible` フォールバックが、自前のフォーカス表示 (`focus:ring-*`) を
+  持たないコントロールにもテーマ色のリングを出す。
 - PR の **active** 検索はローカル同期キャッシュから動作する。**completed / abandoned**
   は履歴が大きくキャッシュしないため、`search_pull_requests` が Azure DevOps から
   ライブ取得する。

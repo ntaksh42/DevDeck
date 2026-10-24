@@ -170,7 +170,7 @@ export function ProjectQueryPicker({
                 }`}
               >
                 <span className="truncate">{highlightTerms(query.name, terms)}</span>
-                <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                <span className="ml-auto shrink-0 text-2xs text-muted-foreground">
                   {highlightTerms(query.folderPath, terms)}
                 </span>
               </li>

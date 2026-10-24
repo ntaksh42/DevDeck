@@ -21,7 +21,7 @@ export const ACTION_BUTTON =
   "inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs font-medium hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Kbd({ children }: { children: string }) {
-  return <kbd className="rounded border border-border bg-muted px-1 text-[10px] font-mono">{children}</kbd>;
+  return <kbd className="rounded border border-border bg-muted px-1 text-3xs font-mono">{children}</kbd>;
 }
 
 export function ThreadPanel({
@@ -74,7 +74,7 @@ export function ThreadPanel({
       />
       {beforeComposer}
       {readOnly ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-2xs text-muted-foreground">
           Read-only validation mode: replies and status changes are disabled.
         </p>
       ) : (
@@ -186,7 +186,7 @@ export function WorkItemPanel({
                 comment.id === item.commentId ? "border-l-[3px] border-l-amber-400 bg-amber-50/40 dark:bg-amber-950/20" : ""
               }`}
             >
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
                 <span className="font-medium text-foreground">{comment.createdBy ?? "Unknown"}</span>
                 {comment.createdDate ? <span>{formatRelativeDate(comment.createdDate)}</span> : null}
                 {readOnly ? null : (
@@ -218,20 +218,20 @@ export function WorkItemPanel({
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+          className="text-2xs text-muted-foreground hover:text-foreground hover:underline"
         >
           Show {workItem.comments.length - shown} older comments
         </button>
       ) : null}
       {readOnly ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Read-only validation mode: commenting is disabled.
         </p>
       ) : (
         // Pinned to the bottom of the preview so it stays in reach of long discussions.
         <div ref={composerRef} data-inbox-composer="true" className="sticky bottom-0 z-10 bg-card pt-1">
           {replyTo ? (
-            <div className="mb-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="mb-0.5 flex items-center gap-1.5 text-2xs text-muted-foreground">
               <span>Replying to {replyTo.comment.createdBy ?? "Unknown"}</span>
               <button
                 type="button"

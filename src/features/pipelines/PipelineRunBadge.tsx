@@ -36,7 +36,7 @@ export function RunBadge({
   return (
     <span
       className={`inline-flex w-fit shrink-0 items-center gap-1 rounded px-1.5 py-px font-medium ${
-        size === "xs" ? "text-[11px]" : "text-xs"
+        size === "xs" ? "text-2xs" : "text-xs"
       } ${runToneClasses(visual.tone)}`}
     >
       {visual.tone === "active" ? <RunningDot /> : Icon ? <Icon className="h-3 w-3" aria-hidden="true" /> : null}

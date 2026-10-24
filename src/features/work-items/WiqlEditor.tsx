@@ -164,7 +164,7 @@ export function WiqlEditor({
             onClick={applyFormatting}
             title="Reformat the query (Shift+Alt+F)"
             aria-keyshortcuts="Shift+Alt+F"
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium hover:bg-secondary"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs font-medium hover:bg-secondary"
           >
             <WandSparkles className="h-3 w-3" aria-hidden="true" />
             Format
@@ -174,7 +174,7 @@ export function WiqlEditor({
             onClick={() => onExpandedChange(!expanded)}
             aria-pressed={expanded}
             title={expanded ? "Shrink the editor" : "Expand the editor"}
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium hover:bg-secondary"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs font-medium hover:bg-secondary"
           >
             {expanded ? (
               <Minimize2 className="h-3 w-3" aria-hidden="true" />
@@ -250,7 +250,7 @@ export function WiqlEditor({
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActiveCompletionIndex(index)}
                 onClick={() => onApplyCompletion(completion)}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] ${
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-2xs ${
                   index === activeIndex
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-secondary"
@@ -270,7 +270,7 @@ export function WiqlEditor({
         </ul>
       ) : null}
 
-      <p id="view-wiql-hint" className="text-[11px] text-muted-foreground">
+      <p id="view-wiql-hint" className="text-2xs text-muted-foreground">
         Ctrl+Space completions · ↑↓ select · Enter/Tab apply · Esc close
       </p>
     </div>

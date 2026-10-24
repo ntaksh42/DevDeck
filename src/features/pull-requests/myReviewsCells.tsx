@@ -125,7 +125,7 @@ export function renderPrCell(
         <div className="flex min-w-0 items-center gap-1.5">
           {returned ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-[11px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-2xs font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
               title="The author pushed new changes after your review — returned to you"
             >
               Returned
@@ -141,7 +141,7 @@ export function renderPrCell(
           </span>
           {pr.mergeStatus === 'conflicts' ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-2xs font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
               title="This pull request has merge conflicts"
             >
               Conflicts

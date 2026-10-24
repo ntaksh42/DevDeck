@@ -28,7 +28,7 @@ export function InboxInsightPanel({
     <button
       type="button"
       onClick={onGenerate}
-      className="ml-auto shrink-0 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+      className="ml-auto shrink-0 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
     >
       {insight ? "Regenerate" : "Generate notes"} <Kbd>I</Kbd>
     </button>
@@ -62,7 +62,7 @@ export function InboxInsightPanel({
         ) : (
           <>
             {verdict ? (
-              <span className={`shrink-0 rounded border px-1 text-[11px] font-semibold ${verdict.className}`}>
+              <span className={`shrink-0 rounded border px-1 text-2xs font-semibold ${verdict.className}`}>
                 {verdict.label}
               </span>
             ) : null}
@@ -78,17 +78,17 @@ export function InboxInsightPanel({
             <li key={index} className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-1.5">
                 {evidence.location ? (
-                  <span className="font-mono text-[11px] text-muted-foreground">{evidence.location}</span>
+                  <span className="font-mono text-2xs text-muted-foreground">{evidence.location}</span>
                 ) : null}
                 <span className="break-words">{evidence.text}</span>
                 {evidence.guess ? (
-                  <span className="rounded border border-border px-1 text-[10px] text-muted-foreground">
+                  <span className="rounded border border-border px-1 text-3xs text-muted-foreground">
                     unverified
                   </span>
                 ) : null}
               </div>
               {evidence.code ? (
-                <pre className="mt-0.5 overflow-x-auto rounded bg-background px-1.5 py-0.5 font-mono text-[11px] leading-snug">
+                <pre className="mt-0.5 overflow-x-auto rounded bg-background px-1.5 py-0.5 font-mono text-2xs leading-snug">
                   {evidence.code}
                 </pre>
               ) : null}
@@ -99,12 +99,12 @@ export function InboxInsightPanel({
 
       {insight.replyDraft ? (
         <div className="mt-1.5 rounded border-l-2 border-l-sky-500 bg-background px-2 py-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Suggested reply</p>
+          <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">Suggested reply</p>
           <p className="mt-0.5 whitespace-pre-line break-words">{insight.replyDraft}</p>
           <button
             type="button"
             onClick={() => onUseDraft(insight.replyDraft ?? "")}
-            className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+            className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
           >
             Use as reply <Kbd>Shift+R</Kbd>
           </button>

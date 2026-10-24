@@ -253,7 +253,7 @@ export function ViewEditorDialog({
                     key={macro}
                     type="button"
                     onClick={() => onInsertWiqlText(macro)}
-                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] hover:bg-secondary"
+                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs hover:bg-secondary"
                   >
                     {macro}
                   </button>
@@ -327,7 +327,7 @@ export function ViewEditorDialog({
                 {draftExtraColumns.map((referenceName) => (
                   <span
                     key={referenceName}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px]"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-2xs"
                     title={referenceName}
                   >
                     {referenceName}

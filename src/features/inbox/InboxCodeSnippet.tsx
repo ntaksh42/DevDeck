@@ -90,7 +90,7 @@ export function InboxCodeSnippet({ item, thread }: { item: InboxEntry; thread: P
   if (!filePath || line == null) return null;
 
   const header = (
-    <div className="flex min-w-0 items-center gap-1 border-b border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+    <div className="flex min-w-0 items-center gap-1 border-b border-border px-2 py-0.5 font-mono text-2xs text-muted-foreground">
       <span className="min-w-0 truncate" title={filePath}>
         {filePath}
       </span>
@@ -102,18 +102,18 @@ export function InboxCodeSnippet({ item, thread }: { item: InboxEntry; thread: P
   let body;
   const error = changesQuery.error ?? diffQuery.error;
   if (error) {
-    body = <p className="px-2 py-1 text-[11px] text-muted-foreground">Could not load the code: {commandErrorMessage(error)}</p>;
+    body = <p className="px-2 py-1 text-2xs text-muted-foreground">Could not load the code: {commandErrorMessage(error)}</p>;
   } else if (!diffQuery.data) {
-    body = <p className="px-2 py-1 text-[11px] text-muted-foreground">Loading the code…</p>;
+    body = <p className="px-2 py-1 text-2xs text-muted-foreground">Loading the code…</p>;
   } else {
     const diff = diffQuery.data;
     const content = onNewSide ? diff.targetContent : diff.baseContent;
     const reason = onNewSide ? diff.targetUnavailableReason : diff.baseUnavailableReason;
     body = content == null ? (
-      <p className="px-2 py-1 text-[11px] text-muted-foreground">{unavailableMessage(reason)}</p>
+      <p className="px-2 py-1 text-2xs text-muted-foreground">{unavailableMessage(reason)}</p>
     ) : (
       <div className="overflow-x-auto py-0.5">
-        <table className="w-full border-collapse font-mono text-[11px] leading-4" aria-label={`Code around line ${line}`}>
+        <table className="w-full border-collapse font-mono text-2xs leading-4" aria-label={`Code around line ${line}`}>
           <tbody>
             {snippetLines(content, line).map((row) => (
               <tr

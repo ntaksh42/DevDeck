@@ -15,6 +15,12 @@ export default {
       fontFamily: {
         sans: ['"Hanken Grotesk Variable"', ...defaultTheme.fontFamily.sans],
       },
+      // Compact text sizes. rem-based (11px / 10px at the 15px root) so they
+      // follow the root font-size tiers in index.css, unlike `text-[11px]`.
+      fontSize: {
+        "2xs": "0.7333rem",
+        "3xs": "0.6667rem",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -46,6 +52,9 @@ export default {
           foreground: "hsl(var(--popover-foreground))",
         },
         link: "hsl(var(--link))",
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        info: "hsl(var(--info))",
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",

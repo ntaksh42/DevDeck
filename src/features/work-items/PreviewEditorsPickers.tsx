@@ -43,7 +43,7 @@ export function CustomFieldPicker({
 
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 sm:col-span-2 2xl:col-span-3">
-      <dt className="shrink-0 text-[11px] font-semibold uppercase leading-4 text-muted-foreground">
+      <dt className="shrink-0 text-2xs font-semibold uppercase leading-4 text-muted-foreground">
         {label}
       </dt>
       <dd ref={pickerRef} className="relative min-w-0 flex-1">
@@ -59,7 +59,7 @@ export function CustomFieldPicker({
         >
           {pending ? "Updating..." : (current ?? "—")}
         </button>
-        {error && <p className="mt-0.5 text-[11px] text-destructive">{error}</p>}
+        {error && <p className="mt-0.5 text-2xs text-destructive">{error}</p>}
         {open ? (
           <div
             ref={listRef}
@@ -184,13 +184,13 @@ export function StatePicker({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full truncate rounded px-1 text-left text-2xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
         {pending ? "Updating..." : (current ?? "—")}
       </button>
       {error && (
-        <p className="mt-0.5 text-[11px] text-destructive">{error}</p>
+        <p className="mt-0.5 text-2xs text-destructive">{error}</p>
       )}
       {open ? (
         <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-popover py-1 shadow-lg">
@@ -294,12 +294,12 @@ export function ClassificationPicker({
         // break-words (not truncate): the trigger sits inside a chip-style
         // PreviewControl now, so a deep classification path wraps onto a
         // second line instead of being cut off with an ellipsis.
-        className="max-w-full break-words rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full break-words rounded px-1 text-left text-2xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
         {pending ? "Updating..." : (display ?? "—")}
       </button>
-      {error && <p className="mt-0.5 text-[11px] text-destructive">{error}</p>}
+      {error && <p className="mt-0.5 text-2xs text-destructive">{error}</p>}
       {open ? (
         <div
           ref={listRef}
@@ -348,7 +348,7 @@ export function ClassificationPicker({
                 />
                 <span className="min-w-0 flex-1 truncate">{option.name}</span>
                 {option.startDate && option.finishDate ? (
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                  <span className="shrink-0 text-2xs text-muted-foreground">
                     {option.startDate.slice(0, 10)} → {option.finishDate.slice(0, 10)}
                   </span>
                 ) : null}
@@ -399,7 +399,7 @@ export function PriorityPicker({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="inline-flex max-w-full items-center gap-1 rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex max-w-full items-center gap-1 rounded px-1 text-left text-2xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
         {!pending && current ? (
@@ -411,7 +411,7 @@ export function PriorityPicker({
         <span className="truncate">{pending ? "Updating..." : (current ?? "—")}</span>
       </button>
       {error && (
-        <p className="mt-0.5 text-[11px] text-destructive">{error}</p>
+        <p className="mt-0.5 text-2xs text-destructive">{error}</p>
       )}
       {open ? (
         <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-popover py-1 shadow-lg">

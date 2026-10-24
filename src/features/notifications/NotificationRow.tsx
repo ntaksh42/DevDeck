@@ -67,7 +67,7 @@ export const NotificationRow = forwardRef<
             {record.title}
           </span>
           <span
-            className="ml-auto shrink-0 text-[11px] text-muted-foreground"
+            className="ml-auto shrink-0 text-2xs text-muted-foreground"
             title={formatDate(record.createdAt)}
           >
             {formatRelativeDate(record.createdAt)}

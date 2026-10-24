@@ -5,7 +5,7 @@ export type DockFilterChip = { label: string; onClear: () => void; onEdit?: () =
 
 function FilterChip({ label, onEdit, onClear }: DockFilterChip) {
   return (
-    <span className="inline-flex h-4 max-w-[12rem] items-center rounded-full bg-primary/10 text-[11px] text-link">
+    <span className="inline-flex h-4 max-w-[12rem] items-center rounded-full bg-primary/10 text-2xs text-link">
       <button type="button" onClick={onEdit} disabled={!onEdit} className="truncate pl-2 pr-1 disabled:cursor-default">
         {label}
       </button>
@@ -105,7 +105,7 @@ export function DockFilterBar({
           data-filter-reveal="true"
           aria-label={label}
           title={`${label} (Ctrl+F or /)`}
-          className="flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <Search className="h-3 w-3" aria-hidden="true" />
           Ctrl+F

@@ -280,7 +280,7 @@ export function PipelineSubscriptionsBoard({
         value={sort}
         onChange={(event) => changeSort(event.target.value as BoardSort)}
         aria-label="Sort pipelines"
-        className="h-4 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+        className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
       >
         <option value="status">Sort: Status</option>
         <option value="name">Sort: Name</option>
@@ -291,7 +291,7 @@ export function PipelineSubscriptionsBoard({
         onClick={() => queries.forEach((query) => void query.refetch())}
         title={lastUpdated ? `Updated ${formatClock(lastUpdated)} — click to refresh` : "Refresh runs"}
         aria-label="Refresh runs"
-        className="inline-flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        className="inline-flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       >
         <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
         {lastUpdated ? <span className="tabular-nums">{formatClock(lastUpdated)}</span> : null}

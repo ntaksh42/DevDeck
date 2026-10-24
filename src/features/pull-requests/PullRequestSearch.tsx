@@ -328,7 +328,7 @@ export function PullRequestSearch({
         {filtersOpen ? (
           <div id="pr-search-advanced-filters" className="flex flex-wrap items-end gap-2">
             <div className="grid w-64 gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Target branches</span>
+              <span className="text-2xs font-medium text-muted-foreground">Target branches</span>
               <MultiSelectFilter
                 className="h-7"
                 options={branchSuggestions.map((branch) => ({ value: branch, label: branch }))}

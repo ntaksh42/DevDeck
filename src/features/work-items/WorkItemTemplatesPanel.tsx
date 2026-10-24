@@ -251,7 +251,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         <Star className="h-3 w-3 shrink-0 fill-current text-amber-500" aria-label="Default" />
                       ) : null}
                     </span>
-                    <span className="w-full truncate text-[11px] text-muted-foreground">
+                    <span className="w-full truncate text-2xs text-muted-foreground">
                       {templateSummary(template)}
                     </span>
                   </button>
@@ -277,7 +277,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
       </button>
 
       {status ? (
-        <span role="status" className="truncate text-[11px] text-muted-foreground">
+        <span role="status" className="truncate text-2xs text-muted-foreground">
           {status}
         </span>
       ) : null}
@@ -324,12 +324,12 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         <div className="flex items-center gap-1 text-sm font-medium">
                           <span className="min-w-0 truncate">{template.name}</span>
                           {template.isDefault ? (
-                            <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                            <span className="shrink-0 rounded bg-amber-500/15 px-1 text-2xs font-medium text-amber-600 dark:text-amber-400">
                               Default
                             </span>
                           ) : null}
                         </div>
-                        <p className="truncate text-[11px] text-muted-foreground">
+                        <p className="truncate text-2xs text-muted-foreground">
                           {templateSummary(template)}
                         </p>
                       </div>

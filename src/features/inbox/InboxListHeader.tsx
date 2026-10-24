@@ -46,7 +46,7 @@ export function InboxListHeader({
           value={organizationId}
           onChange={(event) => onOrganizationChange(event.target.value)}
           aria-label="Filter by organization"
-          className="h-4 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+          className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">All organizations</option>
           {organizations.map((org) => (

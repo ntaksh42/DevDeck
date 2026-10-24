@@ -42,12 +42,12 @@ export function AgentMessage({
         <div className="flex min-w-0 items-center gap-1.5">
           <CommentAvatar name={mine ? "You" : author} />
           <span className={`truncate font-medium ${mine ? "text-foreground" : "text-violet-700 dark:text-violet-300"}`}>{name}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground">{formatRelativeDate(when)}</span>
+          <span className="shrink-0 text-2xs text-muted-foreground">{formatRelativeDate(when)}</span>
         </div>
       )}
       <div className="pl-[26px]">
         {quote ? (
-          <p className="line-clamp-2 break-words border-l-2 border-border pl-1.5 text-[11px] text-muted-foreground" title={quote}>
+          <p className="line-clamp-2 break-words border-l-2 border-border pl-1.5 text-2xs text-muted-foreground" title={quote}>
             {quote}
           </p>
         ) : null}
@@ -60,13 +60,13 @@ export function AgentMessage({
 /** The conversation's state as a pill, where a PR thread shows Active / Resolved. */
 function Status({ note }: { note: AgentNote }) {
   const [tone, label] = noteNeedsYou(note)
-    ? ["border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300", "Needs you"]
+    ? ["border-destructive/30 bg-destructive/10 text-destructive", "Needs you"]
     : note.status === "draft"
       ? ["border-dashed border-border text-muted-foreground", "Draft"]
       : note.status === "done"
         ? ["border-border bg-muted text-muted-foreground", "Done"]
-        : ["border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300", "Open"];
-  return <span className={`shrink-0 rounded border px-1.5 text-[11px] leading-4 ${tone}`}>{label}</span>;
+        : ["border-warning/30 bg-warning/10 text-warning", "Open"];
+  return <span className={`shrink-0 rounded border px-1.5 text-2xs leading-4 ${tone}`}>{label}</span>;
 }
 
 function lastActivity(note: AgentNote): string {
@@ -151,7 +151,7 @@ export const AgentConversation = forwardRef<
         <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
         <CommentAvatar name="You" />
         {expanded ? (
-          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={meta}>
+          <span className="min-w-0 flex-1 truncate text-2xs text-muted-foreground" title={meta}>
             <span className="font-medium text-foreground">You</span>
             {meta.slice("You".length)}
           </span>
@@ -161,7 +161,7 @@ export const AgentConversation = forwardRef<
               {firstLine}
             </span>
             {note.replies.length ? (
-              <span className="shrink-0 text-[11px] text-muted-foreground" title={`${note.replies.length} replies`}>
+              <span className="shrink-0 text-2xs text-muted-foreground" title={`${note.replies.length} replies`}>
                 {note.replies.length}
               </span>
             ) : null}
@@ -186,9 +186,9 @@ export const AgentConversation = forwardRef<
               <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />
             ),
           )}
-          {done && note.resolved ? <p className="pl-[26px] text-[11px] text-muted-foreground">✓ {note.resolved}</p> : null}
+          {done && note.resolved ? <p className="pl-[26px] text-2xs text-muted-foreground">✓ {note.resolved}</p> : null}
           {selected && actions.length ? (
-            <div className="flex flex-wrap gap-x-3 pl-[26px] text-[11px]">
+            <div className="flex flex-wrap gap-x-3 pl-[26px] text-2xs">
               {actions.map((action) => (
                 <button
                   key={action.label}

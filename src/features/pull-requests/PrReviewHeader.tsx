@@ -18,7 +18,7 @@ import { type AddReviewerRequest, PrReviewerAdder } from "./PrReviewerAdder";
 import { PrLabelsRow } from "./PrLabelsRow";
 
 const BADGE_BASE =
-  "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium";
+  "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-2xs font-medium";
 
 function shortRef(refName: string): string {
   return refName.replace(/^refs\/heads\//, "");
@@ -267,7 +267,7 @@ export function PrReviewHeader({
               {reviewers.map((reviewer) => (
                 <span
                   key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
-                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground [overflow-wrap:anywhere]"
+                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-2xs text-foreground [overflow-wrap:anywhere]"
                   title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
                 >
                   {reviewer.displayName}
@@ -284,7 +284,7 @@ export function PrReviewHeader({
                         onClick={() => onToggleReviewerRequired(reviewer)}
                         title={reviewer.isRequired ? "Make optional" : "Make required"}
                         aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
-                        className="rounded px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
+                        className="rounded px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
                       >
                         {reviewer.isRequired ? "Req" : "Opt"}
                       </button>

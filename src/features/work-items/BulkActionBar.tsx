@@ -37,7 +37,7 @@ function BulkBreakdown({
       {shown.map((entry) => (
         <span
           key={entry.label}
-          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground"
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-2xs font-medium text-secondary-foreground"
         >
           {entry.count} {entry.label}
         </span>
@@ -45,7 +45,7 @@ function BulkBreakdown({
       {hidden.length > 0 ? (
         <span
           title={hiddenTitle}
-          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-2xs font-medium text-muted-foreground"
         >
           +{hiddenCount}
         </span>
@@ -62,7 +62,7 @@ export function BulkFailurePanel({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mb-2 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-destructive">
+    <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium">
           {failures.length} bulk update failure{failures.length === 1 ? "" : "s"}
@@ -284,7 +284,7 @@ export function BulkActionBar({
                     >
                       <span className="truncate font-medium">{c.displayName}</span>
                       {c.uniqueName ? (
-                        <span className="truncate text-[11px] text-muted-foreground">{c.uniqueName}</span>
+                        <span className="truncate text-2xs text-muted-foreground">{c.uniqueName}</span>
                       ) : null}
                     </button>
                   ))

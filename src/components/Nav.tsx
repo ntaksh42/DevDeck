@@ -93,7 +93,7 @@ function NavBadge({ count }: { count: number | null | undefined }) {
   return (
     <span
       aria-hidden="true"
-      className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground group-hover:bg-background/70"
+      className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 text-2xs font-medium tabular-nums text-muted-foreground group-hover:bg-background/70"
     >
       {count > 99 ? "99+" : count}
     </span>
