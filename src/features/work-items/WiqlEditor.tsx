@@ -8,11 +8,11 @@ import { isImeComposing } from '@/lib/utils';
 const WIQL_TEXT_CLASSES = "px-3 py-2 font-mono text-xs leading-5 tracking-normal whitespace-pre-wrap break-words";
 
 const TOKEN_CLASSES: Record<string, string> = {
-  keyword: "font-semibold text-sky-700 dark:text-sky-300",
+  keyword: "font-semibold text-info",
   field: "text-purple-700 dark:text-purple-300",
-  macro: "font-semibold text-amber-700 dark:text-amber-300",
-  string: "text-emerald-700 dark:text-emerald-300",
-  number: "text-emerald-700 dark:text-emerald-300",
+  macro: "font-semibold text-warning",
+  string: "text-success",
+  number: "text-success",
   plain: "",
 };
 

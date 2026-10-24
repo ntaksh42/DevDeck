@@ -7,9 +7,9 @@ import { MarkdownView } from "@/lib/markdown";
 import { CommentComposer } from "./CommentComposer";
 
 const AVATAR_PALETTE = [
-  "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-  "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-  "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  "bg-info/10 text-info",
+  "bg-success/10 text-success",
+  "bg-warning/10 text-warning",
   "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
   "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
   "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300",
@@ -76,7 +76,7 @@ function ThreadStatusDropdown({
         className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-2xs font-medium disabled:opacity-50 ${
           resolved
             ? "border-border bg-muted text-muted-foreground"
-            : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
+            : "border-info/30 bg-info/10 text-info"
         }`}
       >
         {resolved ? "Resolved" : "Active"}
@@ -312,7 +312,7 @@ export function PrThreadCard({
       className={`rounded-md border px-2 py-1.5 ${
         resolved
           ? "border-border bg-muted/60"
-          : "border-border border-l-[3px] border-l-amber-400 bg-card dark:border-l-amber-500"
+          : "border-border border-l-[3px] border-l-warning bg-card"
       }`}
     >
       <div className="group/comment flex min-w-0 items-center gap-1.5 text-xs">

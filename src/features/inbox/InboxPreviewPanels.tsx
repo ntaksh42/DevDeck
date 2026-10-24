@@ -183,7 +183,7 @@ export function WorkItemPanel({
             <div
               key={comment.id}
               className={`px-2 py-1 ${
-                comment.id === item.commentId ? "border-l-[3px] border-l-amber-400 bg-amber-50/40 dark:bg-amber-950/20" : ""
+                comment.id === item.commentId ? "border-l-[3px] border-l-warning bg-warning/10" : ""
               }`}
             >
               <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">

@@ -135,7 +135,7 @@ export const AgentConversation = forwardRef<
   return (
     <div
       className={`overflow-hidden rounded-md border ${
-        done ? "border-border bg-muted/60" : "border-border border-l-[3px] border-l-amber-400 bg-card dark:border-l-amber-500"
+        done ? "border-border bg-muted/60" : "border-border border-l-[3px] border-l-warning bg-card"
       } ${selected ? "ring-1 ring-primary/60" : ""}`}
       data-agent-conversation={note.id}
     >

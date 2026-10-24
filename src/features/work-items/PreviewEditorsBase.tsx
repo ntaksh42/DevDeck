@@ -236,9 +236,9 @@ export function HighlightedText({ text, query }: { text: string; query: string }
 }
 
 const CANDIDATE_AVATAR_CLASSES = [
-  "bg-sky-100 text-sky-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-700",
+  "bg-info/10 text-info",
+  "bg-success/10 text-success",
+  "bg-warning/10 text-warning",
   "bg-violet-100 text-violet-700",
   "bg-rose-100 text-rose-700",
   "bg-teal-100 text-teal-700",

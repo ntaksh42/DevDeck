@@ -47,7 +47,7 @@ export function highlightTerms(text: string, terms: string[]): ReactNode {
       const chunk = text.slice(start, i);
       parts.push(
         marked[start] ? (
-          <mark key={start} className="rounded-sm bg-yellow-200/70 text-inherit dark:bg-yellow-500/30">
+          <mark key={start} className="rounded-sm bg-warning/30 text-inherit">
             {chunk}
           </mark>
         ) : (

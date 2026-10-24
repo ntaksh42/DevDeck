@@ -888,6 +888,8 @@ format!(
   `text-3xs` (10px) を使う。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
   `index.css` の `:focus-visible` フォールバックが、自前のフォーカス表示 (`focus:ring-*`) を
   持たないコントロールにもテーマ色のリングを出す。
+  OS の「視覚効果を減らす」設定 (`prefers-reduced-motion`) ではトランジションと pulse/ping を止める
+  (スピナーは処理中表示のため回し続ける)。
 - PR の **active** 検索はローカル同期キャッシュから動作する。**completed / abandoned**
   は履歴が大きくキャッシュしないため、`search_pull_requests` が Azure DevOps から
   ライブ取得する。

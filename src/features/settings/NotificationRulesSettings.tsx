@@ -156,7 +156,7 @@ export function NotificationRulesSettings() {
                   <span
                     className={`rounded px-1.5 py-px text-2xs font-medium ${
                       rule.mute
-                        ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                        ? "bg-warning/10 text-warning"
                         : "bg-secondary text-muted-foreground"
                     }`}
                   >
@@ -252,7 +252,7 @@ export function NotificationRulesSettings() {
         ) : null}
 
         {mutation.isSuccess && !dirty ? (
-          <p className="text-sm text-green-700 dark:text-green-400">
+          <p className="text-sm text-success">
             Notification rules saved.
           </p>
         ) : null}

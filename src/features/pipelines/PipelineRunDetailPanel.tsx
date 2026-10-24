@@ -361,7 +361,7 @@ export function PipelineRunDetailPanel({
             <div ref={timelineRef} className="border-b border-border">
               {tree.length === 0 ? (
                 detail?.timelineUnavailable ? (
-                  <p className="px-3 py-3 text-xs text-amber-700 dark:text-amber-400">
+                  <p className="px-3 py-3 text-xs text-warning">
                     Failed to load the timeline. It may be a transient error — try refreshing.
                   </p>
                 ) : (

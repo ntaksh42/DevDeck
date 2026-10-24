@@ -395,7 +395,7 @@ export function PullRequestSearch({
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 
       {mutation.isSuccess && mutation.data.warnings.length > 0 && (
-        <p role="status" className="shrink-0 text-xs text-amber-600 dark:text-amber-400">
+        <p role="status" className="shrink-0 text-xs text-warning">
           Could not fetch {mutation.data.warnings.length} project(s): {mutation.data.warnings.join(", ")}.
         </p>
       )}

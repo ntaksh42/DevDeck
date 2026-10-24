@@ -3,8 +3,8 @@ import { Kbd } from "./InboxPreviewPanels";
 
 /** `rowClassName` is the small pill on the list row. */
 export const VERDICTS: Record<string, { label: string; className: string; rowClassName: string }> = {
-  reply: { label: "Reply", rowClassName: "border-violet-600/40 bg-violet-500/10 text-violet-700 dark:text-violet-300", className: "border-sky-600/40 text-sky-700 dark:text-sky-300" },
-  fix: { label: "Fix first", rowClassName: "border-destructive/40 bg-destructive/10 text-destructive", className: "border-amber-600/40 text-amber-700 dark:text-amber-300" },
+  reply: { label: "Reply", rowClassName: "border-violet-600/40 bg-violet-500/10 text-violet-700 dark:text-violet-300", className: "border-info/40 text-info" },
+  fix: { label: "Fix first", rowClassName: "border-destructive/40 bg-destructive/10 text-destructive", className: "border-warning/40 text-warning" },
   none: { label: "No action", rowClassName: "border-border text-muted-foreground", className: "border-border text-muted-foreground" },
 };
 
@@ -98,7 +98,7 @@ export function InboxInsightPanel({
       ) : null}
 
       {insight.replyDraft ? (
-        <div className="mt-1.5 rounded border-l-2 border-l-sky-500 bg-background px-2 py-1">
+        <div className="mt-1.5 rounded border-l-2 border-l-info bg-background px-2 py-1">
           <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">Suggested reply</p>
           <p className="mt-0.5 whitespace-pre-line break-words">{insight.replyDraft}</p>
           <button

@@ -26,7 +26,7 @@ export function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
 
 export function RequiredBadge({ required }: { required: boolean }) {
   return required ? (
-    <span className="inline-flex items-center rounded border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+    <span className="inline-flex items-center rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs font-medium text-info">
       Required
     </span>
   ) : (
@@ -53,21 +53,21 @@ export function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
   if (status === 'succeeded') {
     icon = (
       <CheckCircle2
-        className="h-3.5 w-3.5 text-green-600 dark:text-green-400"
+        className="h-3.5 w-3.5 text-success"
         aria-hidden="true"
       />
     );
   } else if (status === 'failed') {
     icon = (
       <XCircle
-        className="h-3.5 w-3.5 text-red-600 dark:text-red-400"
+        className="h-3.5 w-3.5 text-destructive"
         aria-hidden="true"
       />
     );
   } else if (status === 'in_progress') {
     icon = (
       <Loader
-        className="h-3.5 w-3.5 animate-spin text-amber-500 dark:text-amber-400"
+        className="h-3.5 w-3.5 animate-spin text-warning"
         aria-hidden="true"
       />
     );
@@ -141,7 +141,7 @@ export function renderPrCell(
           </span>
           {pr.mergeStatus === 'conflicts' ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-2xs font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+              className="inline-flex shrink-0 items-center rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-2xs font-medium text-destructive"
               title="This pull request has merge conflicts"
             >
               Conflicts

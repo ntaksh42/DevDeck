@@ -210,7 +210,7 @@ export function DesktopNotificationSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Desktop notification settings saved.</p>
+          <p className="text-sm text-success">Desktop notification settings saved.</p>
         ) : null}
 
         {testResult ? <p className="text-sm text-muted-foreground">{testResult}</p> : null}

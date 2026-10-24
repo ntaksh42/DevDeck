@@ -248,7 +248,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                     <span className="flex w-full items-center gap-1 text-sm font-medium">
                       <span className="min-w-0 truncate">{template.name}</span>
                       {template.isDefault ? (
-                        <Star className="h-3 w-3 shrink-0 fill-current text-amber-500" aria-label="Default" />
+                        <Star className="h-3 w-3 shrink-0 fill-current text-warning" aria-label="Default" />
                       ) : null}
                     </span>
                     <span className="w-full truncate text-2xs text-muted-foreground">
@@ -324,7 +324,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         <div className="flex items-center gap-1 text-sm font-medium">
                           <span className="min-w-0 truncate">{template.name}</span>
                           {template.isDefault ? (
-                            <span className="shrink-0 rounded bg-amber-500/15 px-1 text-2xs font-medium text-amber-600 dark:text-amber-400">
+                            <span className="shrink-0 rounded bg-warning/15 px-1 text-2xs font-medium text-warning">
                               Default
                             </span>
                           ) : null}
@@ -341,7 +341,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
                       >
                         <Star
-                          className={`h-3.5 w-3.5 ${template.isDefault ? "fill-current text-amber-500" : ""}`}
+                          className={`h-3.5 w-3.5 ${template.isDefault ? "fill-current text-warning" : ""}`}
                           aria-hidden="true"
                         />
                       </button>

@@ -190,7 +190,7 @@ export function ReviewTab({
             onClick={() =>
               runPrAction("complete", `Complete (merge) this pull request using ${mergeStrategy}?`)
             }
-            className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900"
+            className="rounded border border-success/30 bg-success/10 px-2 py-0.5 font-medium text-success hover:bg-success/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Complete
           </button>

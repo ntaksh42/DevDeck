@@ -47,7 +47,7 @@ export function SectionGrip({ show }: { show: boolean }) {
   if (!show) return null;
   return (
     <GripVertical
-      className="ml-auto h-3 w-3 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-slate-400"
+      className="ml-auto h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
       aria-hidden="true"
     />
   );

@@ -198,7 +198,7 @@ export function CollapsibleComment({
     // text, not chrome, carries each entry.
     <article className="group min-w-0 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-2xs font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info/10 text-2xs font-semibold text-info">
           {commentAuthorInitials(createdBy)}
         </span>
         <span className="min-w-0 truncate font-bold">
@@ -206,7 +206,7 @@ export function CollapsibleComment({
         </span>
         {createdDate ? (
           <span
-            className="shrink-0 text-2xs font-medium text-slate-500 dark:text-slate-400"
+            className="shrink-0 text-2xs font-medium text-muted-foreground"
             title={new Date(createdDate).toLocaleString()}
           >
             {formatRelativeDate(createdDate)}

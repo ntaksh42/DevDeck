@@ -28,7 +28,7 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
               className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary disabled:cursor-default disabled:opacity-60"
               title={pr.webUrl ?? "Pull request link unavailable"}
             >
-              <span className="w-16 shrink-0 truncate text-2xs font-bold text-slate-500 dark:text-slate-400">
+              <span className="w-16 shrink-0 truncate text-2xs font-bold text-muted-foreground">
                 {inReviews ? "Review" : "PR"}
               </span>
               <span className="shrink-0 font-mono text-2xs font-extrabold text-primary">
@@ -52,7 +52,7 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
 export function WorkItemAttachmentsSection({ preview }: { preview: WorkItemPreview }) {
   return (
     <PreviewSection
-      accentColor="border-l-amber-400 dark:border-l-amber-500"
+      accentColor="border-l-warning"
       collapseId="attachments"
       title={`Attachments (${preview.attachments.length})`}
     >

@@ -183,3 +183,19 @@
 .dv-sash {
   pointer-events: none;
 }
+
+/* Honor the OS "reduce motion" setting: no fades/slides, no pulsing or pinging
+   indicators. Spinners keep rotating so a pending state still reads as busy. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-ping,
+  .animate-pulse {
+    animation: none;
+  }
+}

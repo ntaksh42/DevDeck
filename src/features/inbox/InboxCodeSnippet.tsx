@@ -119,7 +119,7 @@ export function InboxCodeSnippet({ item, thread }: { item: InboxEntry; thread: P
               <tr
                 key={row.number}
                 data-commented-line={row.number === line ? "true" : undefined}
-                className={row.number === line ? "bg-amber-100 dark:bg-amber-900/40" : undefined}
+                className={row.number === line ? "bg-warning/10" : undefined}
               >
                 <td className="w-10 select-none pr-2 text-right align-top text-muted-foreground tabular-nums">{row.number}</td>
                 <td className="whitespace-pre pr-2">{row.text}</td>

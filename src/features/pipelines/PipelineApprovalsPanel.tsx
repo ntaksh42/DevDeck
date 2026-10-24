@@ -28,7 +28,7 @@ export function PipelineApprovalsPanel({
   };
   const first = approvals[0]?.instructions?.trim() || "Approval required to continue";
   return (
-    <div className="relative min-w-0 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30">
+    <div className="relative min-w-0 rounded-md border border-warning/30 bg-warning/10">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
@@ -36,11 +36,11 @@ export function PipelineApprovalsPanel({
         className="flex w-full items-center gap-2 px-3 py-1 text-left text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-amber-800 dark:text-amber-200" aria-hidden="true" />
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-amber-800 dark:text-amber-200" aria-hidden="true" />
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
         )}
-        <span className="shrink-0 font-medium text-amber-800 dark:text-amber-200">
+        <span className="shrink-0 font-medium text-warning">
           Pending approvals ({approvals.length})
         </span>
         {!expanded && approvals.length > 0 ? (
@@ -51,14 +51,14 @@ export function PipelineApprovalsPanel({
         ) : null}
       </button>
       {error || expanded ? (
-        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-md border border-amber-300 bg-amber-50 shadow-lg dark:border-amber-700/60 dark:bg-amber-950">
+        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-md border border-warning/30 bg-warning/10 shadow-lg">
       {error ? (
         <p role="alert" className="px-3 py-2 text-xs text-destructive">
           {error}
         </p>
       ) : null}
       {expanded ? (
-      <ul className="divide-y divide-amber-200/70 border-t border-amber-200 dark:divide-amber-800/40 dark:border-amber-800/60">
+      <ul className="divide-y divide-warning/20 border-t border-warning/30">
         {approvals.map((approval) => {
           const busy = pendingApprovalId === approval.id;
           return (

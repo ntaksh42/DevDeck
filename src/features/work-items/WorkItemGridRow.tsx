@@ -109,7 +109,7 @@ export const WorkItemGridRow = forwardRef<
               role="img"
               aria-label="Unread activity"
               title="Changed since you last opened it"
-              className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
+              className="h-2 w-2 shrink-0 rounded-full bg-blue-500"
             />
           ) : null}
           {isTitle && isStale ? (
@@ -133,7 +133,7 @@ export const WorkItemGridRow = forwardRef<
           {isTitle && item.hasDraftPullRequest ? (
             <GitPullRequest
               role="img"
-              className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+              className="h-3.5 w-3.5 shrink-0 text-warning"
               aria-label="関連PRあり (Draft)"
             >
               <title>関連PRあり (Draft)</title>

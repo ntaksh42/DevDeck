@@ -447,7 +447,7 @@ export function AgentPanel({
         {quote ? (
           <p className="mb-1 flex items-center gap-1 text-2xs text-muted-foreground">
             Quoting
-            <span className="min-w-0 flex-1 truncate border-l-2 border-yellow-400 pl-1 text-foreground" title={quote.quote}>
+            <span className="min-w-0 flex-1 truncate border-l-2 border-warning pl-1 text-foreground" title={quote.quote}>
               {quote.quote}
             </span>
             <button type="button" onClick={onClearQuote} aria-label="Drop the quote" className="rounded hover:bg-accent">

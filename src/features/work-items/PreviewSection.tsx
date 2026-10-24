@@ -35,7 +35,7 @@ export function PreviewControl({
 }) {
   return (
     <div className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1">
-      <span className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
+      <span className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-muted-foreground">
         {label}
       </span>
       <div className="flex min-w-0 items-center leading-4">{children}</div>
@@ -59,7 +59,7 @@ export function PreviewField({
         wide ? "w-full" : "min-w-0"
       }`}
     >
-      <dt className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
+      <dt className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-muted-foreground">
         {label}
       </dt>
       <dd
@@ -75,7 +75,7 @@ export function PreviewField({
 }
 
 export function PreviewSection({
-  accentColor = "border-l-slate-400 dark:border-l-slate-500",
+  accentColor = "border-l-muted-foreground",
   children,
   className = "",
   collapseId,
@@ -118,22 +118,22 @@ export function PreviewSection({
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
             {...move}
-            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-blue-50 px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-blue-950 dark:hover:bg-blue-900 ${accentColor}`}
+            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-info/10 px-1.5 py-1 text-left hover:bg-info/20 focus:outline-none focus:ring-1 focus:ring-ring ${accentColor}`}
           >
             <ChevronRight
-              className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
+              className={`h-3 w-3 shrink-0 text-info transition-transform ${
                 collapsed ? "" : "rotate-90"
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-2xs font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:text-blue-100">
+            <h3 className="text-2xs font-extrabold uppercase tracking-wider leading-4 text-foreground">
               {title}
             </h3>
             <SectionGrip show={move !== null} />
           </button>
         ) : (
           <h3
-            className={`rounded border-l-4 bg-blue-50 px-1.5 py-1 text-2xs font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:bg-blue-950 dark:text-blue-100 ${accentColor}`}
+            className={`rounded border-l-4 bg-info/10 px-1.5 py-1 text-2xs font-extrabold uppercase tracking-wider leading-4 text-foreground ${accentColor}`}
           >
             {title}
           </h3>
@@ -168,7 +168,7 @@ export function PreviewTagsField({
 
   return (
     <div className="flex w-full min-w-0 items-baseline gap-1.5">
-      <dt className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
+      <dt className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-muted-foreground">
         {label}
       </dt>
       <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1">

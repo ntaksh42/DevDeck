@@ -70,7 +70,7 @@ export function BulkFailurePanel({
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded px-1 text-destructive hover:bg-red-100 dark:hover:bg-red-950"
+          className="rounded px-1 text-destructive hover:bg-destructive/20"
         >
           Dismiss
         </button>

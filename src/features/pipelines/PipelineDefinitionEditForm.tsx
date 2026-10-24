@@ -206,7 +206,7 @@ export function PipelineDefinitionEditForm({
                     {variable.name}
                   </span>
                   <span>(secret)</span>
-                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-2xs font-medium text-amber-700">
+                  <span className="shrink-0 rounded bg-warning/10 px-1.5 py-0.5 text-2xs font-medium text-warning">
                     Secret
                   </span>
                 </div>

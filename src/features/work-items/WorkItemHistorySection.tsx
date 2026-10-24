@@ -35,15 +35,15 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         {...move}
-        className="group flex w-full items-center gap-1 rounded border-l-4 border-l-slate-400 bg-blue-50 px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:border-l-slate-500 dark:bg-blue-950 dark:hover:bg-blue-900"
+        className="group flex w-full items-center gap-1 rounded border-l-4 border-l-muted-foreground bg-info/10 px-1.5 py-1 text-left hover:bg-info/20 focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <ChevronRight
-          className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
+          className={`h-3 w-3 shrink-0 text-info transition-transform ${
             open ? "rotate-90" : ""
           }`}
           aria-hidden="true"
         />
-        <h3 className="text-2xs font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:text-blue-100">
+        <h3 className="text-2xs font-extrabold uppercase tracking-wider leading-4 text-foreground">
           History
         </h3>
         {open && updatesQuery.isFetching ? (

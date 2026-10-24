@@ -29,7 +29,7 @@ export function PipelineTestResultsPanel({
     <div className="border-b border-border pb-2">
       <PreviewBand>Tests ({results.total})</PreviewBand>
       <p className="flex flex-wrap gap-x-3 px-3 text-xs">
-        <span className="text-emerald-600 dark:text-emerald-400">{results.passed} passed</span>
+        <span className="text-success">{results.passed} passed</span>
         <span className={results.failed > 0 ? "font-medium text-destructive" : "text-muted-foreground"}>
           {results.failed} failed
         </span>

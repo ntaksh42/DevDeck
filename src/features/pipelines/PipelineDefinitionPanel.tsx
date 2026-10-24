@@ -70,7 +70,7 @@ function VariableRow({ variable }: { variable: PipelineVariable }) {
       <td className="py-1 align-top">
         <div className="flex flex-wrap gap-1">
           {variable.isSecret && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-2xs font-medium text-amber-700">
+            <span className="rounded bg-warning/10 px-1.5 py-0.5 text-2xs font-medium text-warning">
               Secret
             </span>
           )}
