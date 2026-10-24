@@ -610,8 +610,11 @@ CI・役割・投票などのバッジはラベル文字列にする。Work Item
 `text/plain` (ヘッダー付き TSV、Excel / テキストエディタ向け) を同時に書き込み、
 `ClipboardItem` が使えない環境、またはリッチ書き込みが拒否された場合は TSV のみ書き込む (`src/lib/clipboardTable.ts`)。
 他人が書いたタイトル等が表計算で数式として評価されないよう、セルの先頭が `=` `+` `-` `@` またはタブ/CR のときは先頭に `'` を付ける。
+この表コピーが「Copy as Grid」(`Ctrl+C`)。`Ctrl+Shift+C` は「Copy as Link」で、同じ選択行を
+1 行 1 リンクとしてコピーする (ラベルは PR が `!id タイトル`、作業項目が `#id タイトル`)。
+`text/html` は行ごとの `<a href>`、`text/plain` は 1 行 1 つの Markdown リンクで、Web URL が無い行は除外する。
 `C` (1 件の URL) と `L` (Markdown リンク) は変わらない。コピー結果はトーストで通知する
-(`Row copied` / `N rows copied` / `Copy failed`)。
+(`Row copied` / `N rows copied` / `Link copied` / `N links copied` / `No links to copy` / `Copy failed`)。
 `Escape` で複数選択を解除。
 My Reviews は既存の `selectedKeys` (ファイル重複検知と共有)、作業項目グリッドは既存の
 チェックボックス選択 (一括操作と共有。選択ロジックは

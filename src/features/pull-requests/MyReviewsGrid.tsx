@@ -12,8 +12,8 @@ import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { SortHeaderButton } from '@/components/SortHeaderButton';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { openExternalUrl } from '@/lib/openExternal';
-import { copyRowsAsTable } from '@/lib/clipboardTable';
-import { reviewCopyColumns } from './prCopyColumns';
+import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
+import { prLinkTarget, reviewCopyColumns } from './prCopyColumns';
 import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
 import { myReviewsAgentList } from './prAgentList';
@@ -129,7 +129,8 @@ export function MyReviewsGrid({
         // Copies the whole shift-selection as a table; `c` alone stays the
         // single-row URL copy.
         e.preventDefault();
-        void copyRowsAsTable(g.selectedPrs, reviewCopyColumns(g.visibleColumns), g.setCopyToast, 1500);
+        if (e.shiftKey) void copyRowsAsLinks(g.selectedPrs, prLinkTarget, g.setCopyToast, 1500);
+        else void copyRowsAsTable(g.selectedPrs, reviewCopyColumns(g.visibleColumns), g.setCopyToast, 1500);
       }
       return;
     }

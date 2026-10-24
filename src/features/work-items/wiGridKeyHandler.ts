@@ -7,7 +7,7 @@ import {
   markdownLink,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
-import { copyRowsAsTable } from '@/lib/clipboardTable';
+import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
 import { toggleTriageArchived } from '@/lib/triage';
 import {
   workItemSummaryKey,
@@ -118,7 +118,16 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
             : displayed[selectedIndex]
               ? [displayed[selectedIndex]]
               : [];
-        void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns), setCopyToast);
+        // Ctrl+Shift+C copies one link per row ("Copy as Link").
+        if (e.shiftKey) {
+          void copyRowsAsLinks(
+            targets,
+            (item) => ({ text: `#${item.id} ${item.title}`, url: item.webUrl }),
+            setCopyToast,
+          );
+        } else {
+          void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns), setCopyToast);
+        }
       }
       return;
     }

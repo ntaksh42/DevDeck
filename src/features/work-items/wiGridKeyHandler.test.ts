@@ -105,13 +105,14 @@ describe("createWiKeyHandler — copy as Markdown link", () => {
 });
 
 describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
-  function fireCtrlC(deps: WiKeyHandlerDeps) {
+  function fireCtrlC(deps: WiKeyHandlerDeps, shiftKey = false) {
     const handler = createWiKeyHandler(deps);
     handler({
-      key: "c",
+      key: shiftKey ? "C" : "c",
       target: document.body,
       defaultPrevented: false,
       ctrlKey: true,
+      shiftKey,
       metaKey: false,
       altKey: false,
       preventDefault: vi.fn(),
@@ -137,6 +138,26 @@ describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
       "#\tTitle\tState\n#456\tFix login\tActive\n#789\tAdd logout\tNew",
     );
     await vi.waitFor(() => expect(setCopyToast).toHaveBeenCalledWith("2 rows copied"));
+  });
+
+  it("Ctrl+Shift+C copies one Markdown link per checked work item", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const setCopyToast = vi.fn();
+    const checkedItems = [
+      makeItem({ id: 456, title: "Fix login", webUrl: "https://dev.azure.com/o/p/_workitems/edit/456" }),
+      makeItem({ id: 789, title: "Add logout", webUrl: "https://dev.azure.com/o/p/_workitems/edit/789" }),
+    ];
+
+    fireCtrlC(makeDeps({ checkedItems, setCopyToast }), true);
+
+    expect(writeText).toHaveBeenCalledWith(
+      "[#456 Fix login](https://dev.azure.com/o/p/_workitems/edit/456)\n[#789 Add logout](https://dev.azure.com/o/p/_workitems/edit/789)",
+    );
+    await vi.waitFor(() => expect(setCopyToast).toHaveBeenCalledWith("2 links copied"));
   });
 
   it("falls back to the focused row when nothing is checked", () => {

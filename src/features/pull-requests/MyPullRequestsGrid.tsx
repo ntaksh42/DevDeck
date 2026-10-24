@@ -17,13 +17,13 @@ import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
-import { copyRowsAsTable } from "@/lib/clipboardTable";
+import { copyRowsAsLinks, copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
 import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
 import { DraftsCheckbox } from "./DraftsCheckbox";
 import { prAgentList, usePrReviewPanels } from "./usePrReviewPanels";
-import { createdCopyColumns } from "./prCopyColumns";
+import { createdCopyColumns, prLinkTarget } from "./prCopyColumns";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
   MAX_REVIEW_PREVIEW_WIDTH,
@@ -231,7 +231,8 @@ export function MyPullRequestsGrid() {
     if (event.ctrlKey || event.metaKey) {
       if ((event.key === "c" || event.key === "C") && !event.altKey) {
         event.preventDefault();
-        void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
+        if (event.shiftKey) void copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast);
+        else void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
       } else if (event.key === "Enter" && pr?.webUrl) {
         event.preventDefault();
         openExternalUrl(pr.webUrl);
