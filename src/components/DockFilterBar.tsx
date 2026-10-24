@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Search, X } from 'lucide-react';
 
 export type DockFilterChip = { label: string; onClear: () => void; onEdit?: () => void };
@@ -71,11 +71,16 @@ export function DockFilterBar({
   // Keyboard users must never be stranded on <body>: when the grid has no row
   // to take focus back (e.g. the filter matched nothing) or a clicked chip
   // disappears, focus lands on the "Ctrl+F" button instead.
+  const focusTimerRef = useRef<number | undefined>(undefined);
   function keepFocusInStrip() {
-    window.setTimeout(() => {
+    window.clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = window.setTimeout(() => {
       if (document.activeElement === document.body || !document.activeElement) revealRef.current?.focus();
     }, 50);
   }
+  // A pending check must not outlive the bar (it would touch `document` after
+  // the component, or a test's jsdom environment, is already gone).
+  useEffect(() => () => window.clearTimeout(focusTimerRef.current), []);
 
   // Focus as soon as the input exists, so keys typed right after Ctrl+F go
   // into the filter instead of reaching the grid's single-key shortcuts.
