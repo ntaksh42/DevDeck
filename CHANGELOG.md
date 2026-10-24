@@ -7,6 +7,7 @@ All notable changes to DevDeck (formerly AzDoDeck) are documented here.
 ### Added
 - **UI scale.** The whole app can be zoomed from Settings and with keyboard shortcuts (#724).
 - Inbox items can be marked and moved to Done or snoozed in bulk (#726).
+- Inbox shows every related link above the conversation — linked work items / pull requests with titles and states, plus links from the description, all comments and attachments — so a reply needs no trip to the browser.
 
 ## [0.2.30] — 2026-10-17
 

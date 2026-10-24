@@ -216,7 +216,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Reply with Claude's draft (edit, then send)</span><kbd className={kbd}>Shift+R</kbd></div>
           <div className={row}><span>Post the reply / post and resolve the thread (in the reply box)</span><kbd className={kbd}>Ctrl+Enter · Ctrl+Shift+Enter</kbd></div>
           <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>
-          <div className={row}><span>Open the nth link</span><kbd className={kbd}>1-9</kbd></div>
+          <div className={row}><span>Open the nth related link</span><kbd className={kbd}>1-9</kbd></div>
           <div className={row}><span>Filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
 
           <p className={section}>Notifications</p>

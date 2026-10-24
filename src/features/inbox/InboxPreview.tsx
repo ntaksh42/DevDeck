@@ -23,6 +23,7 @@ import {
 import type { InboxDetail } from "./useInboxDetail";
 import { InboxInsightPanel } from "./InboxInsightPanel";
 import { InboxContextCode, InboxContextDescription, InboxContextSummary } from "./InboxContext";
+import { InboxRelatedLinks } from "./InboxRelatedLinks";
 
 function bandTitle(item: InboxEntry): string {
   if (isThreadItem(item)) return "Thread";
@@ -177,6 +178,8 @@ export function InboxPreview({
         />
       ) : null}
 
+      {!detail.isLoading ? <InboxRelatedLinks links={links} onOpen={onOpenLink} /> : null}
+
       <h3 className="mt-2 border-b border-border pb-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
         {bandTitle(item)}
       </h3>
@@ -217,30 +220,6 @@ export function InboxPreview({
       ) : null}
 
       {!isThreadItem(item) && !detail.isLoading && !detail.error ? <InboxContextCode {...contextProps} /> : null}
-
-      {links.length > 0 ? (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-dashed border-border pt-1.5 text-xs">
-          <span className="text-muted-foreground">Links</span>
-          {links.slice(0, 9).map((link, index) => (
-            <button
-              key={link.kind === "external" ? link.url : `${link.kind}-${link.id}`}
-              type="button"
-              onClick={() => onOpenLink(link)}
-              title={link.kind === "external" ? link.url : link.label}
-              className="inline-flex items-center gap-1 rounded text-link hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <Kbd>{String(index + 1)}</Kbd>
-              {link.kind !== "external" ? (
-                <span className="text-3xs font-semibold text-muted-foreground">
-                  {link.kind === "workItem" ? "WI" : "PR"}
-                </span>
-              ) : null}
-              {link.label}
-              {link.kind === "external" ? <span aria-hidden="true">↗</span> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
