@@ -223,6 +223,7 @@ pub fn run() {
             commands::work_items::fetch_work_item_image,
             commands::work_items::add_work_item_comment,
             commands::work_items::add_work_item_link,
+            commands::work_items::create_work_item_branch,
             commands::work_items::remove_work_item_link,
             commands::work_items::delete_work_item_comment,
             commands::work_items::update_work_item_comment,
