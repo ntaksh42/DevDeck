@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { copyRowsAsTable, rowsToTableHtml, rowsToTsv, type CopyColumn } from "./clipboardTable";
+import { copyRowsAsLinks, copyRowsAsTable, rowsToLinkHtml, rowsToLinkText, rowsToTableHtml, rowsToTsv, type CopyColumn } from "./clipboardTable";
 
 type Row = { id: number; title: string; url: string | null };
 
@@ -156,5 +156,42 @@ describe("formula injection guard", () => {
 
   it("leaves ID cells such as #123 untouched", () => {
     expect(rowsToTsv([formulaRows[5]], columns).split("\n")[1]).toMatch(/^#6\t/);
+  });
+});
+
+describe("Copy as Link", () => {
+  const links = [
+    { text: "!1 A <b> [x]", url: "https://example.com/1?a=1&b=2" },
+    { text: "!2 Plain", url: "https://example.com/2" },
+  ];
+
+  it("renders one escaped anchor per row", () => {
+    expect(rowsToLinkHtml(links)).toBe(
+      '<div><a href="https://example.com/1?a=1&amp;b=2">!1 A &lt;b&gt; [x]</a></div>' +
+        '<div><a href="https://example.com/2">!2 Plain</a></div>',
+    );
+  });
+
+  it("renders one Markdown link per line as plain text", () => {
+    expect(rowsToLinkText(links)).toBe(
+      "[!1 A <b> x](https://example.com/1?a=1&b=2)\n[!2 Plain](https://example.com/2)",
+    );
+  });
+
+  it("copies linked rows, skips rows without a URL and reports the count", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const setToast = vi.fn();
+
+    await copyRowsAsLinks(rows, (r) => ({ text: `#${r.id} ${r.title}`, url: r.url }), setToast);
+
+    expect(writeText).toHaveBeenCalledWith("[#1 A <b> & \"c\"](https://example.com/1)");
+    expect(setToast).toHaveBeenCalledWith("Link copied");
+  });
+
+  it("reports when no row has a link", async () => {
+    const setToast = vi.fn();
+    await copyRowsAsLinks([rows[1]], (r) => ({ text: r.title, url: r.url }), setToast);
+    expect(setToast).toHaveBeenCalledWith("No links to copy");
   });
 });

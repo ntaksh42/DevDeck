@@ -12,8 +12,8 @@ import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
 import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { useRangeSelection } from '@/lib/useRangeSelection';
-import { copyRowsAsTable } from '@/lib/clipboardTable';
-import { prSearchCopyColumns } from './prCopyColumns';
+import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
+import { prLinkTarget, prSearchCopyColumns } from './prCopyColumns';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
@@ -241,7 +241,7 @@ export function PullRequestResults({
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
       } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
         e.preventDefault();
-        void copyRowsAsTable(selection.selectedRows, prSearchCopyColumns(visibleColumns), setCopyToast);
+        void (e.shiftKey ? copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast) : copyRowsAsTable(selection.selectedRows, prSearchCopyColumns(visibleColumns), setCopyToast));
       }
       return;
     }

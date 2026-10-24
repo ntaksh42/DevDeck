@@ -1,6 +1,9 @@
-// Ctrl+C in the grids copies the selected rows as a table: an HTML <table>
-// (pastes as a real table into Outlook / Gmail / Teams / Word) plus a TSV
-// plain-text fallback (pastes into Excel or a text editor).
+import { markdownLink } from "./utils";
+
+// Ctrl+C in the grids ("Copy as Grid") copies the selected rows as a table: an
+// HTML <table> (pastes as a real table into Outlook / Gmail / Teams / Word)
+// plus a TSV plain-text fallback (pastes into Excel or a text editor).
+// Ctrl+Shift+C ("Copy as Link") copies one link per selected row instead.
 export type CopyColumn<T> = {
   label: string;
   text: (row: T) => string;
@@ -81,6 +84,13 @@ async function writeTable(text: string, html: string): Promise<void> {
   await clipboard.writeText(text);
 }
 
+function toastShower(setToast: (message: string | null) => void, toastMs: number) {
+  return (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), toastMs);
+  };
+}
+
 // Copies the rows as an HTML table + TSV and reports the result through the
 // caller's toast setter. Falls back to TSV-only where rich clipboard writes
 // are unavailable. Returns the promise so tests can await the clipboard write.
@@ -90,10 +100,7 @@ export async function copyRowsAsTable<T>(
   setToast: (message: string | null) => void,
   toastMs = 2000,
 ): Promise<void> {
-  const show = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), toastMs);
-  };
+  const show = toastShower(setToast, toastMs);
   if (rows.length === 0 || columns.length === 0) {
     show("No rows to copy");
     return;
@@ -105,4 +112,44 @@ export async function copyRowsAsTable<T>(
     return;
   }
   show(rows.length === 1 ? "Row copied" : `${rows.length} rows copied`);
+}
+
+// "Copy as Link": one link per row instead of a grid. `text` is the link label
+// (e.g. "!123 Fix login") and `url` its target; rows without a web URL are
+// skipped. The HTML flavour is one <a> per line (clickable links in mail
+// clients / Teams) and the plain-text flavour is one Markdown link per line.
+export type LinkTarget = { text: string; url: string | null | undefined };
+
+export function rowsToLinkHtml(links: { text: string; url: string }[]): string {
+  return links
+    .map(({ text, url }) => `<div><a href="${escapeHtml(url)}">${escapeHtml(text)}</a></div>`)
+    .join("");
+}
+
+export function rowsToLinkText(links: { text: string; url: string }[]): string {
+  return links.map(({ text, url }) => markdownLink(text, url)).join("\n");
+}
+
+export async function copyRowsAsLinks<T>(
+  rows: T[],
+  link: (row: T) => LinkTarget,
+  setToast: (message: string | null) => void,
+  toastMs = 2000,
+): Promise<void> {
+  const show = toastShower(setToast, toastMs);
+  const links = rows.flatMap((row) => {
+    const { text, url } = link(row);
+    return url && isHttpUrl(url) ? [{ text, url }] : [];
+  });
+  if (links.length === 0) {
+    show("No links to copy");
+    return;
+  }
+  try {
+    await writeTable(rowsToLinkText(links), rowsToLinkHtml(links));
+  } catch {
+    show("Copy failed");
+    return;
+  }
+  show(links.length === 1 ? "Link copied" : `${links.length} links copied`);
 }
