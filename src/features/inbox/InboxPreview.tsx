@@ -121,7 +121,7 @@ export function InboxPreview({
           {item.projectName}
           {item.repositoryName ? ` / ${item.repositoryName}` : ""}
         </span>
-        {branches ? <span className="font-mono text-[11px]">{branches}</span> : null}
+        {branches ? <span className="font-mono text-2xs">{branches}</span> : null}
         <span title={formatDate(item.detectedAt)}>
           {item.author ? `${item.author} · ` : ""}
           {formatRelativeDate(item.detectedAt)}
@@ -177,7 +177,7 @@ export function InboxPreview({
         />
       ) : null}
 
-      <h3 className="mt-2 border-b border-border pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="mt-2 border-b border-border pb-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
         {bandTitle(item)}
       </h3>
       {detail.isLoading ? (
@@ -231,7 +231,7 @@ export function InboxPreview({
             >
               <Kbd>{String(index + 1)}</Kbd>
               {link.kind !== "external" ? (
-                <span className="text-[10px] font-semibold text-muted-foreground">
+                <span className="text-3xs font-semibold text-muted-foreground">
                   {link.kind === "workItem" ? "WI" : "PR"}
                 </span>
               ) : null}

@@ -118,7 +118,7 @@ export function ViewCard({
         )}
       </div>
       {/* One meta line: limit, sort and the per-view options. */}
-      <p className="mt-1 truncate text-[11px] text-muted-foreground">
+      <p className="mt-1 truncate text-2xs text-muted-foreground">
         {query?.isError
           ? commandErrorMessage(query.error)
           : view.limit !== undefined
@@ -194,7 +194,7 @@ export function ViewCompactRow({
         {query?.isError ? "!" : stats.displayCount}
       </span>
       {stats.delta !== null && stats.delta !== 0 && !query?.isError ? (
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
           {stats.delta > 0 ? `+${stats.delta}` : stats.delta}
         </span>
       ) : null}

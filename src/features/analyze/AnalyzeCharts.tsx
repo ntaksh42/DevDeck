@@ -4,7 +4,7 @@ const TREND_CLASSES = {
   // A rising query count is the bad direction (more open bugs), matching the
   // work item view sparkline so the two never contradict each other.
   up: "text-destructive",
-  down: "text-emerald-600 dark:text-emerald-400",
+  down: "text-success",
   flat: "text-muted-foreground",
 } as const;
 
@@ -62,7 +62,7 @@ export function DeltaBadge({ delta }: { delta: number | null }) {
   return (
     <span
       className={`text-xs tabular-nums ${
-        rising ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
+        rising ? "text-destructive" : "text-success"
       }`}
     >
       {rising ? "▲" : "▼"}

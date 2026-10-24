@@ -258,7 +258,7 @@ export function PipelinesView() {
               aria-pressed={selectedIsSubscribed}
               className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedIsSubscribed
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                  ? "border-success bg-success/10 text-success"
                   : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >
@@ -315,7 +315,7 @@ export function PipelinesView() {
           />
         ) : null}
         {queueNotice ? (
-          <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{queueNotice}</p>
+          <p className="mt-2 text-xs text-success">{queueNotice}</p>
         ) : null}
       </div>
 

@@ -69,13 +69,13 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
               className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
               title={relation.webUrl ?? undefined}
             >
-              <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              <span className="w-16 shrink-0 truncate text-2xs font-bold text-muted-foreground">
                 {relation.relationType}
               </span>
               {relation.workItemType ? (
                 <WorkItemTypeBadge type={relation.workItemType} />
               ) : null}
-              <span className="shrink-0 font-mono text-[11px] text-primary">
+              <span className="shrink-0 font-mono text-2xs text-primary">
                 #{relation.id}
               </span>
               <span className="min-w-0 flex-1 truncate">
@@ -139,19 +139,19 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
           inputMode="numeric"
           placeholder="Work item #"
           aria-label="Link target work item id"
-          className="h-7 w-24 rounded border border-input bg-background px-1.5 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+          className="h-7 w-24 rounded border border-input bg-background px-1.5 text-2xs outline-none focus:ring-2 focus:ring-ring"
         />
         <button
           type="button"
           disabled={linkMutationPending || !newLinkTargetId.trim()}
           onClick={submitNewLink}
-          className="inline-flex items-center gap-0.5 rounded border border-border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
+          className="inline-flex items-center gap-0.5 rounded border border-border px-1.5 py-0.5 text-2xs hover:bg-accent disabled:opacity-50"
         >
           <Plus className="h-3 w-3" aria-hidden="true" /> Add
         </button>
       </div>
       {linkError ? (
-        <p role="alert" className="mt-1 text-[11px] text-destructive">
+        <p role="alert" className="mt-1 text-2xs text-destructive">
           {linkError}
         </p>
       ) : null}

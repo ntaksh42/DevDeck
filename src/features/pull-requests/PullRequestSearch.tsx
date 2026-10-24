@@ -328,7 +328,7 @@ export function PullRequestSearch({
         {filtersOpen ? (
           <div id="pr-search-advanced-filters" className="flex flex-wrap items-end gap-2">
             <div className="grid w-64 gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Target branches</span>
+              <span className="text-2xs font-medium text-muted-foreground">Target branches</span>
               <MultiSelectFilter
                 className="h-7"
                 options={branchSuggestions.map((branch) => ({ value: branch, label: branch }))}
@@ -395,7 +395,7 @@ export function PullRequestSearch({
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 
       {mutation.isSuccess && mutation.data.warnings.length > 0 && (
-        <p role="status" className="shrink-0 text-xs text-amber-600 dark:text-amber-400">
+        <p role="status" className="shrink-0 text-xs text-warning">
           Could not fetch {mutation.data.warnings.length} project(s): {mutation.data.warnings.join(", ")}.
         </p>
       )}

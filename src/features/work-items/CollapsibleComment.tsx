@@ -198,7 +198,7 @@ export function CollapsibleComment({
     // text, not chrome, carries each entry.
     <article className="group min-w-0 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info/10 text-2xs font-semibold text-info">
           {commentAuthorInitials(createdBy)}
         </span>
         <span className="min-w-0 truncate font-bold">
@@ -206,7 +206,7 @@ export function CollapsibleComment({
         </span>
         {createdDate ? (
           <span
-            className="shrink-0 text-[11px] font-medium text-slate-500 dark:text-slate-400"
+            className="shrink-0 text-2xs font-medium text-muted-foreground"
             title={new Date(createdDate).toLocaleString()}
           >
             {formatRelativeDate(createdDate)}
@@ -365,7 +365,7 @@ export function CollapsibleComment({
               <button
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
-                className="mt-1 rounded border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="mt-1 rounded border border-border bg-card px-2 py-0.5 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 {expanded ? "Collapse" : "Expand"}
               </button>
@@ -383,7 +383,7 @@ export function CollapsibleComment({
                       onClick={() => onToggleReaction(id, reaction.type, !mine)}
                       aria-pressed={mine}
                       title={`${reaction.label}${mine ? " (you reacted)" : ""}`}
-                      className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[11px] tabular-nums disabled:cursor-not-allowed disabled:opacity-60 ${
+                      className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-2xs tabular-nums disabled:cursor-not-allowed disabled:opacity-60 ${
                         mine
                           ? "border-primary bg-primary/10 text-foreground"
                           : "border-border bg-card text-muted-foreground hover:bg-accent"

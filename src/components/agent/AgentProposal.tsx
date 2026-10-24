@@ -30,9 +30,9 @@ export function AgentProposal({
       <div className="flex min-w-0 items-center gap-1.5">
         <CommentAvatar name={reply.author} />
         <span className="truncate font-medium text-violet-700 dark:text-violet-300">@{reply.author}</span>
-        <span className="shrink-0 text-[11px] text-muted-foreground">{formatRelativeDate(reply.createdAt)}</span>
+        <span className="shrink-0 text-2xs text-muted-foreground">{formatRelativeDate(reply.createdAt)}</span>
         <span
-          className={`shrink-0 rounded border px-1.5 text-[11px] leading-4 ${
+          className={`shrink-0 rounded border px-1.5 text-2xs leading-4 ${
             posted
               ? "border-border bg-muted text-muted-foreground"
               : "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300"
@@ -44,16 +44,16 @@ export function AgentProposal({
       <div className="space-y-1 pl-[26px]">
         <div className="rounded border border-dashed border-border px-1.5 py-1">
           <NoteMarkdown text={reply.body} className="text-[13px] leading-5 text-foreground" />
-          {signature ? <p className="mt-1 text-[11px] text-muted-foreground">{signature}</p> : null}
+          {signature ? <p className="mt-1 text-2xs text-muted-foreground">{signature}</p> : null}
         </div>
         {posted ? (
-          <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1 text-2xs text-muted-foreground">
             <Check className="h-3 w-3" aria-hidden="true" />
             Posted {formatRelativeDate(reply.postedAt ?? "")}
             {reply.postedRef ? ` · ${reply.postedRef}` : ""}
           </p>
         ) : (
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2 text-2xs">
             {onPost ? (
               <button
                 type="button"

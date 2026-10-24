@@ -46,7 +46,7 @@ export function InboxPriorityFilter({ value, counts, onChange, onFocusList }: {
             onChange(OPTIONS[next].value);
             buttons.current[next]?.focus();
           }}
-          className={`rounded px-1.5 text-[11px] leading-4 focus:outline-none focus:ring-1 focus:ring-ring ${value === option.value ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+          className={`rounded px-1.5 text-2xs leading-4 focus:outline-none focus:ring-1 focus:ring-ring ${value === option.value ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"}`}
         >
           {option.label} <span className="tabular-nums">{counts[option.value]}</span>
         </button>

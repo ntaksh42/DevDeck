@@ -244,7 +244,7 @@ export function WorkItemPreviewPanel({
       ) : (
         <>
           {previewError ? (
-            <div className="m-3 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-destructive">
+            <div className="m-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {previewError}
             </div>
           ) : preview ? (

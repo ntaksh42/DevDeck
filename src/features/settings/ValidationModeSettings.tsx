@@ -67,7 +67,7 @@ export function ValidationModeSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Validation mode saved.</p>
+          <p className="text-sm text-success">Validation mode saved.</p>
         ) : null}
 
         <div>

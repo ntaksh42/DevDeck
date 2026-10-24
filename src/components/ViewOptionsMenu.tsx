@@ -124,7 +124,7 @@ export function ViewOptionsMenu({
               )}
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
               {item.hint ? (
-                <kbd className="shrink-0 text-[11px] text-muted-foreground">{item.hint}</kbd>
+                <kbd className="shrink-0 text-2xs text-muted-foreground">{item.hint}</kbd>
               ) : null}
             </button>
           ))}

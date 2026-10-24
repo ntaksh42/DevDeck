@@ -280,7 +280,7 @@ export function PipelineSubscriptionsBoard({
         value={sort}
         onChange={(event) => changeSort(event.target.value as BoardSort)}
         aria-label="Sort pipelines"
-        className="h-4 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+        className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
       >
         <option value="status">Sort: Status</option>
         <option value="name">Sort: Name</option>
@@ -291,7 +291,7 @@ export function PipelineSubscriptionsBoard({
         onClick={() => queries.forEach((query) => void query.refetch())}
         title={lastUpdated ? `Updated ${formatClock(lastUpdated)} — click to refresh` : "Refresh runs"}
         aria-label="Refresh runs"
-        className="inline-flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        className="inline-flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       >
         <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
         {lastUpdated ? <span className="tabular-nums">{formatClock(lastUpdated)}</span> : null}
@@ -320,7 +320,7 @@ export function PipelineSubscriptionsBoard({
             <div key={key} className="border-b border-border last:border-b-0">
               <div
                 className={`flex items-center gap-2 border-l-2 px-2 py-1.5 hover:bg-muted/40 ${
-                  isRunning ? "border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/30" : "border-l-transparent"
+                  isRunning ? "border-l-info bg-info/10" : "border-l-transparent"
                 }`}
               >
                 <button
@@ -425,7 +425,7 @@ export function PipelineSubscriptionsBoard({
               aria-pressed={statusFilter === "running"}
               onClick={() => toggleStatusFilter("running")}
               title={`${runningCount} watched pipeline${runningCount === 1 ? "" : "s"} currently running — click to show only these`}
-              className={`${PILL_BASE} bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 ${
+              className={`${PILL_BASE} bg-info/10 text-info ${
                 statusFilter === "running" ? "ring-2 ring-blue-500" : ""
               }`}
             >
@@ -440,7 +440,7 @@ export function PipelineSubscriptionsBoard({
               aria-pressed={statusFilter === "failed"}
               onClick={() => toggleStatusFilter("failed")}
               title={`${failedCount} watched pipeline${failedCount === 1 ? "" : "s"} whose latest run failed — click to show only these`}
-              className={`${PILL_BASE} bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 ${
+              className={`${PILL_BASE} bg-destructive/10 text-destructive ${
                 statusFilter === "failed" ? "ring-2 ring-red-500" : ""
               }`}
             >
@@ -455,7 +455,7 @@ export function PipelineSubscriptionsBoard({
               aria-pressed={approvalsOpen}
               onClick={onToggleApprovals}
               title="Pending approvals assigned to you in the selected project — click to show or hide them"
-              className={`${PILL_BASE} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ${
+              className={`${PILL_BASE} bg-warning/10 text-warning ${
                 approvalsOpen ? "ring-2 ring-amber-500" : ""
               }`}
             >

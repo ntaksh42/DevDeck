@@ -104,7 +104,7 @@ export function AgentContextChips({
     <div
       role="toolbar"
       aria-label="Agent context"
-      className="mb-1 flex flex-wrap items-center gap-1 text-[11px]"
+      className="mb-1 flex flex-wrap items-center gap-1 text-2xs"
       onKeyDown={onKeyDown}
       // Space activates a button on key-up; the key-down already did.
       onKeyUp={(event) => {

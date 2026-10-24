@@ -107,7 +107,7 @@ function BoardCard({
       <span className="line-clamp-2 text-xs font-medium leading-tight text-foreground" title={item.title}>
         {item.title}
       </span>
-      <div className="mt-auto flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-auto flex items-center justify-between gap-2 text-2xs text-muted-foreground">
         <button
           type="button"
           onClick={(event) => {
@@ -202,7 +202,7 @@ export function BoardColumnView({
         <span className="truncate text-xs font-semibold" title={column.state}>
           {column.state}
         </span>
-        <span className="shrink-0 rounded bg-secondary px-1.5 text-[11px] text-muted-foreground">
+        <span className="shrink-0 rounded bg-secondary px-1.5 text-2xs text-muted-foreground">
           {column.items.length}
         </span>
       </div>
@@ -216,7 +216,7 @@ export function BoardColumnView({
         className={`min-h-0 flex-1 overflow-auto p-2 ${dropActive ? 'bg-primary/10 ring-2 ring-inset ring-primary' : ''}`}
       >
         {column.items.length === 0 ? (
-          <p className="px-1 py-2 text-[11px] text-muted-foreground">No items</p>
+          <p className="px-1 py-2 text-2xs text-muted-foreground">No items</p>
         ) : (
           <div style={{ paddingTop: topPad, paddingBottom: bottomPad }}>
             <div className="flex flex-col" style={{ gap: BOARD_CARD_GAP }}>

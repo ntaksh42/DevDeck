@@ -337,7 +337,7 @@ export function AgentPanel({
         <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1">
           <Bot className="h-4 w-4" aria-hidden="true" />
           <span className="text-sm font-semibold">Agent</span>
-          <span className="text-[11px] text-muted-foreground">Ctrl+J</span>
+          <span className="text-2xs text-muted-foreground">Ctrl+J</span>
           <span className="flex-1" />
           <button type="button" onClick={onClose} title="Close (Esc)" aria-label="Close the agent panel" className="rounded p-0.5 hover:bg-accent">
             <X className="h-3.5 w-3.5" />
@@ -385,7 +385,7 @@ export function AgentPanel({
           />
         ))}
         {data.deleted ? (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             Deleted.{" "}
             <button type="button" onClick={() => data.undoDelete.mutate()} className="text-primary underline">
               Undo (Ctrl+Z)
@@ -397,7 +397,7 @@ export function AgentPanel({
         ) : null}
       </div>
       {help || starting ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-2xs text-muted-foreground">
           {help ? (
             <RowShortcutHints
               hints={[
@@ -426,28 +426,28 @@ export function AgentPanel({
           aria-expanded={help}
           aria-label="Show keys and subject options"
           title="Keys and subject options (?)"
-          className="absolute right-1 top-1 rounded px-1 text-[11px] text-muted-foreground hover:bg-accent"
+          className="absolute right-1 top-1 rounded px-1 text-2xs text-muted-foreground hover:bg-accent"
         >
           ?
         </button>
         {drafts ? (
-          <p className="mb-1 flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <p className="mb-1 flex items-center gap-1 rounded bg-warning/10 px-2 py-0.5 text-2xs text-warning">
             <span className="flex-1">{drafts} {drafts === 1 ? "draft" : "drafts"} not sent</span>
             <button
               type="button"
               onClick={() => data.submitDrafts.mutate()}
               disabled={data.submitDrafts.isPending}
               title="Send the drafts of this item to the agent"
-              className="rounded border border-amber-400 px-1.5 hover:bg-amber-200 dark:hover:bg-amber-900"
+              className="rounded border border-warning/40 px-1.5 hover:bg-warning/20"
             >
               Send
             </button>
           </p>
         ) : null}
         {quote ? (
-          <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+          <p className="mb-1 flex items-center gap-1 text-2xs text-muted-foreground">
             Quoting
-            <span className="min-w-0 flex-1 truncate border-l-2 border-yellow-400 pl-1 text-foreground" title={quote.quote}>
+            <span className="min-w-0 flex-1 truncate border-l-2 border-warning pl-1 text-foreground" title={quote.quote}>
               {quote.quote}
             </span>
             <button type="button" onClick={onClearQuote} aria-label="Drop the quote" className="rounded hover:bg-accent">
@@ -456,7 +456,7 @@ export function AgentPanel({
           </p>
         ) : null}
         {data.readOnly ? (
-          <p className="mb-1 text-[11px] text-muted-foreground">Read-only validation mode: the request is saved but the agent is not started.</p>
+          <p className="mb-1 text-2xs text-muted-foreground">Read-only validation mode: the request is saved but the agent is not started.</p>
         ) : null}
         <AgentContextChips
           subject={subject}

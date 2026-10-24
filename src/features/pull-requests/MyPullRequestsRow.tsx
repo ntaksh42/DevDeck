@@ -33,7 +33,7 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
       return (
         <div className="flex min-w-0 items-center gap-1.5">
           {pr.readyToMerge && !pr.isDraft && (
-            <span className="shrink-0 rounded border border-green-600 px-1.5 py-0.5 text-xs text-green-600 dark:text-green-400">Ready to merge</span>
+            <span className="shrink-0 rounded border border-success px-1.5 py-0.5 text-xs text-success">Ready to merge</span>
           )}
           {pr.isDraft && (
             <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
@@ -65,7 +65,7 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
           title={`${pr.approvals} of ${pr.reviewerCount} reviewers approved`}
         >
           <CheckCircle2
-            className={`h-3.5 w-3.5 ${complete ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
+            className={`h-3.5 w-3.5 ${complete ? "text-success" : "text-muted-foreground"}`}
             aria-hidden="true"
           />
           {pr.approvals}/{pr.reviewerCount}

@@ -97,8 +97,8 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
                         hasError
                           ? "font-medium text-destructive"
                           : hasWarning
-                            ? "font-medium text-amber-700 dark:text-amber-400"
-                            : "font-medium text-green-700 dark:text-green-400"
+                            ? "font-medium text-warning"
+                            : "font-medium text-success"
                       }
                     >
                       {hasError ? `${state.errorCount} failed` : hasWarning ? "Limited" : "Healthy"}
@@ -115,7 +115,7 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
                     ) : null}
                     {!state.lastError && state.lastWarning ? (
                       <span
-                        className="max-w-52 truncate text-xs text-amber-700 dark:text-amber-400"
+                        className="max-w-52 truncate text-xs text-warning"
                         title={state.lastWarning}
                       >
                         {state.lastWarning}

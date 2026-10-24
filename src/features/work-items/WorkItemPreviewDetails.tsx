@@ -270,7 +270,7 @@ export function WorkItemPreviewDetails({
         <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-mono text-[11px] font-bold leading-5 text-slate-600 dark:text-slate-300">
+            <span className="shrink-0 font-mono text-2xs font-bold leading-5 text-muted-foreground">
               #{preview.id}
             </span>
             {/* Type and state stay whole; the "updated" text is what gives way. */}
@@ -286,7 +286,7 @@ export function WorkItemPreviewDetails({
             ) : null}
             {preview.changedDate ? (
               <span
-                className="hidden min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
+                className="hidden min-w-0 truncate text-2xs font-medium text-muted-foreground sm:inline"
                 title={preview.changedDate}
               >
                 updated {formatRelativeDate(preview.changedDate)}
@@ -409,7 +409,7 @@ export function WorkItemPreviewDetails({
                 {commentsInSide && !hasComments ? (
                   <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
                 ) : sections.visibleIn("side").length === 0 ? (
-                  <p className="rounded border border-dashed border-border px-2 py-3 text-center text-[11px] text-muted-foreground">
+                  <p className="rounded border border-dashed border-border px-2 py-3 text-center text-2xs text-muted-foreground">
                     Drag a section header here (or focus it and press Alt+→).
                   </p>
                 ) : null}

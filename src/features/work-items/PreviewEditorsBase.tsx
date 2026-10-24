@@ -150,13 +150,13 @@ export function ReasonEditor({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full truncate rounded px-1 text-left text-2xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
         {pending ? "Updating..." : (current ?? "—")}
       </button>
       {error && (
-        <p className="mt-0.5 text-[11px] text-destructive">{error}</p>
+        <p className="mt-0.5 text-2xs text-destructive">{error}</p>
       )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-2 shadow-lg">
@@ -181,7 +181,7 @@ export function ReasonEditor({
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="rounded px-2 py-1 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
               Cancel
             </button>
@@ -189,7 +189,7 @@ export function ReasonEditor({
               type="button"
               disabled={!draft.trim() || draft.trim() === (current ?? "").trim() || pending}
               onClick={save}
-              className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded bg-primary px-2 py-1 text-2xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Save
             </button>
@@ -236,9 +236,9 @@ export function HighlightedText({ text, query }: { text: string; query: string }
 }
 
 const CANDIDATE_AVATAR_CLASSES = [
-  "bg-sky-100 text-sky-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-700",
+  "bg-info/10 text-info",
+  "bg-success/10 text-success",
+  "bg-warning/10 text-warning",
   "bg-violet-100 text-violet-700",
   "bg-rose-100 text-rose-700",
   "bg-teal-100 text-teal-700",
@@ -251,7 +251,7 @@ export function CandidateAvatar({ displayName }: { displayName: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${colorClass}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold ${colorClass}`}
     >
       {commentAuthorInitials(displayName)}
     </span>
