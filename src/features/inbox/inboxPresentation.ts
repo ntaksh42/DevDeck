@@ -115,10 +115,22 @@ export function matchesInboxFilter(item: InboxItem, query: string): boolean {
     .some((value) => value.toLowerCase().includes(needle));
 }
 
+/** Where a link was found; the preview groups the links by it, in this order. */
+export type InboxLinkOrigin = "linked" | "description" | "comment" | "attachment";
+
+type InboxLinkBase = {
+  origin: InboxLinkOrigin;
+  label: string;
+  /** What the link points at (a work item / pull request title), when known. */
+  title?: string | null;
+  /** Short extra context such as a state, a relation type or a PR status. */
+  detail?: string | null;
+};
+
 export type InboxLink =
-  | { kind: "workItem"; id: number; label: string }
-  | { kind: "pullRequest"; id: number; label: string }
-  | { kind: "external"; url: string; label: string };
+  | (InboxLinkBase & { kind: "workItem"; id: number })
+  | (InboxLinkBase & { kind: "pullRequest"; id: number; repositoryId?: string | null })
+  | (InboxLinkBase & { kind: "external"; url: string });
 
 const LINK_PATTERN = /https?:\/\/[^\s<>"')\]]+|\bAB#\d+|(?<![\w/])!\d+\b/gi;
 
@@ -126,7 +138,7 @@ function trimUrl(url: string): string {
   return url.replace(/[.,;:!?]+$/, "");
 }
 
-function shortUrlLabel(url: string): string {
+export function shortUrlLabel(url: string): string {
   try {
     const parsed = new URL(url);
     const path = parsed.pathname === "/" ? "" : parsed.pathname;
@@ -138,10 +150,13 @@ function shortUrlLabel(url: string): string {
 }
 
 /**
- * Links found in comment texts, in order of appearance and without duplicates:
+ * Links found in texts, in order of appearance and without duplicates:
  * `AB#123` (work item), `!45` (pull request) and http(s) URLs.
  */
-export function extractInboxLinks(texts: (string | null | undefined)[]): InboxLink[] {
+export function extractInboxLinks(
+  texts: (string | null | undefined)[],
+  origin: InboxLinkOrigin = "comment",
+): InboxLink[] {
   const links: InboxLink[] = [];
   const seen = new Set<string>();
   for (const text of texts) {
@@ -151,13 +166,13 @@ export function extractInboxLinks(texts: (string | null | undefined)[]): InboxLi
       let link: InboxLink;
       if (/^AB#/i.test(raw)) {
         const id = Number(raw.slice(3));
-        link = { kind: "workItem", id, label: `AB#${id}` };
+        link = { kind: "workItem", id, label: `AB#${id}`, origin };
       } else if (raw.startsWith("!")) {
         const id = Number(raw.slice(1));
-        link = { kind: "pullRequest", id, label: `!${id}` };
+        link = { kind: "pullRequest", id, label: `!${id}`, origin };
       } else {
         const url = trimUrl(raw);
-        link = { kind: "external", url, label: shortUrlLabel(url) };
+        link = { kind: "external", url, label: shortUrlLabel(url), origin };
       }
       const key =
         link.kind === "external" ? link.url : `${link.kind}:${link.id}`;
