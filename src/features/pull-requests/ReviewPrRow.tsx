@@ -52,7 +52,7 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
             else focusPrimaryPreview();
           }
         }}
-        className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none
+        className={`grid cursor-pointer select-none items-center whitespace-nowrap gap-2 border-b border-border px-2 py-1 text-sm outline-none
         focus:ring-2 focus:ring-inset focus:ring-ring
         ${gridRowStateClass({ selected, inMultiSelection, isStale })}`}
         style={{ gridTemplateColumns: columnTemplate }}
