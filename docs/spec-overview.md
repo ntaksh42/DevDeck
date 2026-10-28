@@ -107,6 +107,13 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   PR (`/_git/{repo}/pullrequest/{id}`) は PR Search、WI (`/_workitems/edit/{id}`、ボード等の `?workitem={id}`) は Work Item Search を、URL の組織名に一致する接続でその ID により開く (検索ビューはアクティブ接続を読むため、別の登録済み組織の URL ならアクティブ接続をその組織へ切り替えてから開き、行の詳細にその旨を出す。組織横断サマリーと同じ挙動)。PR Search は active の PR を対象にするため、完了済み / 破棄済みの PR は見つからない。
   パイプライン実行 (`/_build/results?buildId={id}`) は特定の実行をアプリ内で選ぶ手段が無いためブラウザで開く行だけを出す。URL の組織が未登録なら「not registered」と示し、ブラウザで開く行だけを出す。
   解釈できない URL は通常のテキスト入力として扱う。`Ctrl+Enter` はどの行でも URL をブラウザで開く。
+- **次アクション / 前回閲覧以降の更新 / 設定の移行** (詳細: `docs/spec-daily-flow.md`):
+  - My Pull Requests では `N` / `Shift+N` で、次/前の「自分の対応が要る PR」(Ready to merge) へ移動する
+    (`nextAction.ts` の純関数。My Reviews 向けの判定 `reviewNextAction` も同ファイルにある)。
+  - My Reviews は、開いた時点の PR 状態の指紋 (タイトル・ドラフト・マージ状態・CI・ターゲット) を
+    `azdodeck:lastSeen:v1` に保存し、同期後に指紋が変わった行へ「Updated」バッジを出す (最大 2000 件)。
+  - Settings > Data & sync の「Export / import settings」で、レイアウト・ビュー・キー割り当て等の
+    ローカル設定を JSON で書き出し/読み込みできる (許可リスト方式。組織・資格情報・行動履歴は含めない)。
 - **作業項目のフォロー** (issue #304): プレビューのタブ帯 `⋯` メニューの Follow 項目 (✓ で現在の状態を表示) で Follow/Unfollow
   (`follow_work_item` / `unfollow_work_item`)。Azure DevOps に公開の follow/購読設定 REST API が
   無いため、フォローはローカルの SQLite ウォッチリスト (`followed_work_items`、フォロー時点の
@@ -987,7 +994,8 @@ format!(
 ## 関連ドキュメント
 
 - 設計解説 (初心者向け): [`docs/design/README.md`](design/README.md)
-- 提案/将来計画: `docs/spec-cross-cutting-efficiency.md` (横断・運用効率),
+- 提案/将来計画: `docs/spec-daily-flow.md` (トレイ常駐・ディープリンクは仕様のみ),
+  `docs/spec-cross-cutting-efficiency.md` (横断・運用効率),
   `docs/spec-reliability-foundation.md` (信頼性・基盤),
   `docs/spec-pr-review.md`, `docs/spec-keyboard-ux.md`,
   `docs/spec-ideas-market-research.md`, `docs/product-improvement-ideas.md`

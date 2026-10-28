@@ -41,7 +41,7 @@ describe("My Reviews focused selection", () => {
       const [returnedKeys, setReturnedKeys] = useState(new Set<string>());
       return useMyReviewsSelectionState({
         sortedPrs: rows, visibleSortedIndexes: visible, prFlatIndexes: visible,
-        scrollerEl: null, containerRef, rowRefs, returnedKeys, setReturnedKeys,
+        scrollerEl: null, containerRef, rowRefs, returnedKeys, setReturnedKeys, setUpdatedKeys: () => {},
         resultKeysSignature: rows.map((pr) => pr.pullRequestId).join("|"),
         organizationId: "org", selectRequest: null, onSelectRequestHandled: undefined,
         onClearForSelectRequest: () => {},

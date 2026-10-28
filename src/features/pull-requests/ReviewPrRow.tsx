@@ -11,6 +11,7 @@ type ReviewPrRowProps = {
   selected: boolean;
   inMultiSelection: boolean;
   returned: boolean;
+  updated?: boolean;
   columnTemplate: string;
   visibleColumns: SortKey[];
   staleThresholdDays: number;
@@ -24,6 +25,7 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
       selected,
       inMultiSelection,
       returned,
+      updated = false,
       columnTemplate,
       visibleColumns,
       staleThresholdDays,
@@ -58,7 +60,7 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
         style={{ gridTemplateColumns: columnTemplate }}
       >
         {visibleColumns.map((key) => (
-          <Fragment key={key}>{renderPrCell(key, pr, isStale, returned)}</Fragment>
+          <Fragment key={key}>{renderPrCell(key, pr, isStale, returned, updated)}</Fragment>
         ))}
       </div>
     );
