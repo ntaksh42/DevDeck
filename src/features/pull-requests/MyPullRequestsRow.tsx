@@ -138,7 +138,7 @@ export const CreatedPrRow = forwardRef<
       role="row"
       aria-selected={selected || inMultiSelection}
       onClick={(e) => onSelect({ shiftKey: e.shiftKey, ctrlKey: e.ctrlKey || e.metaKey })}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
+      className={`grid cursor-pointer select-none items-center whitespace-nowrap gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
