@@ -34,11 +34,14 @@ export function PreviewControl({
   shortcut?: string;
 }) {
   return (
-    <div className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1">
+    // Pickers return focus to their trigger on close. The trigger's own
+    // rectangular outline overlapped this pill's border and label, so the
+    // keyboard focus ring is drawn on the pill itself instead.
+    <div className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1 has-[>div>*>button:focus-visible]:border-ring has-[>div>*>button:focus-visible]:ring-1 has-[>div>*>button:focus-visible]:ring-ring">
       <span className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-muted-foreground">
         {label}
       </span>
-      <div className="flex min-w-0 items-center leading-4">{children}</div>
+      <div className="flex min-w-0 items-center leading-4 [&>*>button:focus-visible]:outline-none">{children}</div>
       {shortcut ? <ShortcutHint>{shortcut}</ShortcutHint> : null}
     </div>
   );
