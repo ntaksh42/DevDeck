@@ -1,4 +1,6 @@
 import type {
+  InboxItem,
+  NotificationRecord,
   PullRequestSummary,
   ReviewPullRequestSummary,
   WorkItemPreview,
@@ -69,6 +71,22 @@ export function applyWorkItemScenario(
   if (scenario === "empty") return [];
   if (scenario !== "large-data") return workItems;
   return repeatWorkItems(workItems, 420);
+}
+
+export function applyNotificationScenario(
+  notifications: NotificationRecord[],
+): NotificationRecord[] {
+  const scenario = currentDemoScenario();
+  if (scenario === "empty") return [];
+  if (scenario !== "large-data") return notifications;
+  return [...notifications, ...repeatNotifications(notifications, 300)];
+}
+
+export function applyInboxScenario(items: InboxItem[]): InboxItem[] {
+  const scenario = currentDemoScenario();
+  if (scenario === "empty") return [];
+  if (scenario !== "large-data") return items;
+  return [...items, ...repeatInboxItems(items, 300)];
 }
 
 export function applyWorkItemPreviewScenario(
@@ -162,6 +180,36 @@ function repeatWorkItems(
         ? shiftedIso(source.changedDate, index)
         : source.changedDate,
       webUrl: source.webUrl?.replace(/edit\/\d+$/, `edit/${id}`) ?? null,
+    };
+  });
+}
+
+// Negative ids sort the extra rows after the seed rows (the list is ordered by
+// id, newest first) and never collide with ids recorded during the session.
+function repeatNotifications(
+  base: NotificationRecord[],
+  count: number,
+): NotificationRecord[] {
+  return Array.from({ length: count }, (_, index) => {
+    const source = base[index % base.length];
+    return {
+      ...source,
+      id: -(index + 1),
+      title: `${source.title} #${index + 1}`,
+      createdAt: shiftedIso(source.createdAt, index + 60),
+      isRead: index % 3 !== 0,
+    };
+  });
+}
+
+function repeatInboxItems(base: InboxItem[], count: number): InboxItem[] {
+  return Array.from({ length: count }, (_, index) => {
+    const source = base[index % base.length];
+    return {
+      ...source,
+      id: 50_000 + index,
+      title: `${source.title} #${index + 1}`,
+      detectedAt: shiftedIso(source.detectedAt, index + 60),
     };
   });
 }

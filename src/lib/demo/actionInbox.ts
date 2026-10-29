@@ -5,6 +5,8 @@ import type {
   SetInboxItemStateInput,
 } from "@/lib/azdoCommands";
 
+import { applyInboxScenario } from "@/lib/azdoDemoHarness";
+
 const DEMO_ORG = "contoso";
 
 // Thread ids match the demo pull request review threads (1-3) so the preview
@@ -153,7 +155,7 @@ function buildSeed(): InboxItem[] {
 }
 
 function all(): InboxItem[] {
-  if (!items) items = buildSeed();
+  if (!items) items = applyInboxScenario(buildSeed());
   return items;
 }
 
