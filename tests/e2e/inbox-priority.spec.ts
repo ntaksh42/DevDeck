@@ -8,10 +8,17 @@ test("Inbox priority can be switched and processed entirely by keyboard", async 
   const rows = list.getByRole("option");
   await expect(rows).toHaveCount(4);
   await rows.first().click();
-  // The priority switch sits in the tab band; Shift+Tab passes the panel's Move button first.
+  // The priority switch sits in the tab band; Shift+Tab passes the column
+  // filter buttons and the panel's Move button first. It must stay reachable
+  // within a handful of presses.
   const backToPriority = async () => {
-    await page.keyboard.press("Shift+Tab");
-    await page.keyboard.press("Shift+Tab");
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press("Shift+Tab");
+      const onPriority = await page.evaluate(
+        () => document.activeElement?.getAttribute("role") === "radio",
+      );
+      if (onPriority) return;
+    }
   };
   await backToPriority();
   await expect(page.getByRole("radio", { name: "All", exact: true })).toBeFocused();

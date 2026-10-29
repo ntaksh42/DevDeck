@@ -84,6 +84,12 @@ export function CommentField({
             {submitLabel}
           </button>
         </div>
+      ) : status ? (
+        // Keep a status (e.g. "Comment posted") visible after a successful
+        // submit collapses the actions row.
+        <div role="status" className="flex justify-end">
+          {status}
+        </div>
       ) : null}
     </div>
   );

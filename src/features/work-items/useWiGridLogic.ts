@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { parkGridFocus } from '@/lib/parkGridFocus';
+import { scrollGridRowIntoView } from '@/lib/useGridVirtualizer';
 import { useQuery } from '@tanstack/react-query';
 import {
   getWorkItemPreview,
@@ -316,18 +318,10 @@ export function useWiGridLogic(
       if (count === 0) return false;
       const index = Math.max(0, Math.min(selectedIndex, count - 1));
       const scroller = gridScrollRef.current;
-      if (scroller) {
-        const rowTop = index * WI_GRID_ROW_HEIGHT;
-        const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
-        if (rowTop < scroller.scrollTop) {
-          scroller.scrollTop = rowTop;
-        } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
-          scroller.scrollTop = rowBottom - scroller.clientHeight;
-        }
-      }
+      if (scroller) scrollGridRowIntoView(scroller, index, WI_GRID_ROW_HEIGHT, count);
       const node = rowRefs.current[index];
       if (!node) return false;
-      node.focus();
+      node.focus({ preventScroll: true });
       return true;
     },
   });
@@ -350,18 +344,11 @@ export function useWiGridLogic(
 
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(index, displayed.length - 1));
+    parkGridFocus(rowRefs.current[next]);
     setSelectedIndex(next);
     const scroller = gridScrollRef.current;
-    if (scroller) {
-      const rowTop = next * WI_GRID_ROW_HEIGHT;
-      const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
-      if (rowTop < scroller.scrollTop) {
-        scroller.scrollTop = rowTop;
-      } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
-        scroller.scrollTop = rowBottom - scroller.clientHeight;
-      }
-    }
-    window.setTimeout(() => rowRefs.current[next]?.focus(), 0);
+    if (scroller) scrollGridRowIntoView(scroller, next, WI_GRID_ROW_HEIGHT, displayed.length);
+    window.setTimeout(() => rowRefs.current[next]?.focus({ preventScroll: true }), 0);
   }
 
   const { handleCheckboxChange, selectRangeTo, toggleSelectionAt, clearCheckedIds } =

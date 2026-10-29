@@ -16,6 +16,8 @@ import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
 import { prLinkTarget, prSearchCopyColumns } from './prCopyColumns';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
+import { parkGridFocus } from '@/lib/parkGridFocus';
+import { usePendingRowFocus } from '@/lib/usePendingRowFocus';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
@@ -173,6 +175,7 @@ export function PullRequestResults({
   // starts a fresh single-row selection.
   function moveSelectionTo(index: number, extend = false) {
     const next = clamp(index, 0, filteredResults.length - 1);
+    parkGridFocus(rowRefs.current[next]);
     restoreFocusRef.current = true;
     scrollRowIntoView(next);
     setSelectedIndex(next);
@@ -184,15 +187,8 @@ export function PullRequestResults({
     moveSelectionTo(selectedIndex + delta);
   }
 
-  // Rows outside the virtual window unmount, so roving focus is restored once
-  // the row for the new selection is mounted again.
-  useEffect(() => {
-    if (!restoreFocusRef.current) return;
-    const row = rowRefs.current[selectedIndex];
-    if (!row) return;
-    restoreFocusRef.current = false;
-    row.focus({ preventScroll: true });
-  });
+  // Rows outside the virtual window unmount; refocus the selection once mounted.
+  usePendingRowFocus(restoreFocusRef, rowRefs, selectedIndex);
 
   function openFilter(col: PrSearchFilterableColumn, anchorEl: HTMLButtonElement) {
     filterButtonRef.current = anchorEl;

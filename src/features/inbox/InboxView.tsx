@@ -13,6 +13,7 @@ import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { pushToast } from "@/lib/toast";
 import { clamp, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import { parkGridFocus } from "@/lib/parkGridFocus";
 import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 import { useDockFilter } from "@/components/DockFilterBar";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
@@ -154,11 +155,21 @@ export function InboxView() {
   const listFocus = useInboxListFocus({ listRef, rowRefs, index, entries, scrollRowIntoView: virtual.scrollRowIntoView });
   const { focusList, focusRow } = listFocus;
 
+  const parkingFocusRef = useRef(false);
   function moveSelectionTo(next: number) {
     const target = clamp(next, 0, entries.length - 1);
+    // Parking focus on the list must not bounce it straight back to the old row.
+    parkingFocusRef.current = true;
+    parkGridFocus(rowRefs.current[target]);
+    parkingFocusRef.current = false;
     virtual.scrollRowIntoView(target);
     setSelectedIndex(target);
-    window.setTimeout(() => focusRow(target), 0);
+    // The target row may not have mounted yet (it scrolls into the virtual
+    // window first). Park focus on the list then; useInboxListFocus moves it
+    // onto the row once it mounts, instead of losing it to <body>.
+    window.setTimeout(() => {
+      if (!focusRow(target)) listRef.current?.focus({ preventScroll: true });
+    }, 0);
   }
 
   /** The item leaves the list at once, so the next row is selected and the list keeps focus. */
@@ -338,7 +349,9 @@ export function InboxView() {
           onClearColumnFilters={() => updateColumnFilters(() => ({}))}
           listRef={listRef}
           focusHandlers={listFocus}
-          onFocusList={() => focusRow(index)}
+          onFocusList={() => {
+            if (!parkingFocusRef.current) focusRow(index);
+          }}
           rowRefs={rowRefs}
           virtual={virtual}
           entries={entries}

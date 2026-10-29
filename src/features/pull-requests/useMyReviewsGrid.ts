@@ -272,11 +272,11 @@ export function useMyReviewsGrid({
   // Virtualizer — must come after reviewRows is computed.
   const {
     scrollerRef,
-    scrollerEl,
     firstRow: firstVirtualRow,
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: reviewRows.length,
     rowHeight: PR_GRID_ROW_HEIGHT,
@@ -306,7 +306,7 @@ export function useMyReviewsGrid({
     sortedPrs,
     visibleSortedIndexes,
     prFlatIndexes,
-    scrollerEl,
+    scrollRowIntoView,
     containerRef,
     rowRefs,
     returnedKeys,
