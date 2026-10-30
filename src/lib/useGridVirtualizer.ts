@@ -31,8 +31,14 @@ export function useGridVirtualizer({
     if (!scrollerEl) return;
     const element = scrollerEl;
 
+    // The window only moves a whole row at a time; skip re-rendering the
+    // owner on every scrolled pixel while the top row stays the same.
     function updateViewport() {
-      setViewport({ height: element.clientHeight, scrollTop: element.scrollTop });
+      const height = element.clientHeight;
+      const scrollTop = snapToRow(element.scrollTop, rowHeight);
+      setViewport((prev) =>
+        prev.height === height && prev.scrollTop === scrollTop ? prev : { height, scrollTop },
+      );
     }
 
     updateViewport();
@@ -44,7 +50,7 @@ export function useGridVirtualizer({
       element.removeEventListener("scroll", updateViewport);
       resizeObserver?.disconnect();
     };
-  }, [scrollerEl]);
+  }, [scrollerEl, rowHeight]);
 
   const firstRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
   const visibleRowCount = Math.ceil(Math.max(viewport.height, rowHeight) / rowHeight);
@@ -94,4 +100,9 @@ export function scrollGridRowIntoView(
   } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
     scroller.scrollTop = rowBottom - scroller.clientHeight;
   }
+}
+
+/** Rounds a scroll offset down to the top of its row. */
+export function snapToRow(scrollTop: number, rowHeight: number): number {
+  return Math.floor(scrollTop / rowHeight) * rowHeight;
 }

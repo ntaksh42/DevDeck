@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parkGridFocus } from '@/lib/parkGridFocus';
-import { scrollGridRowIntoView } from '@/lib/useGridVirtualizer';
+import { scrollGridRowIntoView, snapToRow } from '@/lib/useGridVirtualizer';
 import { useQuery } from '@tanstack/react-query';
 import {
   getWorkItemPreview,
@@ -279,12 +279,21 @@ export function useWiGridLogic(
     const scroller = scrollerAttached;
     if (!scroller) return;
     const scrollerElement = scroller;
+    // The virtual window only moves a whole row at a time, so store scrollTop
+    // snapped to the row and skip the update while it stays in the same row.
+    // Re-rendering the grid (and the preview beside it) on every scrolled pixel
+    // made trackpad scrolling stutter on long lists.
     function updateViewport() {
-      setGridViewport({
+      const next = {
         width: scrollerElement.clientWidth,
         height: scrollerElement.clientHeight,
-        scrollTop: scrollerElement.scrollTop,
-      });
+        scrollTop: snapToRow(scrollerElement.scrollTop, WI_GRID_ROW_HEIGHT),
+      };
+      setGridViewport((prev) =>
+        prev.width === next.width && prev.height === next.height && prev.scrollTop === next.scrollTop
+          ? prev
+          : next,
+      );
     }
     updateViewport();
     scrollerElement.addEventListener("scroll", updateViewport, { passive: true });
@@ -328,7 +337,8 @@ export function useWiGridLogic(
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
-  function handlePreviewUpdated(preview: WorkItemPreview) {
+  // Stable: the memoized preview panel receives it as a prop.
+  const handlePreviewUpdated = useCallback((preview: WorkItemPreview) => {
     const key = workItemSummaryKey(preview);
     setItemOverrides((current) => {
       const next = new Map(current);
@@ -340,7 +350,7 @@ export function useWiGridLogic(
       });
       return next;
     });
-  }
+  }, [setItemOverrides]);
 
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(index, displayed.length - 1));

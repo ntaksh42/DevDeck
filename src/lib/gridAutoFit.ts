@@ -16,6 +16,24 @@ export function gridRows(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(ROW_SELECTOR));
 }
 
+/** Grid rows that a DOM mutation added or changed (text updates included). */
+export function mutatedGridRows(records: MutationRecord[]): HTMLElement[] {
+  const rows = new Set<HTMLElement>();
+  for (const record of records) {
+    const target = record.target instanceof Element ? record.target : record.target.parentElement;
+    const changedRow = target?.closest<HTMLElement>(ROW_SELECTOR);
+    if (changedRow && record.type === "characterData") rows.add(changedRow);
+    record.addedNodes.forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.matches(ROW_SELECTOR)) rows.add(node);
+      node.querySelectorAll<HTMLElement>(ROW_SELECTOR).forEach((row) => rows.add(row));
+      const parentRow = node.parentElement?.closest<HTMLElement>(ROW_SELECTOR);
+      if (parentRow) rows.add(parentRow);
+    });
+  }
+  return [...rows];
+}
+
 /** Grid items of a row, skipping absolutely positioned decorations. */
 function rowCells(row: HTMLElement): HTMLElement[] {
   return Array.from(row.children).filter((child): child is HTMLElement => {
@@ -40,10 +58,10 @@ export function measureColumnContentWidths(
   root: HTMLElement,
   trackOffset: number,
   count: number,
-  { headerOnly = false }: { headerOnly?: boolean } = {},
+  { headerOnly = false, rows: onlyRows }: { headerOnly?: boolean; rows?: HTMLElement[] } = {},
 ): (number | null)[] {
   const result: (number | null)[] = Array.from({ length: count }, () => null);
-  const rows = gridRows(root);
+  const rows = onlyRows ?? gridRows(root);
   const measuredRows = (headerOnly ? rows.slice(0, 1) : rows)
     .map(rowCells)
     .filter((cells) => cells.length >= trackOffset + count)
