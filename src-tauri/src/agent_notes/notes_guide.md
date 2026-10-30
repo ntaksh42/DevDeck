@@ -63,6 +63,8 @@ front-matter は `key: value` の行。値は JSON 文字列か素のテキス�
 | `summarize` | 要約を返信する。結果 HTML は変えない | 要約を返信する |
 | (無し) | `quote` があれば `fix`。無ければ本文から判断: 結果の修正・やり直しなら `fix`、質問・要約なら `question` | `question` |
 
+結果 HTML を作る・作り直すときは、skill `devdeck-result-html` の書式 (結論・図・表の並べ方とプレビューの制約) に従う。
+
 結果 HTML を直したときは、直した要素に `data-agent-note="{Note のファイル名}"` 属性を付ける
 (DevDeck が「直した箇所」として示す)。
 

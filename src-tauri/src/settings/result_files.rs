@@ -9,14 +9,14 @@ use regex::Regex;
 
 use crate::error::Result;
 
-pub(super) fn find_review_result_file(
+pub(crate) fn find_review_result_file(
     folder: &Path,
     pull_request_id: i64,
 ) -> Result<Option<PathBuf>> {
     find_result_file(folder, |name| file_name_matches_pr(name, pull_request_id))
 }
 
-pub(super) fn find_work_item_result_file(
+pub(crate) fn find_work_item_result_file(
     folder: &Path,
     work_item_id: i64,
 ) -> Result<Option<PathBuf>> {

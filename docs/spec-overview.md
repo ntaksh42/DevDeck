@@ -242,6 +242,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     `pull-request` は `agent-notes/pr-{id}/` を使う (前提は `review_result_folder_path` の設定)。`ask` は結果フォルダ不要で、
     ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
     `investigate` / `summarize`。
+  - **自動レビュー / 自動調査** (`auto_agent/`、設定 `auto_agent_enabled`、既定オフ): 組織の同期が終わるたびに、My Reviews と My Work Items のキャッシュから未処理の項目を順に (PR が先、1 回の同期で最大 3 件) 取り出して処理するキュー。未処理とは、ドラフトでなく、notes フォルダ (`pr-{id}` / `wi-{id}`) も結果フォルダの結果 HTML も無いこと。起動時やオンにした時点で溜まっていた分も、後の同期で順に処理される。結果フォルダが未設定の種類は対象外。前のバッチが資料を集めている間は次を始めない (全組織で 1 バッチずつ)。項目ごとに REST で PR のレビュー情報と変更ファイル / WI のプレビューを取得して `_context/` の資料にし、`kind: investigate` の Note (本文: 結果 HTML を結果フォルダに作る・コードを変更しない・コメントの提案を書かない) を作って `run_agent` と同じ方法 (既定のエージェントとモデル、ウィンドウなし) で起動する。Note を作った時点で処理済みになる。取得に失敗した項目は処理済みにならず、次の同期でやり直す。失敗は警告ログのみ。
   - **旧保存先からの移行**: 以前は結果フォルダ配下の `.to-agent-msg/{wi|pr}-{id}/` に保存していた。起動時と設定保存時に、
     両結果フォルダの `.to-agent-msg` から各項目フォルダをファイル単位で `agent-notes/` へ移す (移動先に同名ファイルがあれば
     上書きせず旧側に残す。空になったフォルダは削除)。何度実行しても同じ結果になる。失敗は警告ログのみ。
@@ -265,7 +266,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     引用は空白を無視したテキスト + 前後 24 文字の文脈 + 位置で再アンカーする。ハイライトは CSS Custom Highlight API、
     番号ピン (左余白、状態の色: Needs you 赤・Open 黄・下書き点線) とスクロール位置マーカー (右端) は親ドキュメント側に描画し、
     結果 HTML は書き換えない。iframe は `sandbox="allow-same-origin"` (スクリプト無効) のため、スクロールと選択は親から
-    ポーリングで監視する。
+    ポーリングで監視する。結果 HTML 内の `http(s)` リンクは既定のブラウザで開く。
   - **グリッドと通知**: My Reviews / My Work Items の行のタイトル横に open メモ数のバッジ (Needs you があれば赤、
     未読のエージェント返信があれば太字)。App 直下の `useAgentNoteWatcher` が `summarize_agent_notes` を 5 秒ごとに取得し、
     変化した項目のメモ一覧を即時再取得、エージェントの返信・完了をデスクトップ通知する (`desktop_notifications_enabled` に従い、
@@ -283,6 +284,11 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     `{CODEX_HOME または %USERPROFILE%\.codex}\skills\devdeck-notes\SKILL.md` に置く / 更新する (`agent_notes/skill.rs`)。
     設定フォルダ (`.claude` / `.codex`) が無いエージェントには置かない。DevDeck 製の印
     (`<!-- devdeck:managed ... -->`) が無い既存の `SKILL.md` は変更しない。配置失敗は警告ログのみ。
+  - **Skill (`devdeck-result-html`)**: 同じ場所・同じ規則で、調査・レビュー結果 HTML の書式
+    (`agent_notes/result_format.md`) を置く。ファイル名は `PR{番号}.html` / `WIT{番号}.html`、
+    並びは結論 → ポイントの図 → 本文 → 根拠 → 未確認 → (PR のみ) 畳んだ指摘の下書き、見出しの番号は対象 PR / Work Item への
+    リンク、図はインライン SVG (プレビューは JavaScript・外部ファイル不可)。
+    ガイドと自動実行の Note は、結果 HTML をこの書式で書くよう指示する。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・
@@ -507,6 +513,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `claude_model_choices` / `codex_model_choices` | Agent パネルのモデル選択に足す候補 (カンマ / 空白区切り)。 |
 | `inbox_insight_enabled` | 同期の後、新しい Inbox のコメント項目について Claude Code (`claude -p`) に判定・理由・根拠 (クローンがあれば読み取り専用でコードを確認)・返信案を書かせ、プレビュー先頭に出す。コメント本文がモデルに送られるため既定はオフ。Settings → Agent command のチェックボックス。 |
 | `inbox_insight_model` | その判断メモに使うモデル。未設定なら `sonnet`。英数字と `._:/[]-` 以外を含む名前は無視して `sonnet` を使う。 |
+| `auto_agent_enabled` | 同期の後、自分がレビュアーの PR (ドラフトを除く) と自分にアサインされた WI のうち未処理のものを、既定のエージェントに Agent notes の `investigate` として順に依頼し、結果 HTML を作らせる。起動時に溜まっていた分も対象。既定オフ。項目のフィールド・説明・コメントがエージェントに渡る。 |
 | `codex_command` | Codex で起動するときのシェルコマンド。プレースホルダは `agent_command` と同じ。未設定なら既定コマンド `codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" "Read {guide} and handle the open notes in {notes}"` (Codex を非対話で、書き込みを作業フォルダとメモフォルダに限るサンドボックスで実行。Azure CLI 未ログイン・git push 不可は Claude Code と同じ) を使う (`agent_notes/launch.rs` の `DEFAULT_CODEX_COMMAND`)。 |
 | `agent_command` | Claude Code で Agent パネルからの依頼・返信・Run now (`Shift+Enter`) を起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_CLAUDE_COMMAND`)。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |

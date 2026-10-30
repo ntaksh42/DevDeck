@@ -84,6 +84,7 @@ pub(super) async fn sync_org(
     );
     outcome.merge(pr_outcome);
     outcome.merge(wi_outcome);
+    crate::auto_agent::start(&db, &settings, &org);
     outcome
 }
 

@@ -113,6 +113,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -162,6 +163,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
         });
       }
       if (command === "update_app_settings") {
@@ -207,6 +209,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -256,6 +259,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -299,6 +303,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: true,
           notificationContentPreviewEnabled: false,
@@ -348,6 +353,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -390,6 +396,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           readOnlyValidationModeEnabled: true,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -439,6 +446,7 @@ describe("App — Settings", () => {
           agentWorkspacePath: null,
           inboxInsightEnabled: false,
           inboxInsightModel: null,
+          autoAgentEnabled: false,
           ...settings,
         });
       }

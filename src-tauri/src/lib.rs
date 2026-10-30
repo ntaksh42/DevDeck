@@ -3,6 +3,7 @@ use std::str::FromStr;
 mod agent_notes;
 mod app_state;
 mod auth;
+mod auto_agent;
 mod commands;
 mod db;
 mod diagnostics;

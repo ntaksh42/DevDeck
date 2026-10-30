@@ -31,6 +31,7 @@ function nonDefaultSettings(): AppSettings {
     agentWorkspacePath: "C:/src/workspace",
     inboxInsightEnabled: true,
     inboxInsightModel: "opus",
+    autoAgentEnabled: true,
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
     notificationContentPreviewEnabled: false,
