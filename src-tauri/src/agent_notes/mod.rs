@@ -363,7 +363,7 @@ pub(crate) fn notes_root(db: &AppDatabase) -> PathBuf {
     db.data_dir().join(NOTES_ROOT)
 }
 
-fn notes_dir(root: &Path, target: NoteTarget, item_id: i64) -> PathBuf {
+pub(crate) fn notes_dir(root: &Path, target: NoteTarget, item_id: i64) -> PathBuf {
     root.join(format!("{}-{item_id}", target.dir_prefix()))
 }
 

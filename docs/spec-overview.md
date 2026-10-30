@@ -242,6 +242,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     `pull-request` は `agent-notes/pr-{id}/` を使う (前提は `review_result_folder_path` の設定)。`ask` は結果フォルダ不要で、
     ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
     `investigate` / `summarize`。
+  - **自動レビュー / 自動調査** (`auto_agent/`、設定 `auto_agent_enabled`、既定オフ): 組織の同期の前に My Reviews と My Work Items の ID を控え、同期の後に増えた項目を対象にする (その種類の同期が一度も完了していない組織では何もしない)。ドラフト PR と、すでに notes フォルダ (`pr-{id}` / `wi-{id}`) がある項目は除き、PR を先に、組織・同期ごとに最大 3 件 (超えた分は手動)。項目ごとに REST で PR のレビュー情報と変更ファイル / WI のプレビューを取得して `_context/` の資料にし、`kind: investigate` の Note (本文: 結果 HTML を結果フォルダに作る・コードを変更しない・コメントの提案を書かない) を作って `run_agent` と同じ方法 (既定のエージェントとモデル、ウィンドウなし) で起動する。取得・起動はバックグラウンドで行い同期を待たせない。失敗は警告ログのみ。結果フォルダ未設定の対象は Note 作成で失敗し、起動しない。
   - **旧保存先からの移行**: 以前は結果フォルダ配下の `.to-agent-msg/{wi|pr}-{id}/` に保存していた。起動時と設定保存時に、
     両結果フォルダの `.to-agent-msg` から各項目フォルダをファイル単位で `agent-notes/` へ移す (移動先に同名ファイルがあれば
     上書きせず旧側に残す。空になったフォルダは削除)。何度実行しても同じ結果になる。失敗は警告ログのみ。
@@ -507,6 +508,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `claude_model_choices` / `codex_model_choices` | Agent パネルのモデル選択に足す候補 (カンマ / 空白区切り)。 |
 | `inbox_insight_enabled` | 同期の後、新しい Inbox のコメント項目について Claude Code (`claude -p`) に判定・理由・根拠 (クローンがあれば読み取り専用でコードを確認)・返信案を書かせ、プレビュー先頭に出す。コメント本文がモデルに送られるため既定はオフ。Settings → Agent command のチェックボックス。 |
 | `inbox_insight_model` | その判断メモに使うモデル。未設定なら `sonnet`。英数字と `._:/[]-` 以外を含む名前は無視して `sonnet` を使う。 |
+| `auto_agent_enabled` | 同期の後、新たに自分がレビュアーになった PR (ドラフトを除く) と新たに自分にアサインされた WI について、既定のエージェントに Agent notes の `investigate` を自動で依頼し、結果 HTML を作らせる。既定オフ。項目のフィールド・説明・コメントがエージェントに渡る。 |
 | `codex_command` | Codex で起動するときのシェルコマンド。プレースホルダは `agent_command` と同じ。未設定なら既定コマンド `codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" "Read {guide} and handle the open notes in {notes}"` (Codex を非対話で、書き込みを作業フォルダとメモフォルダに限るサンドボックスで実行。Azure CLI 未ログイン・git push 不可は Claude Code と同じ) を使う (`agent_notes/launch.rs` の `DEFAULT_CODEX_COMMAND`)。 |
 | `agent_command` | Claude Code で Agent パネルからの依頼・返信・Run now (`Shift+Enter`) を起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_CLAUDE_COMMAND`)。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |

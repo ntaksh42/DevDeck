@@ -70,6 +70,10 @@ pub struct AppSettings {
     pub inbox_insight_enabled: bool,
     /// Model for those summaries; unset means `sonnet`.
     pub inbox_insight_model: Option<String>,
+    /// After each sync, starts the agent (Agent notes `investigate`) on pull
+    /// requests newly awaiting my review and work items newly assigned to me,
+    /// up to three per organization and sync. Off by default.
+    pub auto_agent_enabled: bool,
     pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
@@ -124,6 +128,7 @@ impl Default for AppSettings {
             agent_workspace_path: None,
             inbox_insight_enabled: false,
             inbox_insight_model: None,
+            auto_agent_enabled: false,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
@@ -188,6 +193,7 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         agent_auto_post_enabled: get_bool_setting(conn, "agent_auto_post_enabled", false)?,
         inbox_insight_enabled: get_bool_setting(conn, "inbox_insight_enabled", false)?,
         inbox_insight_model: get_setting(conn, "inbox_insight_model")?,
+        auto_agent_enabled: get_bool_setting(conn, "auto_agent_enabled", false)?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
             "read_only_validation_mode_enabled",
@@ -324,6 +330,7 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         "inbox_insight_enabled",
         settings.inbox_insight_enabled,
     )?;
+    set_bool_setting(conn, "auto_agent_enabled", settings.auto_agent_enabled)?;
     set_bool_setting(
         conn,
         "read_only_validation_mode_enabled",

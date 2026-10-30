@@ -173,6 +173,7 @@ fn app_settings_can_be_saved_and_cleared() {
             agent_workspace_path: Some("C:/src/workspace".to_string()),
             inbox_insight_enabled: true,
             inbox_insight_model: Some("sonnet".to_string()),
+            auto_agent_enabled: true,
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,
             notification_content_preview_enabled: false,
@@ -220,6 +221,7 @@ fn app_settings_can_be_saved_and_cleared() {
     assert!(saved.read_only_validation_mode_enabled);
     assert!(saved.inbox_insight_enabled);
     assert_eq!(saved.inbox_insight_model.as_deref(), Some("sonnet"));
+    assert!(saved.auto_agent_enabled);
     assert!(saved.desktop_notifications_enabled);
     assert!(!saved.notification_content_preview_enabled);
     assert!(saved.notify_work_item_assignments);

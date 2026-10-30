@@ -42,6 +42,7 @@ export function AgentCommandSettings() {
   const [autoPost, setAutoPost] = useState(false);
   const [insightEnabled, setInsightEnabled] = useState(false);
   const [insightModel, setInsightModel] = useState("");
+  const [autoAgent, setAutoAgent] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
     claudeModelChoices: "",
@@ -69,6 +70,9 @@ export function AgentCommandSettings() {
     setInsightModel(settingsQuery.data?.inboxInsightModel ?? "");
   }, [settingsQuery.data?.inboxInsightEnabled, settingsQuery.data?.inboxInsightModel]);
   useEffect(() => {
+    setAutoAgent(settingsQuery.data?.autoAgentEnabled ?? false);
+  }, [settingsQuery.data?.autoAgentEnabled]);
+  useEffect(() => {
     const data = settingsQuery.data;
     setModels({
       claudeModel: data?.claudeModel ?? "",
@@ -94,6 +98,7 @@ export function AgentCommandSettings() {
         agentWorkspacePath: workspace,
         inboxInsightEnabled: insightEnabled,
         inboxInsightModel: insightModel,
+        autoAgentEnabled: autoAgent,
         ...models,
       }),
     );
@@ -232,6 +237,26 @@ export function AgentCommandSettings() {
             clone of the PR's repository in the workspace folder, it checks the code read-only and
             cites file:line. The comment thread is sent to the model. Nothing is replied or
             resolved for you.
+          </span>
+        </div>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoAgent}
+              onChange={(event) => setAutoAgent(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Review new pull requests and investigate new work items automatically
+          </label>
+          <span className="text-xs text-muted-foreground">
+            After each sync, the default agent starts on pull requests that newly ask for your
+            review (drafts skipped) and work items newly assigned to you, at most 3 per sync, as an
+            Investigate request in the Agent panel. It writes the result HTML into the result
+            folder and is told not to change code or propose comments. Items that already have
+            agent notes are skipped. The item's fields, description and comments are sent to the
+            agent.
           </span>
         </div>
 
