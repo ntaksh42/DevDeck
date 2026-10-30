@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-mod result_files;
+pub(crate) mod result_files;
 mod result_html;
 
 use serde::{Deserialize, Serialize};

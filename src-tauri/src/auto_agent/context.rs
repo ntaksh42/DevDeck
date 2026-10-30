@@ -20,6 +20,7 @@ pub(super) fn note_body(target: NoteTarget, result_folder: &str) -> String {
     };
     format!(
         "DevDeck の自動実行です。{what}し、結果 HTML を {folder} (`{result_folder}`) に作ってください。\n\
+         - 結果 HTML は skill `devdeck-result-html` の書式に従う。\n\
          - 読み取り専用: コードやブランチは変更しない。\n\
          - PR / WI へのコメントの提案 (`post`) は書かない。\n\
          - 資料は `context_file` と手元のクローンから得る。"

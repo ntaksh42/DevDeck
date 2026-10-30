@@ -1,23 +1,30 @@
-//! Automatic review and investigation (setting `auto_agent_enabled`): after a
-//! sync, pull requests that newly await my review and work items newly
-//! assigned to me are handed to the agent as an Agent notes `investigate`
-//! note, exactly as if the user had asked from the Result panel. The agent
-//! writes the result HTML; it gets no Azure DevOps access and is told not to
-//! change code or propose comments.
+//! Automatic review and investigation (setting `auto_agent_enabled`): after
+//! each sync, pull requests awaiting my review and work items assigned to me
+//! that are not handled yet are handed to the agent as an Agent notes
+//! `investigate` note, exactly as if the user had asked from the Result panel.
+//! The items form a queue worked off a few per sync, so what was waiting when
+//! the app started (or when the setting was turned on) is handled too. The
+//! agent writes the result HTML; it gets no Azure DevOps access and is told
+//! not to change code or propose comments.
 
 mod context;
 
-use std::collections::HashSet;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::agent_notes::{self, AgentNoteService, CreateAgentNoteInput, NoteTarget, RunAgentInput};
 use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, Organization};
 use crate::error::Result;
 use crate::pr_review::{PrLocator, PrReviewService};
 use crate::secrets::SecretStore;
+use crate::settings::result_files;
 use crate::work_items::{GetWorkItemPreviewInput, WorkItemService};
 
-/// Items started per organization and sync; the rest stay for the user.
+/// Items started per organization and sync; the rest wait for later syncs.
 const ITEMS_PER_SYNC: usize = 3;
+/// Set while a batch is gathering material, so an overlapping sync does not
+/// pick the same items before their notes exist.
+static RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// One item to hand to the agent.
 #[derive(Debug)]
@@ -42,74 +49,64 @@ impl AutoItem {
     }
 }
 
-/// Snapshot of the review PRs and my work items taken before a sync, or
-/// `None` when the feature is off or there is no earlier sync to compare with
-/// (the first sync would otherwise hand over everything at once).
-pub(crate) struct Before {
-    prs: Option<HashSet<i64>>,
-    work_items: Option<HashSet<i64>>,
-}
-
-impl Before {
-    pub(crate) fn take(
-        db: &AppDatabase,
-        settings: &AppSettings,
-        org_id: &str,
-        prs_synced: bool,
-        work_items_synced: bool,
-    ) -> Option<Self> {
-        if !settings.auto_agent_enabled {
-            return None;
-        }
-        let prs = prs_synced
-            .then(|| db.list_review_pull_requests(org_id).ok())
-            .flatten()
-            .map(|prs| prs.iter().map(|pr| pr.pull_request_id).collect());
-        let work_items = work_items_synced
-            .then(|| db.list_my_work_items(org_id).ok())
-            .flatten()
-            .map(|items| items.iter().map(|wi| wi.id).collect());
-        Some(Self { prs, work_items })
-    }
-}
-
-/// The new items worth starting, pull requests first, up to the per-sync
-/// limit. Drafts are left out (not ready for review), and so is anything that
-/// already has a notes folder (the user or an earlier run asked already).
+/// The next items of the queue, pull requests first, up to the per-sync
+/// limit. Drafts are left out (not ready for review), and so is anything
+/// already handled: it has a notes folder (the user or an earlier run asked)
+/// or a result HTML.
 pub(crate) fn pick(
-    before: &Before,
     prs: Vec<CachedReviewPr>,
     work_items: Vec<CachedWorkItem>,
-    has_notes: impl Fn(NoteTarget, i64) -> bool,
+    is_handled: impl Fn(NoteTarget, i64) -> bool,
 ) -> Vec<AutoItem> {
-    let is_new =
-        |seen: &Option<HashSet<i64>>, id: i64| seen.as_ref().is_some_and(|s| !s.contains(&id));
     let prs = prs
         .into_iter()
-        .filter(|pr| !pr.is_draft && is_new(&before.prs, pr.pull_request_id))
+        .filter(|pr| !pr.is_draft)
         .map(AutoItem::PullRequest);
-    let work_items = work_items
-        .into_iter()
-        .filter(|wi| is_new(&before.work_items, wi.id))
-        .map(AutoItem::WorkItem);
+    let work_items = work_items.into_iter().map(AutoItem::WorkItem);
     prs.chain(work_items)
-        .filter(|item| !has_notes(item.target(), item.id()))
+        .filter(|item| !is_handled(item.target(), item.id()))
         .take(ITEMS_PER_SYNC)
         .collect()
 }
 
-/// Compares the cache with `before` and starts the agent on the new items in
-/// the background. Gathering the material calls the REST API, so it does not
-/// hold up the sync.
-pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization, before: Before) {
+/// Starts the agent on the next unhandled items in the background. Gathering
+/// the material calls the REST API, so it does not hold up the sync. A target
+/// without a result folder is skipped (there is nowhere to write the result).
+pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
+    if !settings.auto_agent_enabled || RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let review_folder = settings.review_result_folder_path.as_deref().map(Path::new);
+    let work_item_folder = settings
+        .work_item_result_folder_path
+        .as_deref()
+        .map(Path::new);
+    let prs = match review_folder {
+        Some(_) => db.list_review_pull_requests(&org.id).unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let work_items = match work_item_folder {
+        Some(_) => db.list_my_work_items(&org.id).unwrap_or_default(),
+        None => Vec::new(),
+    };
     let root = agent_notes::notes_root(db);
-    let items = pick(
-        &before,
-        db.list_review_pull_requests(&org.id).unwrap_or_default(),
-        db.list_my_work_items(&org.id).unwrap_or_default(),
-        |target, id| agent_notes::notes_dir(&root, target, id).exists(),
-    );
+    let items = pick(prs, work_items, |target, id| {
+        if agent_notes::notes_dir(&root, target, id).exists() {
+            return true;
+        }
+        let found = match target {
+            NoteTarget::PullRequest => {
+                review_folder.map(|folder| result_files::find_review_result_file(folder, id))
+            }
+            _ => {
+                work_item_folder.map(|folder| result_files::find_work_item_result_file(folder, id))
+            }
+        };
+        // An unreadable folder counts as handled, so nothing is started blind.
+        found.is_none_or(|found| !matches!(found, Ok(None)))
+    });
     if items.is_empty() {
+        RUNNING.store(false, Ordering::SeqCst);
         return;
     }
     let db = db.clone();
@@ -121,6 +118,7 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
                 tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto agent: failed to start");
             }
         }
+        RUNNING.store(false, Ordering::SeqCst);
     });
 }
 

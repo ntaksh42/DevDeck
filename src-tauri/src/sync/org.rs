@@ -63,13 +63,6 @@ pub(super) async fn sync_org(
         }
     };
     let snooze = SnoozeService::new(db.clone());
-    let auto_before = crate::auto_agent::Before::take(
-        &db,
-        &settings,
-        &org.id,
-        has_completed_sync(&db, "prs", &org.id),
-        has_completed_sync(&db, "work_items", &org.id),
-    );
 
     let (pr_outcome, wi_outcome) = tokio::join!(
         sync_org_prs(
@@ -91,9 +84,7 @@ pub(super) async fn sync_org(
     );
     outcome.merge(pr_outcome);
     outcome.merge(wi_outcome);
-    if let Some(before) = auto_before {
-        crate::auto_agent::start(&db, &settings, &org, before);
-    }
+    crate::auto_agent::start(&db, &settings, &org);
     outcome
 }
 

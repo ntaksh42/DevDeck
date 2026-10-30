@@ -1,7 +1,5 @@
-use std::collections::HashSet;
-
 use super::context::html_to_text;
-use super::{pick, AutoItem, Before};
+use super::{pick, AutoItem};
 use crate::agent_notes::NoteTarget;
 use crate::db::{CachedReviewPr, CachedWorkItem};
 
@@ -46,14 +44,6 @@ fn wi(id: i64) -> CachedWorkItem {
     }
 }
 
-fn before(prs: Option<&[i64]>, wis: Option<&[i64]>) -> Before {
-    let set = |ids: &[i64]| ids.iter().copied().collect::<HashSet<_>>();
-    Before {
-        prs: prs.map(set),
-        work_items: wis.map(set),
-    }
-}
-
 fn ids(items: &[AutoItem]) -> Vec<(NoteTarget, i64)> {
     items
         .iter()
@@ -62,25 +52,10 @@ fn ids(items: &[AutoItem]) -> Vec<(NoteTarget, i64)> {
 }
 
 #[test]
-fn picks_only_new_non_draft_items_pull_requests_first() {
+fn picks_unhandled_non_draft_items_pull_requests_first() {
     let picked = pick(
-        &before(Some(&[1]), Some(&[10])),
         vec![pr(1, false), pr(2, false), pr(3, true)],
         vec![wi(10), wi(11)],
-        |_, _| false,
-    );
-    assert_eq!(
-        ids(&picked),
-        vec![(NoteTarget::PullRequest, 2), (NoteTarget::WorkItem, 11)]
-    );
-}
-
-#[test]
-fn caps_items_per_sync_and_skips_items_with_notes() {
-    let picked = pick(
-        &before(Some(&[]), Some(&[])),
-        vec![pr(1, false), pr(2, false)],
-        vec![wi(10), wi(11), wi(12)],
         |target, id| target == NoteTarget::PullRequest && id == 1,
     );
     assert_eq!(
@@ -94,14 +69,27 @@ fn caps_items_per_sync_and_skips_items_with_notes() {
 }
 
 #[test]
-fn starts_nothing_without_an_earlier_sync() {
+fn caps_items_per_sync_leaving_the_rest_queued() {
     let picked = pick(
-        &before(None, None),
-        vec![pr(1, false)],
-        vec![wi(10)],
+        vec![pr(1, false), pr(2, false)],
+        vec![wi(10), wi(11)],
         |_, _| false,
     );
-    assert!(picked.is_empty());
+    assert_eq!(
+        ids(&picked),
+        vec![
+            (NoteTarget::PullRequest, 1),
+            (NoteTarget::PullRequest, 2),
+            (NoteTarget::WorkItem, 10)
+        ]
+    );
+    // Once those have notes, the next sync takes the rest.
+    let next = pick(
+        vec![pr(1, false), pr(2, false)],
+        vec![wi(10), wi(11)],
+        |target, id| target == NoteTarget::PullRequest || id == 10,
+    );
+    assert_eq!(ids(&next), vec![(NoteTarget::WorkItem, 11)]);
 }
 
 #[test]

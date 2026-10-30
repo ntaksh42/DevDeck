@@ -248,15 +248,16 @@ export function AgentCommandSettings() {
               onChange={(event) => setAutoAgent(event.target.checked)}
               className="h-4 w-4"
             />
-            Review new pull requests and investigate new work items automatically
+            Review pull requests and investigate work items automatically
           </label>
           <span className="text-xs text-muted-foreground">
-            After each sync, the default agent starts on pull requests that newly ask for your
-            review (drafts skipped) and work items newly assigned to you, at most 3 per sync, as an
-            Investigate request in the Agent panel. It writes the result HTML into the result
-            folder and is told not to change code or propose comments. Items that already have
-            agent notes are skipped. The item's fields, description and comments are sent to the
-            agent.
+            After each sync, the default agent works through pull requests awaiting your review
+            (drafts skipped) and work items assigned to you that have neither agent notes nor a
+            result HTML yet, 3 per sync, including those already waiting when the app starts.
+            Each becomes an Investigate request in the Agent panel; the agent writes the result
+            HTML into the result folder and is told not to change code or propose comments. A
+            type without a result folder is skipped. The item's fields, description and comments
+            are sent to the agent.
           </span>
         </div>
 
