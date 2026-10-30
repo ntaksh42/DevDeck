@@ -70,7 +70,13 @@ export function applyWorkItemScenario(
   const scenario = currentDemoScenario();
   if (scenario === "empty") return [];
   if (scenario !== "large-data") return workItems;
-  return repeatWorkItems(workItems, 420);
+  return repeatWorkItems(workItems, largeWorkItemCount());
+}
+
+/** `?wiCount=3000` lengthens the large-data work item lists (default 420). */
+function largeWorkItemCount(): number {
+  const requested = Number(new URLSearchParams(window.location.search).get("wiCount"));
+  return Number.isInteger(requested) && requested > 0 ? requested : 420;
 }
 
 export function applyNotificationScenario(
@@ -165,6 +171,14 @@ function repeatReviewPullRequests(
   });
 }
 
+// Assignee only: views filter on state and type, so those must stay put.
+const LONG_ASSIGNEES = [
+  "Alexandra Montgomery-Watanabe",
+  "Christopher Nakamura",
+  "Maximilian Okonkwo-Fernandes",
+  "Bo Li",
+];
+
 function repeatWorkItems(
   base: WorkItemSummary[],
   count: number,
@@ -172,8 +186,14 @@ function repeatWorkItems(
   return Array.from({ length: count }, (_, index) => {
     const source = base[index % base.length];
     const id = 30_000 + index;
+    // Real result sets mix short and long values, and the long ones often
+    // only appear further down, so auto-fitted columns keep growing while
+    // scrolling, as they do against a real organization.
+    const assignedTo =
+      index >= 40 && index % 4 === 0 ? LONG_ASSIGNEES[(index / 4) % LONG_ASSIGNEES.length] : source.assignedTo;
     return {
       ...source,
+      assignedTo,
       id,
       title: `${source.title} #${index + 1}`,
       changedDate: source.changedDate

@@ -17,6 +17,10 @@ localStorage.setItem("azdodeck:demo:scenario", "large-data");
 
 URL parameters take precedence over local storage.
 
+With `large-data`, `wiCount` sets how many work items the demo generates
+(default 420), e.g. `?scenario=large-data&wiCount=3000`, to profile scrolling
+on very long lists.
+
 ## Scenarios
 
 | Scenario | Purpose |
