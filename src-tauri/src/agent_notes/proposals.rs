@@ -241,9 +241,15 @@ pub(super) fn prepare_post_in(
             ));
         }
     }
+    // The notes root is part of the key so that separate roots never share a
+    // slot: the app has one root, but tests run in parallel, each in its own
+    // temporary root, and reuse the same ids.
     let key = format!(
-        "{target}:{}:{}:{}",
-        input.item_id, input.note_id, input.reply_index
+        "{}:{target}:{}:{}:{}",
+        root.display(),
+        input.item_id,
+        input.note_id,
+        input.reply_index
     );
     if !in_flight()
         .lock()
