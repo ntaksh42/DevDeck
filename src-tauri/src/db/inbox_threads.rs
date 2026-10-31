@@ -15,8 +15,27 @@ use super::{AppDatabase, NewInboxItem};
 
 /// Kinds raised by a comment. They are kept one row per conversation; other
 /// (retired) kinds keep one row per raising event.
-pub(super) const COMMENT_KINDS_SQL: &str = "('pr_mention', 'pr_reply', 'wi_mention')";
-const COMMENT_KINDS: [&str; 3] = ["pr_mention", "pr_reply", "wi_mention"];
+pub(super) const COMMENT_KINDS_SQL: &str =
+    "('pr_mention', 'pr_group_mention', 'pr_reply', 'wi_mention', 'wi_reply')";
+const COMMENT_KINDS: [&str; 5] = [
+    "pr_mention",
+    "pr_group_mention",
+    "pr_reply",
+    "wi_mention",
+    "wi_reply",
+];
+/// PR comment kinds, as SQL.
+pub(super) const PR_COMMENT_KINDS_SQL: &str = "('pr_mention', 'pr_group_mention', 'pr_reply')";
+
+/// How strongly a kind asks for the user: a direct mention, then a group
+/// mention, then a reply. A waiting conversation keeps its strongest kind.
+fn kind_rank(kind: &str) -> u8 {
+    match kind {
+        "pr_mention" | "wi_mention" => 2,
+        "pr_group_mention" => 1,
+        _ => 0,
+    }
+}
 
 /// Inserts new items or folds them into the row of their conversation.
 /// Returns how many rows were added or updated.
@@ -96,7 +115,7 @@ fn upsert_conversation_item(
         return Ok(0);
     }
     // A mention still waiting stays a mention when a plain reply follows it.
-    let kind = if state != "done" && kind == "pr_mention" {
+    let kind = if state != "done" && kind_rank(&kind) > kind_rank(&item.kind) {
         kind
     } else {
         item.kind.clone()
@@ -137,15 +156,17 @@ impl AppDatabase {
     pub fn finish_inbox_items_of_closed_prs(&self, organization_id: &str) -> Result<usize> {
         let conn = self.open()?;
         Ok(conn.execute(
-            "UPDATE action_inbox_items SET state = 'done', snoozed_until = NULL, done_at = ?2 \
-             WHERE org_id = ?1 AND state != 'done' AND kind IN ('pr_mention', 'pr_reply') \
+            &format!(
+                "UPDATE action_inbox_items SET state = 'done', snoozed_until = NULL, done_at = ?2 \
+             WHERE org_id = ?1 AND state != 'done' AND kind IN {PR_COMMENT_KINDS_SQL} \
                AND NOT EXISTS (SELECT 1 FROM pull_requests p WHERE p.org_id = ?1 \
                    AND p.repository_id = action_inbox_items.repository_id \
                    AND p.pull_request_id = action_inbox_items.subject_id \
                    AND p.status = 'active') \
                AND NOT EXISTS (SELECT 1 FROM review_pull_requests r WHERE r.org_id = ?1 \
                    AND r.repository_id = action_inbox_items.repository_id \
-                   AND r.pull_request_id = action_inbox_items.subject_id)",
+                   AND r.pull_request_id = action_inbox_items.subject_id)"
+            ),
             params![organization_id, format_time(Utc::now())],
         )?)
     }
@@ -236,6 +257,19 @@ pub(super) fn migrate_v27(conn: &Connection) -> Result<()> {
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_action_inbox_conversation \
              ON action_inbox_items(org_id, repository_id, subject_id, thread_id) \
              WHERE kind IN {COMMENT_KINDS_SQL};"
+    ))?;
+    Ok(())
+}
+
+/// Rebuilds the one-row-per-conversation index for the comment kinds added in
+/// v30 (`pr_group_mention`, `wi_reply`).
+pub(super) fn migrate_v30(conn: &Connection) -> Result<()> {
+    conn.execute_batch(&format!(
+        "DROP INDEX IF EXISTS idx_action_inbox_conversation; \
+         CREATE UNIQUE INDEX idx_action_inbox_conversation \
+             ON action_inbox_items(org_id, repository_id, subject_id, thread_id) \
+             WHERE kind IN {COMMENT_KINDS_SQL}; \
+         PRAGMA user_version = 30;"
     ))?;
     Ok(())
 }

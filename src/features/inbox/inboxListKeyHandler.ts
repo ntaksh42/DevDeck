@@ -36,6 +36,22 @@ export function inboxListKeyHandler({
   previewRef: RefObject<HTMLDivElement | null>;
   openLink: (link: InboxLink) => void;
 }) {
+  // M / Ctrl+M, like "Focus comment" in My Reviews and Work Items: the reply
+  // box (WI mentions: a Reply to the mentioning comment, else the comment box).
+  function focusReply(event: KeyboardEvent) {
+    event.preventDefault();
+    activatePanel("conversation");
+    // Wait for the panel to mount if it was stacked behind the agent's tab.
+    window.setTimeout(() => {
+      const preview = previewRef.current;
+      const target =
+        preview?.querySelector<HTMLElement>('[data-inbox-mention-reply="true"], [data-thread-reply="true"]') ??
+        preview?.querySelector<HTMLElement>('[data-inbox-composer="true"] textarea');
+      if (target instanceof HTMLTextAreaElement) target.focus();
+      else target?.click();
+    }, 0);
+  }
+
   return function handleListKeyDown(event: KeyboardEvent) {
     if (isEditableTarget(event.target)) return;
     if (event.altKey || event.metaKey) return;
@@ -43,6 +59,8 @@ export function inboxListKeyHandler({
       if (event.key === "Enter" && selected) {
         event.preventDefault();
         openInBrowser(selected);
+      } else if (event.key.toLowerCase() === "m" && !event.shiftKey && selected) {
+        focusReply(event);
       }
       return;
     }
@@ -133,18 +151,8 @@ export function inboxListKeyHandler({
         event.preventDefault();
         applyReplyDraft(selected.insight.replyDraft);
       }
-    } else if (lower === "r") {
-      event.preventDefault();
-      activatePanel("conversation");
-      // Wait for the panel to mount if it was stacked behind the agent's tab.
-      window.setTimeout(() => {
-        const preview = previewRef.current;
-        const target =
-          preview?.querySelector<HTMLElement>('[data-inbox-mention-reply="true"], [data-thread-reply="true"]') ??
-          preview?.querySelector<HTMLElement>('[data-inbox-composer="true"] textarea');
-        if (target instanceof HTMLTextAreaElement) target.focus();
-        else target?.click();
-      }, 0);
+    } else if (lower === "m" && !event.shiftKey) {
+      focusReply(event);
     } else if (lower === "q") {
       event.preventDefault();
       openAgentPanel(agentRequestOf(selected));

@@ -102,23 +102,45 @@ fn mention_tokens_become_readable() {
 }
 
 #[test]
-fn first_scan_only_sets_the_baseline() {
+fn first_scan_keeps_only_mentions_still_waiting() {
     let (_tf, db, org) = setup();
-    let threads = vec![thread(
-        1,
-        "active",
-        vec![comment(10, "other", &format!("@<{ME}> please look"))],
-    )];
-    let update = update_action_inbox(&db, &org, &scan(5, threads));
-    assert_eq!(update, InboxUpdate::default());
+    let threads = vec![
+        // Waiting: active and not answered.
+        thread(
+            1,
+            "active",
+            vec![comment(10, "other", &format!("@<{ME}> please look"))],
+        ),
+        // Answered by the user afterwards.
+        thread(
+            2,
+            "active",
+            vec![
+                comment(11, "other", &format!("@<{ME}> and this")),
+                comment(12, ME, "done"),
+            ],
+        ),
+        // Resolved.
+        thread(
+            3,
+            "fixed",
+            vec![comment(13, "other", &format!("@<{ME}> old"))],
+        ),
+        // A plain reply is history, not a request.
+        thread(4, "active", vec![comment(14, "other", "plain")]),
+    ];
+    let update = update_action_inbox(&db, &org, &scan(5, threads), &Default::default());
+    assert_eq!(update.added, 1);
     assert_eq!(
         db.get_inbox_comment_cursor("org1", "repo", 5).unwrap(),
-        Some(10)
+        Some(14)
     );
-    assert!(db
-        .list_inbox_items(None, InboxListState::Open, 50)
-        .unwrap()
-        .is_empty());
+    let items = db.list_inbox_items(None, InboxListState::Open, 50).unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        (items[0].thread_id, items[0].kind.as_str()),
+        (1, "pr_mention")
+    );
 }
 
 #[test]
@@ -144,7 +166,7 @@ fn a_new_mention_and_a_new_reply_are_stored_with_their_kind() {
             ],
         ),
     ];
-    let update = update_action_inbox(&db, &org, &scan(5, threads));
+    let update = update_action_inbox(&db, &org, &scan(5, threads), &Default::default());
     assert_eq!(update.added, 2);
 
     let mut items = db.list_inbox_items(None, InboxListState::Open, 50).unwrap();
@@ -172,8 +194,14 @@ fn rescanning_does_not_duplicate_items() {
             vec![comment(20, "tanaka", &format!("@<{ME}> hi"))],
         )]
     };
-    assert_eq!(update_action_inbox(&db, &org, &scan(5, threads())).added, 1);
-    assert_eq!(update_action_inbox(&db, &org, &scan(5, threads())).added, 0);
+    assert_eq!(
+        update_action_inbox(&db, &org, &scan(5, threads()), &Default::default()).added,
+        1
+    );
+    assert_eq!(
+        update_action_inbox(&db, &org, &scan(5, threads()), &Default::default()).added,
+        0
+    );
     assert_eq!(
         db.list_inbox_items(None, InboxListState::Open, 50)
             .unwrap()
@@ -193,7 +221,10 @@ fn inbox_does_not_depend_on_the_notification_cursor() {
         "active",
         vec![comment(20, "tanaka", &format!("@<{ME}> hi"))],
     )];
-    assert_eq!(update_action_inbox(&db, &org, &scan(5, threads)).added, 1);
+    assert_eq!(
+        update_action_inbox(&db, &org, &scan(5, threads), &Default::default()).added,
+        1
+    );
 }
 
 #[test]
@@ -205,14 +236,14 @@ fn a_resolved_thread_closes_its_items() {
         "active",
         vec![comment(20, "tanaka", &format!("@<{ME}> hi"))],
     )];
-    update_action_inbox(&db, &org, &scan(5, active));
+    update_action_inbox(&db, &org, &scan(5, active), &Default::default());
 
     let resolved = vec![thread(
         1,
         "closed",
         vec![comment(20, "tanaka", &format!("@<{ME}> hi"))],
     )];
-    let update = update_action_inbox(&db, &org, &scan(5, resolved));
+    let update = update_action_inbox(&db, &org, &scan(5, resolved), &Default::default());
     assert_eq!(update.resolved, 1);
     assert!(db
         .list_inbox_items(None, InboxListState::Open, 50)
@@ -291,13 +322,13 @@ fn any_new_comment_on_my_own_pr_is_reported_but_not_on_a_review_pr() {
     };
     let reviewing = scan(5, threads());
     assert_eq!(
-        update_action_inbox(&db, &org, &reviewing),
+        update_action_inbox(&db, &org, &reviewing, &Default::default()),
         InboxUpdate::default()
     );
 
     let mut own = scan(6, threads());
     own[0].authored = true;
-    let update = update_action_inbox(&db, &org, &own);
+    let update = update_action_inbox(&db, &org, &own, &Default::default());
     assert_eq!(update.added, 1);
     let item = db
         .list_inbox_items(None, InboxListState::Open, 10)
@@ -317,7 +348,7 @@ fn without_a_known_user_nothing_is_detected() {
         vec![comment(20, "tanaka", &format!("@<{ME}> hi"))],
     )];
     assert_eq!(
-        update_action_inbox(&db, &org, &scan(5, threads)),
+        update_action_inbox(&db, &org, &scan(5, threads), &Default::default()),
         InboxUpdate::default()
     );
 }
@@ -391,7 +422,7 @@ fn a_new_item_keeps_its_thread_location_and_older_open_items_are_backfilled() {
             None,
         ),
     ];
-    update_action_inbox(&db, &org, &scan(5, threads));
+    update_action_inbox(&db, &org, &scan(5, threads), &Default::default());
     let items = db.list_inbox_items(None, InboxListState::Open, 50).unwrap();
     let new_item = items.iter().find(|item| item.comment_id == 20).unwrap();
     assert_eq!(new_item.file_path.as_deref(), Some("/src/Retry.cs"));

@@ -9,6 +9,28 @@ use crate::prs::InboxUpdate;
 
 const RETIRED_KINDS: [&str; 3] = ["pr_review_request", "pr_returned", "wi_assigned"];
 
+/// Records the Inbox scan of one sync kind (`inbox_prs` / `inbox_wi`) in Sync
+/// health, so a scan that left something out shows as "Limited" instead of
+/// silently missing comments.
+pub(super) fn record_inbox_health(
+    db: &AppDatabase,
+    org: &Organization,
+    kind: &str,
+    warning: Option<&str>,
+) {
+    let now = chrono::Utc::now().to_rfc3339();
+    if let Err(e) = db.update_sync_state(
+        &format!("{kind}:{}", org.id),
+        &org.id,
+        Some(&now),
+        0,
+        None,
+        warning,
+    ) {
+        tracing::warn!(org = %org.name, error = ?e, "inbox: failed to record the scan in sync health");
+    }
+}
+
 /// Finishes any open row of a kind the Inbox no longer lists.
 pub(super) fn retire_condition_items(db: &AppDatabase, org: &Organization) -> InboxUpdate {
     let mut update = InboxUpdate::default();

@@ -16,8 +16,8 @@ use super::{AppDatabase, InboxItem};
 /// Kinds that get a summary: comments addressed to the user. The PR and work
 /// item syncs run side by side, and each summarizes only its own kinds, since
 /// only the PR sync has the full comment threads at hand.
-pub const PR_INSIGHT_KINDS: [&str; 2] = ["pr_mention", "pr_reply"];
-pub const WI_INSIGHT_KINDS: [&str; 1] = ["wi_mention"];
+pub const PR_INSIGHT_KINDS: [&str; 3] = ["pr_mention", "pr_group_mention", "pr_reply"];
+pub const WI_INSIGHT_KINDS: [&str; 2] = ["wi_mention", "wi_reply"];
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]

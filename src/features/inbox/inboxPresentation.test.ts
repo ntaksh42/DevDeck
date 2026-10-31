@@ -5,7 +5,9 @@ import {
   inboxKindLabel,
   inboxLocationLabel,
   inboxRowTitle,
+  isThreadItem,
   matchesInboxFilter,
+  matchesInboxPriority,
   shortRefName,
 } from "./inboxPresentation";
 
@@ -106,5 +108,17 @@ describe("inboxLocationLabel", () => {
     expect(inboxLocationLabel({ filePath: "/src/app/dashboard.ts", line: 7 })).toBe("dashboard.ts:7");
     expect(inboxLocationLabel({ filePath: "/README.md", line: null })).toBe("README.md");
     expect(inboxLocationLabel({ filePath: null, line: null })).toBeNull();
+  });
+});
+
+describe("team mentions and work item replies", () => {
+  it("files them under Other and keeps team mentions answerable in their thread", () => {
+    for (const kind of ["pr_group_mention", "wi_reply"]) {
+      expect(matchesInboxPriority({ kind }, "priority")).toBe(false);
+      expect(matchesInboxPriority({ kind }, "other")).toBe(true);
+    }
+    expect(inboxKindLabel("pr_group_mention")).toBe("Team");
+    expect(inboxKindLabel("wi_reply")).toBe("WI reply");
+    expect(isThreadItem({ kind: "pr_group_mention" })).toBe(true);
   });
 });

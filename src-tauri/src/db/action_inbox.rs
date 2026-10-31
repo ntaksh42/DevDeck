@@ -144,11 +144,12 @@ impl AppDatabase {
         pull_request_id: i64,
     ) -> Result<Vec<OpenInboxRef>> {
         let conn = self.open()?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT id, thread_id, comment_id FROM action_inbox_items \
              WHERE org_id = ?1 AND repository_id = ?2 AND subject_id = ?3 \
-               AND kind IN ('pr_mention', 'pr_reply') AND state != 'done'",
-        )?;
+               AND kind IN {} AND state != 'done'",
+            super::inbox_threads::PR_COMMENT_KINDS_SQL
+        ))?;
         let rows = stmt.query_map(
             params![organization_id, repository_id, pull_request_id],
             |row| {
