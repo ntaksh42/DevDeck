@@ -46,6 +46,7 @@ export function resolveNotificationJump(record: NotificationRecord): Notificatio
     case "pipelineWatchStarted":
     case "pipelineWatchFinished":
     case "pipelineRunQueued":
+    case "pipelineInvestigationStarted":
       return { type: "view", view: "pipelines" };
     case "syncFailed":
       return { type: "view", view: "settings" };

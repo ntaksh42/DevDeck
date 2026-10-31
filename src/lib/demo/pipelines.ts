@@ -137,6 +137,41 @@ export function demoPipelineTestResults(buildId: number) {
   return { total: 128, passed: 127, failed: 0, other: 1, failedTests: [], truncated: false };
 }
 
+// Flaky comparison for the demo pipeline: of build 1002's failures, one is a
+// known flaky test, one broke recently, one is new in the compared window.
+export function demoFlakyTests() {
+  return {
+    comparedRuns: 10,
+    skippedRuns: 0,
+    tests: [
+      {
+        name: "RegistryClient.retries on 503",
+        kind: "flaky",
+        failedRuns: 3,
+        observedRuns: 10,
+        sinceBuildId: null,
+        sinceBuildNumber: null,
+      },
+      {
+        name: "RegistryClient.pushes layers in order",
+        kind: "newFailure",
+        failedRuns: 2,
+        observedRuns: 10,
+        sinceBuildId: 997,
+        sinceBuildNumber: "20260612.3",
+      },
+      {
+        name: "Publish.skips unchanged artifacts",
+        kind: "unstable",
+        failedRuns: 4,
+        observedRuns: 10,
+        sinceBuildId: null,
+        sinceBuildNumber: null,
+      },
+    ],
+  };
+}
+
 type DemoTimelineNode = {
   id: string;
   parentId: string | null;
