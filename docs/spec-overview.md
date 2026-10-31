@@ -191,6 +191,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     - **一度だけ投稿**: 投稿後、提案の直後に `<!-- posted {時刻} {thread-N|comment-N} -->` を DevDeck が書き (`postedAt` /
       `postedRef`)、`app-data/agent-notes/post-log.jsonl` に 1 行追記する。投稿済み、または同じ対象に同じ本文を投稿済みの提案は
       再投稿しない。投稿中の二重実行は拒否する。マーカー行 (`reply` / `post` / `posted`) を含む人の入力は拒否する。
+    - **行コメントの提案**: PR のメモでは、提案マーカーに `file={パス} line={行}` を付けると (`<!-- post claude {時刻} file=/src/a.ts line=42 -->`、パスの空白は `%20`)、その行 (変更後の側) に新しいスレッドとして投稿する (`post_agent_comment` が `post_pull_request_comment` に `filePath` / `rightLine` を渡し、`threadId` は使わない)。投稿前に PR の変更ファイル (`list_pull_request_changes`) にそのパスがあるか確かめ、無ければ拒否する。パスは `/` 始まり・`..` を含まない・制御文字なし・1,000 文字以内、行は 1 以上で、片方だけ・WI のメモ・自動投稿はいずれも拒否する。Agent パネルでは「Proposed line comment」として、表示中の PR のメモなら Inbox と同じ部品 (`PrCodeSnippet`) で前後 5 行のコードと対象行を出す (別の PR を表示中・投稿後は `path:line` の 1 行)。承認 (`C` / Post ボタン) は通常の提案と同じ。`NoteReply` は `filePath` / `line` を返す。
     - **自動投稿 (設定 `agent_auto_post_enabled`、既定 off)**: on にすると、Agent パネルが表示中の WI / PR の会話に現れた
       未投稿の提案を、承認なしで 1 件ずつ `auto` 付きで投稿する (パネルを閉じている間・別の対象を表示している間は投稿せず、
       開くまで Needs you のまま待つ)。上限は 1 つの対象に 1 時間 3 件、全体で 1 時間 10 件。本文に `http(s)://` か `@` を含む提案は

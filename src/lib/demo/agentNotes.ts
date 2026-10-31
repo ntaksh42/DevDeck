@@ -112,6 +112,14 @@ const demoNotes = new Map<string, AgentNote[]>([
             createdAt: "2026-09-26T11:10:00+09:00",
             body: "Load-tested 50 rps with **200-request bursts**: the limiter holds, p99 +3 ms. Should I also cover `PUT /limits`?",
           },
+          {
+            author: "codex",
+            createdAt: "2026-09-26T11:12:00+09:00",
+            body: "This refresh runs on every render; consider memoizing it so a burst does not refetch the dashboard each time.",
+            kind: "post",
+            filePath: "/src/app/dashboard.ts",
+            line: 7,
+          },
         ],
         filePath: `${FOLDER}\\pr-101\\20260926-101500.md`,
       }),
@@ -210,12 +218,15 @@ export function demoReplyAgentNote(input: ReplyAgentNoteInput): AgentNote {
 }
 
 /** Marks a proposed comment as posted, as the desktop app does after it posts it. */
-export function demoPostAgentComment(input: AgentNoteItem & { noteId: string; replyIndex: number }): void {
+export function demoPostAgentComment(
+  input: AgentNoteItem & { noteId: string; replyIndex: number; auto?: boolean },
+): void {
   if (input.target === "ask") throw new Error("agent comments can only be posted to a work item or pull request");
   const current = find(input);
   const reply = current.replies[input.replyIndex];
   if (!reply || reply.kind !== "post") throw new Error("no proposed comment at that position");
   if (reply.postedAt) throw new Error("this comment was already posted");
+  if (input.auto && (reply.filePath || reply.line != null)) throw new Error("a line comment needs your approval");
   const replies = current.replies.map((r, i) =>
     i === input.replyIndex
       ? { ...r, postedAt: now(), postedRef: input.target === "pull-request" ? "thread-1" : "comment-1" }
