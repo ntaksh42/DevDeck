@@ -59,68 +59,71 @@ export function AppContent({
   onOpenPullRequest,
   onOpenView,
 }: AppContentProps) {
+  // The view scrolls itself (Settings), so a non-scrolling frame paints the focus border.
   return (
-    <section
-      data-focus-pane="view"
-      tabIndex={-1}
-      onKeyDownCapture={handlePaneFocusKey}
-      className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 outline-none ${
-        activeView === "settings" || organizations.length === 0
-          ? "overflow-auto"
-          : "overflow-hidden"
-      }`}
-    >
-      <Suspense fallback={<LoadingState />}>
-        {organizationsQuery.isLoading ? (
-          <LoadingState />
-        ) : organizationsQuery.isError ? (
-          <ErrorState
-            message={commandErrorMessage(organizationsQuery.error)}
-            onRetry={() => void organizationsQuery.refetch()}
-            onOpenSettings={onOpenSettings}
-          />
-        ) : activeView === "pullRequestSearch" ? (
-          <PullRequestSearch
-            externalSearch={pullRequestSearchRequest}
-            onExternalSearchHandled={onPullRequestSearchHandled}
-          />
-        ) : activeView === "myReviews" ? (
-          <MyReviewsGrid
-            selectRequest={myReviewsSelectRequest}
-            onSelectRequestHandled={onMyReviewsSelectHandled}
-          />
-        ) : activeView === "myPullRequests" ? (
-          <MyPullRequestsGrid />
-        ) : activeView === "workItems" ? (
-          <WorkItemSearch
-            externalSearch={workItemSearchRequest}
-            onExternalSearchHandled={onWorkItemSearchHandled}
-          />
-        ) : activeView === "myWorkItems" ? (
-          <MyWorkItemsPanel />
-        ) : activeView === "workItemViews" ? (
-          <WorkItemViewsPanel
-            selectedViewRequestId={selectedWorkItemViewRequestId}
-            onSelectedViewChange={onSelectedViewChange}
-            onSelectedViewRequestHandled={onSelectedViewRequestHandled}
-            onViewsChange={onWorkItemNavViewsChange}
-          />
-        ) : activeView === "pipelines" ? (
-          <PipelinesView />
-        ) : activeView === "inbox" ? (
-          <InboxView />
-        ) : activeView === "notifications" ? (
-          <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
-        ) : activeView === "crossOrgSummary" ? (
-          <CrossOrgSummaryView onOpenView={onOpenView} />
-        ) : activeView === "analyze" ? (
-          <AnalyzeView />
-        ) : organizations.length === 0 ? (
-          <SetupPanel />
-        ) : (
-          <OrganizationSettings organizations={organizations} />
-        )}
-      </Suspense>
-    </section>
+    <div data-focus-frame className="flex min-h-0 flex-1 flex-col">
+      <section
+        data-focus-pane="view"
+        tabIndex={-1}
+        onKeyDownCapture={handlePaneFocusKey}
+        className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 outline-none ${
+          activeView === "settings" || organizations.length === 0
+            ? "overflow-auto"
+            : "overflow-hidden"
+        }`}
+      >
+        <Suspense fallback={<LoadingState />}>
+          {organizationsQuery.isLoading ? (
+            <LoadingState />
+          ) : organizationsQuery.isError ? (
+            <ErrorState
+              message={commandErrorMessage(organizationsQuery.error)}
+              onRetry={() => void organizationsQuery.refetch()}
+              onOpenSettings={onOpenSettings}
+            />
+          ) : activeView === "pullRequestSearch" ? (
+            <PullRequestSearch
+              externalSearch={pullRequestSearchRequest}
+              onExternalSearchHandled={onPullRequestSearchHandled}
+            />
+          ) : activeView === "myReviews" ? (
+            <MyReviewsGrid
+              selectRequest={myReviewsSelectRequest}
+              onSelectRequestHandled={onMyReviewsSelectHandled}
+            />
+          ) : activeView === "myPullRequests" ? (
+            <MyPullRequestsGrid />
+          ) : activeView === "workItems" ? (
+            <WorkItemSearch
+              externalSearch={workItemSearchRequest}
+              onExternalSearchHandled={onWorkItemSearchHandled}
+            />
+          ) : activeView === "myWorkItems" ? (
+            <MyWorkItemsPanel />
+          ) : activeView === "workItemViews" ? (
+            <WorkItemViewsPanel
+              selectedViewRequestId={selectedWorkItemViewRequestId}
+              onSelectedViewChange={onSelectedViewChange}
+              onSelectedViewRequestHandled={onSelectedViewRequestHandled}
+              onViewsChange={onWorkItemNavViewsChange}
+            />
+          ) : activeView === "pipelines" ? (
+            <PipelinesView />
+          ) : activeView === "inbox" ? (
+            <InboxView />
+          ) : activeView === "notifications" ? (
+            <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
+          ) : activeView === "crossOrgSummary" ? (
+            <CrossOrgSummaryView onOpenView={onOpenView} />
+          ) : activeView === "analyze" ? (
+            <AnalyzeView />
+          ) : organizations.length === 0 ? (
+            <SetupPanel />
+          ) : (
+            <OrganizationSettings organizations={organizations} />
+          )}
+        </Suspense>
+      </section>
+    </div>
   );
 }
