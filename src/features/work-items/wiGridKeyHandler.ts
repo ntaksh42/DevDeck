@@ -24,6 +24,7 @@ export interface WiKeyHandlerDeps {
   checkedItems: WorkItemSummary[];
   visibleColumns: WiSortKey[];
   extraColumns: string[];
+  extraColumnLabel?: (referenceName: string) => string;
   openFilterCol: FilterableColumn | null;
   triageScope: string | undefined;
   snoozeEnabled: boolean;
@@ -54,7 +55,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
   return (e) => {
     if (e.defaultPrevented) return;
     const {
-      selectedIndex, displayed, checkedIds, checkedItems, visibleColumns, extraColumns,
+      selectedIndex, displayed, checkedIds, checkedItems, visibleColumns, extraColumns, extraColumnLabel,
       openFilterCol, triageScope,
       snoozeEnabled, snoozeTargetRef, rowRefs, moveSelection, setOpenFilterCol,
       setFilterAnchorRect, setBulkAssignOpen, setBulkStateOpen, setBulkPriorityOpen,
@@ -126,7 +127,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
             setCopyToast,
           );
         } else {
-          void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns), setCopyToast);
+          void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns, extraColumnLabel), setCopyToast);
         }
       }
       return;
