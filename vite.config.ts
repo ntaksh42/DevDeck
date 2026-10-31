@@ -51,6 +51,7 @@ export default defineConfig(async () => ({
         "**/src-tauri/**",
         `${path.resolve(__dirname, ".claude").replace(/\\/g, "/")}/**`,
         `${path.resolve(__dirname, ".worktrees").replace(/\\/g, "/")}/**`,
+        `${path.resolve(__dirname, "target").replace(/\\/g, "/")}/**`,
       ],
     },
   },
