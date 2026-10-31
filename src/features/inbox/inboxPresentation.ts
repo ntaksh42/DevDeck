@@ -54,7 +54,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 const KIND_CLASSES: Record<string, string> = {
-  pr_mention: "text-amber-700 dark:text-amber-300",
+  pr_mention: "text-amber-800 dark:text-amber-300",
   pr_reply: "text-sky-700 dark:text-sky-300",
   pr_review_request: "text-blue-700 dark:text-blue-300",
   pr_returned: "text-violet-700 dark:text-violet-300",
