@@ -32,6 +32,7 @@ function nonDefaultSettings(): AppSettings {
     inboxInsightEnabled: true,
     inboxInsightModel: "opus",
     autoAgentEnabled: true,
+    autoAgentPipelinesEnabled: true,
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
     notificationContentPreviewEnabled: false,

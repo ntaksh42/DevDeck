@@ -9,10 +9,10 @@ use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::github;
 use crate::pipelines::{
-    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    CancelPipelineRunInput, FlakyTestReport, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListFlakyTestsInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
@@ -423,6 +423,10 @@ impl Provider for GithubProvider {
         &self,
         _input: ListPipelineTestResultsInput,
     ) -> Result<PipelineTestResults> {
+        Err(pipelines_unsupported())
+    }
+
+    async fn list_flaky_tests(&self, _input: ListFlakyTestsInput) -> Result<FlakyTestReport> {
         Err(pipelines_unsupported())
     }
 

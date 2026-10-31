@@ -25,6 +25,7 @@ export function settingsInput(
     inboxInsightEnabled: settings?.inboxInsightEnabled ?? false,
     inboxInsightModel: settings?.inboxInsightModel ?? null,
     autoAgentEnabled: settings?.autoAgentEnabled ?? false,
+    autoAgentPipelinesEnabled: settings?.autoAgentPipelinesEnabled ?? false,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,

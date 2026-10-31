@@ -23,6 +23,9 @@ const noteReplySchema = z.object({
   /** Set once DevDeck posted a `post` reply: when, and where (`thread-12` / `comment-34`). */
   postedAt: z.string().nullable().optional(),
   postedRef: z.string().nullable().optional(),
+  /** A `post` on a pull request line: the file (`/src/a.ts`) and the 1-based line on the new side. */
+  filePath: z.string().nullable().optional(),
+  line: z.number().nullable().optional(),
 });
 
 export type NoteReply = z.infer<typeof noteReplySchema>;

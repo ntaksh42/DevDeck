@@ -50,6 +50,8 @@ pub struct UpdateAppSettingsInput {
     pub inbox_insight_model: Option<String>,
     #[serde(default)]
     pub auto_agent_enabled: Option<bool>,
+    #[serde(default)]
+    pub auto_agent_pipelines_enabled: Option<bool>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
     pub notification_content_preview_enabled: Option<bool>,
@@ -242,6 +244,7 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         inbox_insight_enabled: input.inbox_insight_enabled.unwrap_or(false),
         inbox_insight_model: normalize_path(input.inbox_insight_model),
         auto_agent_enabled: input.auto_agent_enabled.unwrap_or(false),
+        auto_agent_pipelines_enabled: input.auto_agent_pipelines_enabled.unwrap_or(false),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
         notification_content_preview_enabled: input
