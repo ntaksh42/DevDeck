@@ -1,3 +1,4 @@
+import { demoPaletteSearch } from "./demo/palette";
 import type {
   AddAzureCliOrganizationInput,
   AddPatOrganizationInput,
@@ -25,7 +26,6 @@ import type {
   PullRequestChanges,
   RunWorkItemQueryInput,
   SearchAllInput,
-  SearchAllResult,
   SearchPullRequestsInput,
   SearchPullRequestMentionsInput,
   SearchWorkItemAssigneesInput,
@@ -302,38 +302,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
       return demoWorkItems(input);
     }
-    case "search_all": {
-      const input = (args as { input?: SearchAllInput } | undefined)?.input;
-      const query = input?.query.trim() ?? "";
-      const limit = input?.limitPerKind ?? 5;
-      if (!query) {
-        return {
-          workItems: [],
-          pullRequests: [],
-          totals: { workItems: 0, pullRequests: 0 },
-        } satisfies SearchAllResult;
-      }
-      const workItems = demoWorkItems({ query });
-      const pullRequests = demoPullRequests({ query }).pullRequests;
-      // Numeric Inbox lookups also reach PRs seeded only in the review cache.
-      const reviewPr = demoReviewPullRequests().find((pr) => String(pr.pullRequestId) === query);
-      if (reviewPr && !pullRequests.some((pr) => pr.pullRequestId === reviewPr.pullRequestId)) {
-        pullRequests.push({
-          ...reviewPr,
-          status: "active",
-          closedDate: null,
-          sourceRefName: demoPrReviewDetail(reviewPr.pullRequestId).sourceRefName,
-        });
-      }
-      return {
-        workItems: workItems.slice(0, limit),
-        pullRequests: pullRequests.slice(0, limit),
-        totals: {
-          workItems: workItems.length,
-          pullRequests: pullRequests.length,
-        },
-      } satisfies SearchAllResult;
-    }
+    case "search_all":
+      return demoPaletteSearch((args as { input?: SearchAllInput } | undefined)?.input);
     case "list_my_work_items": {
       const snoozed = demoSnoozedKeys("work_item");
       return demoMyWorkItems().filter((item) => !snoozed.has(String(item.id)));

@@ -4,6 +4,7 @@ mod inbox;
 mod inbox_hits;
 mod live_results;
 mod notifications;
+mod palette;
 mod search;
 mod service;
 mod sync;

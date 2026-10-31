@@ -175,8 +175,7 @@ function AppShell() {
     setPaletteSearchText,
     paletteSearchItems,
     paletteRecentItems,
-    paletteSearchEnabled,
-    searchAllQueryIsFetching,
+    searchAllQueryIsFetching, paletteSearchStatus, paletteSearchError,
   } = usePaletteSearch(commandPaletteOpen, organizations, {
     setWorkItemSearchRequest,
     setPullRequestSearchRequest,
@@ -482,8 +481,9 @@ function AppShell() {
             organizations.length > 0
               ? {
                   items: [...paletteSearchItems, ...paletteRecentItems],
-                  pending: paletteSearchEnabled && searchAllQueryIsFetching,
+                  pending: searchAllQueryIsFetching,
                   onQueryChange: setPaletteSearchText,
+                  status: paletteSearchStatus, error: paletteSearchError,
                 }
               : undefined
           }
