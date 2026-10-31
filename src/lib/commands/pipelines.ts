@@ -141,6 +141,29 @@ const pipelineTestResultsSchema = z.object({
 });
 export type PipelineTestResults = z.infer<typeof pipelineTestResultsSchema>;
 
+const flakyTestKindSchema = z.enum(["flaky", "unstable", "newFailure", "consistent", "fixed"]);
+export type FlakyTestKind = z.infer<typeof flakyTestKindSchema>;
+
+const flakyTestReportSchema = z.object({
+  /** Completed runs compared (runs that published tests). */
+  comparedRuns: z.number(),
+  /** Runs whose test results could not be fetched. */
+  skippedRuns: z.number(),
+  /** Every test that failed at least once in the compared runs. */
+  tests: z.array(
+    z.object({
+      name: z.string(),
+      kind: flakyTestKindSchema,
+      failedRuns: z.number(),
+      observedRuns: z.number(),
+      sinceBuildId: z.number().nullable(),
+      sinceBuildNumber: z.string().nullable(),
+    }),
+  ),
+});
+export type FlakyTestReport = z.infer<typeof flakyTestReportSchema>;
+export type FlakyTestStat = FlakyTestReport["tests"][number];
+
 export type ListPipelineRunsInput = {
   organizationId?: string;
   projectId: string;
@@ -200,6 +223,19 @@ export async function listPipelineTestResults(input: {
 }): Promise<PipelineTestResults> {
   const result = await invokeCommand("list_pipeline_test_results", { input });
   return pipelineTestResultsSchema.parse(result);
+}
+
+// How the tests that failed in the definition's recent completed runs behaved
+// across those runs (flaky / unstable / new failure / ...).
+export async function listFlakyTests(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+  branch?: string;
+  runs?: number;
+}): Promise<FlakyTestReport> {
+  const result = await invokeCommand("list_flaky_tests", { input });
+  return flakyTestReportSchema.parse(result);
 }
 
 export async function getPipelineDefinition(input: {

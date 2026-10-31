@@ -20,6 +20,7 @@ import {
   demoPipelineLogTail,
   demoPipelineRunDetail,
   demoPipelineTestResults,
+  demoFlakyTests,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
@@ -90,6 +91,9 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "list_pipeline_test_results": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineTestResults(input?.buildId ?? 1001);
+    }
+    case "list_flaky_tests": {
+      return demoFlakyTests();
     }
     case "get_pipeline_definition": {
       const input = (args as { input?: { definitionId?: number } } | undefined)?.input;

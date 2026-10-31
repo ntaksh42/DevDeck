@@ -419,6 +419,8 @@ export function PipelineRunDetailPanel({
               organizationId={organizationId}
               projectId={projectId}
               buildId={buildId}
+              definitionId={run.definitionId}
+              sourceBranch={run.sourceBranch}
             />
 
             {selectedLogId == null ? (
