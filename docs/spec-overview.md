@@ -310,13 +310,20 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     行頭へ配置し句キーワードを大文字化する。引用文字列と `[...]` のフィールド参照は退避してから
     整形するため、`'To Do And Review'` のような値やキーワードを含むフィールド名は変化しない。
     `ASC` / `DESC` などユーザーが書いた値は大文字化しない。
-  - **Test run**: 「Test」ボタンで `count_work_item_query` のみを実行し一致件数を表示する
+  - **Test run**: 「Test」ボタン (WIQL 欄の上のマクロチップ行の右端) で `count_work_item_query` のみを実行し一致件数を表示する
     (保存もダイアログを閉じることもしない)。WIQL 未入力・`validateWiql` エラー・プロジェクト未選択は
     バックエンドを呼ばずにその場でエラーを返す。結果は WIQL 編集で破棄し、実行が競合した場合は
     最新の実行結果のみを反映する。
+  - **レイアウト**: 上から「入力方法のタブ (Paste URL / From existing query)」→ Name・Project →
+    WIQL (マクロチップ + Test + Format / Expand) → 折りたたみの「Advanced settings」→ Cancel / Save。
+    タブは `role="tablist"` で `←` `→` `Home` `End` により切替 (フォーカスはタブに残り、クリック時は
+    パネルの入力欄へ移る)。初期は Paste URL でその入力欄にフォーカスする。「Advanced settings」
+    (`ViewAdvancedSettings`) は Limit / Auto refresh / Alert when count / Extra columns を収め、
+    閉じた状態でも現在値を 1 行 (`Limit 200 · Refresh off · Alert off · Columns 0`) で示す。
+    `Enter` / `Space` で開閉し、Limit・Auto refresh・Alert のエラーで保存に失敗したときは自動で開く。
   - **サイズ**: ダイアログ幅は既定 `max-w-2xl`、WIQL 欄の「Expand」で `max-w-4xl` + 18 行に拡大し、
     「Shrink」または展開中の `Escape` で戻る。
-  - **Azure DevOps クエリのインポート**: URL 貼り付けとは別に、選択中プロジェクトの
+  - **Azure DevOps クエリのインポート** (「From existing query」タブ): 選択中プロジェクトの
     クエリ階層 (Shared Queries / My Queries) を `list_project_queries` で動的に取得し、
     フィルタ入力付きのリスト (フォルダパス + 名前を空白区切りの AND・大文字小文字無視で
     絞り込み。日本語可) から選択できる。↑/↓ で移動し Enter で確定 (IME 変換中の Enter は
