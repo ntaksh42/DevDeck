@@ -54,6 +54,7 @@ export const appSettingsSchema = z.object({
   inboxInsightEnabled: z.boolean().default(false),
   inboxInsightModel: z.string().nullable().default(null),
   autoAgentEnabled: z.boolean().default(false),
+  autoAgentPipelinesEnabled: z.boolean().default(false),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
   notificationContentPreviewEnabled: z.boolean().default(true),
@@ -200,6 +201,7 @@ export type DeleteOrganizationInput = {
 export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
   autoAgentEnabled?: boolean;
+  autoAgentPipelinesEnabled?: boolean;
   workItemResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
   agentCommand?: string | null;

@@ -15,6 +15,7 @@ export const NOTIFICATION_KINDS = [
   "pipelineWatchStarted",
   "pipelineWatchFinished",
   "pipelineRunQueued",
+  "pipelineInvestigationStarted",
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -78,7 +79,11 @@ export type ParsedNotificationPayload =
   | { kind: "wiAssigned" | "wiStateChanged"; payload: WorkItemNotificationPayload }
   | { kind: "syncFailed"; payload: SyncFailedNotificationPayload }
   | {
-      kind: "pipelineWatchStarted" | "pipelineWatchFinished" | "pipelineRunQueued";
+      kind:
+        | "pipelineWatchStarted"
+        | "pipelineWatchFinished"
+        | "pipelineRunQueued"
+        | "pipelineInvestigationStarted";
       payload: PipelineNotificationPayload;
     }
   | { kind: string; payload: Record<string, unknown> };
@@ -100,6 +105,7 @@ export function parseNotificationPayload(record: NotificationRecord): ParsedNoti
     case "pipelineWatchStarted":
     case "pipelineWatchFinished":
     case "pipelineRunQueued":
+    case "pipelineInvestigationStarted":
       return { kind: record.kind, payload: record.payload as PipelineNotificationPayload };
     default:
       return { kind: record.kind, payload: record.payload };

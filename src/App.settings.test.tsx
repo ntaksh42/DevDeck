@@ -114,6 +114,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -164,6 +165,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
         });
       }
       if (command === "update_app_settings") {
@@ -210,6 +212,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -260,6 +263,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -304,6 +308,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: true,
           notificationContentPreviewEnabled: false,
@@ -354,6 +359,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -397,6 +403,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           readOnlyValidationModeEnabled: true,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -447,6 +454,7 @@ describe("App — Settings", () => {
           inboxInsightEnabled: false,
           inboxInsightModel: null,
           autoAgentEnabled: false,
+          autoAgentPipelinesEnabled: false,
           ...settings,
         });
       }
