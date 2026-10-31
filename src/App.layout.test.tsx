@@ -309,7 +309,7 @@ describe("App — Layout", () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_all", {
-        input: { query: "123" },
+        input: { organizationId: "contoso", query: "123" },
       });
     });
     expect(await screen.findByText("#123 Fix save workflow")).toBeTruthy();
@@ -317,17 +317,8 @@ describe("App — Layout", () => {
 
     fireEvent.click(screen.getByText("#123 Fix save workflow"));
 
-    await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("search_work_items", {
-        input: {
-          organizationId: "contoso",
-          query: "123",
-          states: undefined,
-          workItemTypes: undefined,
-          projectIds: undefined,
-        },
-      });
-    });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());
+    expect(invokeMock.mock.calls.some(([command]) => command === "search_work_items")).toBe(false);
     const main = within(await screen.findByRole("main"));
     expect((await main.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
 
@@ -337,7 +328,7 @@ describe("App — Layout", () => {
     fireEvent.click(screen.getByText("#123 Fix save workflow"));
     await waitFor(() => {
       const searchCalls = invokeMock.mock.calls.filter(
-        ([command]) => command === "search_work_items",
+        ([command]) => command === "search_all",
       );
       expect(searchCalls.length).toBeGreaterThanOrEqual(2);
     });

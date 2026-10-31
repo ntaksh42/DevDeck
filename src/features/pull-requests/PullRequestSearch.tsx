@@ -57,7 +57,7 @@ export function PullRequestSearch({
   externalSearch,
   onExternalSearchHandled,
 }: {
-  externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
+  externalSearch?: { query: string; requestId: number; organizationId?: string; pullRequest?: PullRequestSummary } | null;
   onExternalSearchHandled?: () => void;
 }) {
   const organizationId = useActiveOrganizationId();
@@ -136,7 +136,8 @@ export function PullRequestSearch({
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const searchHistory = useSearchHistory<PrSearchFilters>("prSearch");
-  const results = mutation.data?.pullRequests ?? NO_RESULTS;
+  const [openedPr, setOpenedPr] = useState<PullRequestSummary | null>(null);
+  const results = useMemo(() => openedPr ? [openedPr] : mutation.data?.pullRequests ?? NO_RESULTS, [openedPr, mutation.data]);
   const truncated = mutation.data?.truncated ?? false;
   const total = mutation.data?.total ?? 0;
   const activeSearchFilterCount =
@@ -176,7 +177,9 @@ export function PullRequestSearch({
     setFromDate("");
     setToDate("");
     setExcludeDrafts(false);
-    mutation.mutate({
+    setOpenedPr(externalSearch.pullRequest ?? null);
+    mutation.reset();
+    if (!externalSearch.pullRequest) mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
       statuses: ["active"],
@@ -190,6 +193,7 @@ export function PullRequestSearch({
   // Runs a search and records it in the recent list. Re-running a history entry
   // restores its filters into the form first so the form matches the results.
   function runSearch(text: string, filters: PrSearchFilters) {
+    setOpenedPr(null);
     mutation.mutate({
       organizationId,
       query: text,
@@ -238,7 +242,8 @@ export function PullRequestSearch({
     setFromDate("");
     setToDate("");
     setExcludeDrafts(false);
-    if (mutation.isSuccess) {
+    if (openedPr || mutation.isSuccess) {
+      setOpenedPr(null);
       mutation.mutate({
         organizationId,
         query: "",
@@ -413,7 +418,7 @@ export function PullRequestSearch({
           />
         }
         results={results}
-        searched={mutation.isSuccess}
+        searched={openedPr !== null || mutation.isSuccess}
         truncated={truncated}
         total={total}
       />

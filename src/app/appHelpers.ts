@@ -46,9 +46,9 @@ export function parsePaletteSearch(text: string): { kind: PaletteSearchKind | nu
           : prefix === "inbox"
             ? "inbox"
             : "pullRequests";
-    return { kind, query: match[2].trim() };
+    return { kind, query: match[2].trim().replace(/^#(?=\d+$)/, "") };
   }
-  return { kind: null, query: text.trim() };
+  return { kind: null, query: text.trim().replace(/^#(?=\d+$)/, "") };
 }
 
 // Resolves the second-key -> view lookup for the goto chain from the current

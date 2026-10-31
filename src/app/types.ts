@@ -1,3 +1,4 @@
+import type { WorkItemSummary, PullRequestSummary } from "@/lib/azdoCommands";
 import type { KeybindingMap } from "@/lib/keybindings";
 
 export type View =
@@ -18,7 +19,7 @@ export type NavSectionId = "pullRequests" | "workItems";
 
 export type PaletteSearchKind = "workItems" | "pullRequests" | "wiki" | "inbox";
 
-export type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
+export type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string; workItem?: WorkItemSummary; pullRequest?: PullRequestSummary };
 
 export const DEFAULT_SIDEBAR_WIDTH = 232;
 export const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
