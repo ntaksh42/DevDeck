@@ -3,6 +3,9 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResultFrame } from "./ResultFrame";
 import type { FrameState } from "./types";
+import { openExternalUrl } from "@/lib/openExternal";
+
+vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn(() => Promise.resolve()) }));
 
 afterEach(() => {
   vi.useRealTimers();
@@ -93,5 +96,40 @@ describe("ResultFrame", () => {
       blocks: [...doc.body.querySelectorAll<HTMLElement>("p")],
     };
     expect(() => rerender(<ResultFrame {...props} frame={shortFrame} />)).not.toThrow();
+  });
+
+  it("opens web links in the result in the user's browser", () => {
+    const frameRef = createRef<HTMLIFrameElement>();
+    const noop = () => {};
+    render(
+      <ResultFrame
+        html=""
+        title="Result"
+        frameRef={frameRef}
+        frame={null}
+        onFrameLoad={noop}
+        anchors={[]}
+        activeId={null}
+        pendingRange={null}
+        onComment={noop}
+        onRevealNote={noop}
+        onOpenNote={noop}
+      />,
+    );
+    const iframe = frameRef.current!;
+    const doc = iframe.contentDocument!;
+    doc.body.innerHTML =
+      '<a href="https://dev.azure.com/o/p/_git/r/pullrequest/1"><b>!1</b></a><a href="#x">in page</a>';
+    fireEvent.load(iframe);
+
+    const web = new MouseEvent("click", { bubbles: true, cancelable: true });
+    doc.querySelector("b")!.dispatchEvent(web);
+    const local = new MouseEvent("click", { bubbles: true, cancelable: true });
+    doc.querySelector("a[href='#x']")!.dispatchEvent(local);
+
+    expect(web.defaultPrevented).toBe(true);
+    expect(local.defaultPrevented).toBe(false);
+    expect(openExternalUrl).toHaveBeenCalledTimes(1);
+    expect(openExternalUrl).toHaveBeenCalledWith("https://dev.azure.com/o/p/_git/r/pullrequest/1");
   });
 });

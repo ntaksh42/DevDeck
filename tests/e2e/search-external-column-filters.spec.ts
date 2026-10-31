@@ -9,6 +9,9 @@ for (const view of [
     await page.getByRole("grid", { name: "My review pull requests" }).waitFor();
     await page.keyboard.press("g");
     await page.keyboard.press(view.key);
+    // Click first like a user would: navigating with g+key keeps steering focus
+    // to the list until a key press or pointer press, and fill() sends neither.
+    await page.getByPlaceholder(view.placeholder).click();
     await page.getByPlaceholder(view.placeholder).fill(view.query);
     await page.keyboard.press("Enter");
     const grid = page.getByRole("grid", { name: view.grid, exact: true });

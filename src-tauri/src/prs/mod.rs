@@ -1,8 +1,10 @@
 mod group_reviews;
 mod group_reviews_capped;
 mod inbox;
+mod inbox_hits;
 mod live_results;
 mod notifications;
+mod palette;
 mod search;
 mod service;
 mod sync;
@@ -20,11 +22,15 @@ mod live_results_tests;
 mod tests_inbox;
 
 #[cfg(test)]
+mod tests_inbox_hits;
+
+#[cfg(test)]
 mod tests_capped;
 
 #[cfg(test)]
 mod tests_force_refresh;
 
+pub(crate) use group_reviews::member_group_ids;
 pub(crate) use inbox::*;
 pub(crate) use live_results::*;
 pub(crate) use notifications::*;

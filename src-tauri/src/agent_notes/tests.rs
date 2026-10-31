@@ -368,6 +368,16 @@ fn skill_shares_the_guide_text_and_leaves_user_skills_alone() {
     let body = skill.split_once("# DevDeck の Agent notes").unwrap().1;
     assert!(guide.contains(body));
 
+    // The result HTML format is placed beside it.
+    let format =
+        fs::read_to_string(temp.path().join("devdeck-result-html").join("SKILL.md")).unwrap();
+    assert!(format.starts_with(
+        "---
+name: devdeck-result-html
+"
+    ));
+    assert!(format.contains("インライン SVG"));
+
     // An outdated managed skill is refreshed; a user-written one is kept.
     fs::write(&path, skill.replace("data-agent-note", "OLD")).unwrap();
     ensure_skill(temp.path(), notes_root).unwrap();

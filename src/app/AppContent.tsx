@@ -64,9 +64,9 @@ export function AppContent({
       data-focus-pane="view"
       tabIndex={-1}
       onKeyDownCapture={handlePaneFocusKey}
-      className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 outline-none ${
+      className={`flex min-h-0 flex-1 flex-col outline-none ${
         activeView === "settings" || organizations.length === 0
-          ? "overflow-auto"
+          ? "overflow-auto px-3 py-3 lg:px-5"
           : "overflow-hidden"
       }`}
     >

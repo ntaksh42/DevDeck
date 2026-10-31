@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Info, Loader2, Search } from "lucide-react";
 import {
   searchWorkItems,
+  type WorkItemSummary,
   listWorkItemProjects,
   commandErrorMessage,
 } from "@/lib/azdoCommands";
@@ -34,7 +35,7 @@ export function WorkItemSearch({
   externalSearch,
   onExternalSearchHandled,
 }: {
-  externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
+  externalSearch?: { query: string; requestId: number; organizationId?: string; workItem?: WorkItemSummary } | null;
   onExternalSearchHandled?: () => void;
 }) {
   const organizationId = useActiveOrganizationId();
@@ -55,7 +56,8 @@ export function WorkItemSearch({
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
   const searchHistory = useSearchHistory<WiSearchFilters>("workItemSearch");
-  const results = mutation.data ?? [];
+  const [openedItem, setOpenedItem] = useState<WorkItemSummary | null>(null);
+  const results = useMemo(() => openedItem ? [openedItem] : mutation.data ?? [], [openedItem, mutation.data]);
   // Client-side smart filtering over the server results, matching My Work Items
   // (#1234, p:1, @user, s:active, t:bug). Empty filter keeps every row.
   const filteredResults = useMemo(() => {
@@ -72,7 +74,9 @@ export function WorkItemSearch({
     setWorkItemTypes([]);
     setProjectIds([]);
     setResultFilter("");
-    mutation.mutate({
+    setOpenedItem(externalSearch.workItem ?? null);
+    mutation.reset();
+    if (!externalSearch.workItem) mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
       states: undefined,
@@ -86,6 +90,7 @@ export function WorkItemSearch({
   // Runs a search; `record: false` is for opening a recently viewed item, which
   // is a lookup by id rather than a search worth remembering.
   function runSearch(text: string, filters: WiSearchFilters, record = true) {
+    setOpenedItem(null);
     mutation.mutate({
       organizationId,
       query: text,
@@ -172,8 +177,8 @@ export function WorkItemSearch({
         </button>
         <span
           className="text-muted-foreground"
-          title="Showing locally synced data — refreshed automatically every 5 minutes."
-          aria-label="Showing locally synced data — refreshed automatically every 5 minutes."
+          title={openedItem ? "Opened from live Azure DevOps search. Use Ctrl+K to search all accessible projects." : "Showing locally synced data — refreshed automatically every 5 minutes."}
+          aria-label={openedItem ? "Opened from live Azure DevOps search" : "Showing locally synced data — refreshed automatically every 5 minutes."}
           role="note"
         >
           <Info className="h-3.5 w-3.5" aria-hidden="true" />
@@ -188,7 +193,7 @@ export function WorkItemSearch({
         filterResetKey={externalSearch?.requestId}
         loading={mutation.isPending}
         results={filteredResults}
-        searched={mutation.isSuccess}
+        searched={openedItem !== null || mutation.isSuccess}
         emptyContent={
           <WiSearchHistory
             organizationId={organizationId}

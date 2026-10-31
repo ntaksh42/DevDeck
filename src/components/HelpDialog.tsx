@@ -201,7 +201,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
         </div>
         <div className={group}>
           <p {...sectionProps("inbox")}>Inbox</p>
-          <div className={row}><span>Priority (direct PR / WI mentions) / Other (general replies) / All: Tab to the filter in the tab strip, arrows switch, Enter returns to items</span><kbd className={kbd}>← → / ↑ ↓</kbd></div>
+          <div className={row}><span>Priority (direct PR / WI mentions) / Other (team mentions and replies) / All: Tab to the filter in the tab strip, arrows switch, Enter returns to items</span><kbd className={kbd}>← → / ↑ ↓</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Focus the preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in DevDeck</span><kbd className={kbd}>Shift+Enter</kbd></div>
@@ -213,7 +213,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Undo the last Done / Snooze / Reopen (all items of a bulk change)</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Scroll the preview from the list</span><kbd className={kbd}>Space / Shift+Space</kbd></div>
           <div className={row}><span>Expand / collapse the description</span><kbd className={kbd}>D</kbd></div>
-          <div className={row}><span>Reply</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Focus comment (reply)</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Reply with Claude's draft (edit, then send)</span><kbd className={kbd}>Shift+R</kbd></div>
           <div className={row}><span>Post the reply / post and resolve the thread (in the reply box)</span><kbd className={kbd}>Ctrl+Enter · Ctrl+Shift+Enter</kbd></div>
           <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>

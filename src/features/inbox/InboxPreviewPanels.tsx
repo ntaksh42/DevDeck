@@ -78,7 +78,7 @@ export function ThreadPanel({
           Read-only validation mode: replies and status changes are disabled.
         </p>
       ) : (
-        <div data-inbox-composer="true" className="sticky bottom-0 z-10 mt-1 border-t border-border bg-card pt-1">
+        <div data-inbox-composer="true" className="sticky -bottom-2 z-10 mt-1 border-t border-border bg-card pb-2 pt-1">
           <CommentComposer
             key={draft?.key ?? 0}
             initialValue={draft?.text ?? ""}

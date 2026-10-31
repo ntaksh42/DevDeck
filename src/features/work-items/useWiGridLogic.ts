@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parkGridFocus } from '@/lib/parkGridFocus';
+import { scrollGridRowIntoView, snapToRow } from '@/lib/useGridVirtualizer';
 import { useQuery } from '@tanstack/react-query';
 import {
   getWorkItemPreview,
@@ -36,6 +38,7 @@ export interface WiGridLogicProps {
   loading: boolean;
   triageScope?: string;
   extraColumns: string[];
+  extraColumnLabel?: (referenceName: string) => string;
   activeExternalFilterCount?: number;
   onClearExternalFilters?: () => void;
   autoFocus: boolean;
@@ -46,7 +49,7 @@ export function useWiGridLogic(
   state: WiGridState,
 ) {
   const {
-    results, triageScope, extraColumns, loading, activeExternalFilterCount = 0,
+    results, triageScope, extraColumns, extraColumnLabel, loading, activeExternalFilterCount = 0,
     onClearExternalFilters, autoFocus,
   } = props;
   const {
@@ -277,12 +280,21 @@ export function useWiGridLogic(
     const scroller = scrollerAttached;
     if (!scroller) return;
     const scrollerElement = scroller;
+    // The virtual window only moves a whole row at a time, so store scrollTop
+    // snapped to the row and skip the update while it stays in the same row.
+    // Re-rendering the grid (and the preview beside it) on every scrolled pixel
+    // made trackpad scrolling stutter on long lists.
     function updateViewport() {
-      setGridViewport({
+      const next = {
         width: scrollerElement.clientWidth,
         height: scrollerElement.clientHeight,
-        scrollTop: scrollerElement.scrollTop,
-      });
+        scrollTop: snapToRow(scrollerElement.scrollTop, WI_GRID_ROW_HEIGHT),
+      };
+      setGridViewport((prev) =>
+        prev.width === next.width && prev.height === next.height && prev.scrollTop === next.scrollTop
+          ? prev
+          : next,
+      );
     }
     updateViewport();
     scrollerElement.addEventListener("scroll", updateViewport, { passive: true });
@@ -316,25 +328,18 @@ export function useWiGridLogic(
       if (count === 0) return false;
       const index = Math.max(0, Math.min(selectedIndex, count - 1));
       const scroller = gridScrollRef.current;
-      if (scroller) {
-        const rowTop = index * WI_GRID_ROW_HEIGHT;
-        const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
-        if (rowTop < scroller.scrollTop) {
-          scroller.scrollTop = rowTop;
-        } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
-          scroller.scrollTop = rowBottom - scroller.clientHeight;
-        }
-      }
+      if (scroller) scrollGridRowIntoView(scroller, index, WI_GRID_ROW_HEIGHT, count);
       const node = rowRefs.current[index];
       if (!node) return false;
-      node.focus();
+      node.focus({ preventScroll: true });
       return true;
     },
   });
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
 
-  function handlePreviewUpdated(preview: WorkItemPreview) {
+  // Stable: the memoized preview panel receives it as a prop.
+  const handlePreviewUpdated = useCallback((preview: WorkItemPreview) => {
     const key = workItemSummaryKey(preview);
     setItemOverrides((current) => {
       const next = new Map(current);
@@ -346,22 +351,15 @@ export function useWiGridLogic(
       });
       return next;
     });
-  }
+  }, [setItemOverrides]);
 
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(index, displayed.length - 1));
+    parkGridFocus(rowRefs.current[next]);
     setSelectedIndex(next);
     const scroller = gridScrollRef.current;
-    if (scroller) {
-      const rowTop = next * WI_GRID_ROW_HEIGHT;
-      const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
-      if (rowTop < scroller.scrollTop) {
-        scroller.scrollTop = rowTop;
-      } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
-        scroller.scrollTop = rowBottom - scroller.clientHeight;
-      }
-    }
-    window.setTimeout(() => rowRefs.current[next]?.focus(), 0);
+    if (scroller) scrollGridRowIntoView(scroller, next, WI_GRID_ROW_HEIGHT, displayed.length);
+    window.setTimeout(() => rowRefs.current[next]?.focus({ preventScroll: true }), 0);
   }
 
   const { handleCheckboxChange, selectRangeTo, toggleSelectionAt, clearCheckedIds } =
@@ -426,6 +424,7 @@ export function useWiGridLogic(
     checkedItems,
     visibleColumns,
     extraColumns,
+    extraColumnLabel,
     openFilterCol,
     triageScope,
     snoozeEnabled,

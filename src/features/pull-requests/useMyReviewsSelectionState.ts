@@ -7,16 +7,17 @@ import { useKeyedGridSelection } from '@/lib/useKeyedGridSelection';
 import { useLatestRef } from '@/lib/useLatestRef';
 import { detectFileOverlaps } from '@/lib/prOverlap';
 import { markSeen } from '@/lib/lastSeen';
+import { parkGridFocus } from '@/lib/parkGridFocus';
 import { acknowledgeReturn } from './reviewReturnTracking';
 import { reviewFingerprint } from './reviewFingerprint';
 import { reviewTriageKey } from './myReviewsHelpers';
-import { PR_GRID_ROW_HEIGHT, type MyReviewsSelectRequest } from './myReviewsTypes';
+import type { MyReviewsSelectRequest } from './myReviewsTypes';
 
 type SelectionStateInput = {
   sortedPrs: ReviewPullRequestSummary[];
   visibleSortedIndexes: number[];
   prFlatIndexes: number[];
-  scrollerEl: HTMLElement | null;
+  scrollRowIntoView: (flatIndex: number) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;
   returnedKeys: Set<string>;
@@ -33,7 +34,7 @@ export function useMyReviewsSelectionState({
   sortedPrs,
   visibleSortedIndexes,
   prFlatIndexes,
-  scrollerEl,
+  scrollRowIntoView,
   containerRef,
   rowRefs,
   returnedKeys,
@@ -62,27 +63,19 @@ export function useMyReviewsSelectionState({
 
   // ── Navigation helpers ─────────────────────────────────────────────────────
   function focusRow(index: number) {
-    rowRefs.current[index]?.focus();
+    rowRefs.current[index]?.focus({ preventScroll: true });
   }
 
   function scrollPrIntoView(prIndex: number) {
-    const scroller = scrollerEl;
-    if (!scroller) return;
     const flatIndex = prFlatIndexes[prIndex];
-    if (flatIndex == null) return;
-    const rowTop = flatIndex * PR_GRID_ROW_HEIGHT;
-    const rowBottom = rowTop + PR_GRID_ROW_HEIGHT;
-    if (rowTop < scroller.scrollTop) {
-      scroller.scrollTop = rowTop;
-    } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
-      scroller.scrollTop = rowBottom - scroller.clientHeight;
-    }
+    if (flatIndex != null) scrollRowIntoView(flatIndex);
   }
 
   function selectVisiblePosition(position: number) {
     if (visibleSortedIndexes.length === 0) return;
     const clamped = Math.max(0, Math.min(position, visibleSortedIndexes.length - 1));
     const prIndex = visibleSortedIndexes[clamped];
+    parkGridFocus(rowRefs.current[prIndex]);
     setSelectedIndex(prIndex);
     scrollPrIntoView(prIndex);
     window.setTimeout(() => focusRow(prIndex), 0);
@@ -209,7 +202,7 @@ export function useMyReviewsSelectionState({
         // silent no-op that would still report success, stranding focus on
         // <body> with no retry.
         if (!node?.isConnected) return false;
-        node.focus();
+        node.focus({ preventScroll: true });
         return true;
       },
     });

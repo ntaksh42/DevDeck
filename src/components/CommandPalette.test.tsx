@@ -127,3 +127,35 @@ describe("CommandPalette IME composition", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+it("places search results before matching commands and keeps Tab inside the palette", () => {
+  render(<CommandPalette actions={actions} onClose={vi.fn()}
+    search={{ items: [{ id: "wi:42", group: "Work Items", label: "#42 Item", run: vi.fn() }], pending: false, onQueryChange: vi.fn() }} />);
+  const input = screen.getByRole("textbox");
+  expect(screen.getByRole("button", { name: "#42 Item" }).getAttribute("aria-current")).toBe("true");
+  fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
+  const last = document.activeElement;
+  expect(last).not.toBe(input);
+  fireEvent.keyDown(last!, { key: "Tab" });
+  expect(document.activeElement).toBe(input);
+});
+
+it("runs the browser action with Ctrl+Enter and contains navigation keys", async () => {
+  const run = vi.fn();
+  const runAlt = vi.fn();
+  const outsideKeyDown = vi.fn();
+  render(<div onKeyDown={outsideKeyDown}><CommandPalette actions={[]} onClose={vi.fn()}
+    search={{ items: [{ id: "wi:42", group: "Work Items", label: "#42 Item", run, runAlt }], pending: false, onQueryChange: vi.fn() }} /></div>);
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowDown" });
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", ctrlKey: true });
+  await waitFor(() => expect(runAlt).toHaveBeenCalledTimes(1));
+  expect(run).not.toHaveBeenCalled();
+  expect(outsideKeyDown).not.toHaveBeenCalled();
+});
+
+it("shows search scope and API errors distinctly from empty results", () => {
+  render(<CommandPalette actions={[]} onClose={vi.fn()} search={{ items: [], pending: false,
+    onQueryChange: vi.fn(), status: "Demo data only", error: "Search permission denied" }} />);
+  expect(screen.getByRole("status").textContent).toContain("Demo data only");
+  expect(screen.getByRole("alert").textContent).toBe("Search permission denied");
+});

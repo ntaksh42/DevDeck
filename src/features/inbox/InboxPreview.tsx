@@ -27,7 +27,7 @@ import { InboxRelatedLinks } from "./InboxRelatedLinks";
 
 function bandTitle(item: InboxEntry): string {
   if (isThreadItem(item)) return "Thread";
-  if (isWorkItemItem(item)) return item.kind === "wi_mention" ? "Discussion" : "Work item";
+  if (isWorkItemItem(item)) return item.kind === "wi_mention" || item.kind === "wi_reply" ? "Discussion" : "Work item";
   return "Details";
 }
 

@@ -4,7 +4,7 @@ import { invokeCommand } from "./runtime";
 // Kinds the backend raises today. The wire schema stays `z.string()` so a kind
 // from a newer backend does not fail validation; `inboxKindLabel` falls back to
 // the raw value.
-export const INBOX_KINDS = ["pr_mention", "pr_reply"] as const;
+export const INBOX_KINDS = ["pr_mention", "pr_group_mention", "pr_reply", "wi_mention", "wi_reply"] as const;
 export type InboxKind = (typeof INBOX_KINDS)[number];
 
 export type InboxListState = "open" | "snoozed" | "done";

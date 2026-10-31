@@ -65,7 +65,7 @@ export const InboxRow = forwardRef<
       <span className={`w-16 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
         {inboxKindLabel(item.kind)}
       </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+      <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
         <span className="shrink-0 whitespace-nowrap font-medium" title={item.title}>
           {inboxSubjectLabel(item)}
         </span>
@@ -74,7 +74,7 @@ export const InboxRow = forwardRef<
             {location}
           </span>
         ) : null}
-        <span className="min-w-0 shrink truncate text-muted-foreground" title={item.snippet ?? undefined}>
+        <span className="min-w-0 shrink truncate text-foreground/90" title={item.snippet ?? undefined}>
           {item.author ? `${item.author}: ` : ""}
           {item.snippet ?? item.title}
         </span>
@@ -83,7 +83,7 @@ export const InboxRow = forwardRef<
             all up before the comment starts to truncate. */}
         {rowTitle ? (
           <span
-            className="min-w-0 shrink-[100] truncate whitespace-nowrap text-muted-foreground/70"
+            className="min-w-0 shrink-[100] truncate whitespace-nowrap text-muted-foreground"
             title={rowTitle}
           >
             {`· ${rowTitle}`}
@@ -92,7 +92,7 @@ export const InboxRow = forwardRef<
       </span>
       {verdict ? (
         <span
-          className={`shrink-0 rounded border px-1 text-3xs font-semibold leading-4 ${verdict.rowClassName}`}
+          className={`shrink-0 rounded border px-1 text-2xs font-semibold leading-4 ${verdict.rowClassName}`}
           title="Verdict by Claude"
         >
           {verdict.label}

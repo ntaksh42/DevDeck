@@ -4,6 +4,7 @@ import { MessageSquarePlus } from "lucide-react";
 import { useLatestRef } from "@/lib/useLatestRef";
 import { focusPrimaryGrid } from "@/lib/utils";
 import { bindFramePaneFocus } from "@/lib/paneFocus";
+import { openExternalUrl } from "@/lib/openExternal";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
 import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
@@ -165,6 +166,14 @@ export function ResultFrame({
       style.textContent = HIGHLIGHT_CSS;
       doc.head.appendChild(style);
     }
+    // The sandbox blocks navigation, so web links open in the user's browser.
+    doc?.addEventListener("click", (event) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      const href = link?.getAttribute("href") ?? "";
+      if (!/^https?:\/\//i.test(href)) return;
+      event.preventDefault();
+      void openExternalUrl(href).catch(() => undefined);
+    });
     onFrameLoad();
   }
 

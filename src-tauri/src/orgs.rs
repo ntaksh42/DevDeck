@@ -59,7 +59,10 @@ impl OrganizationService {
             auth_provider = "pat",
             "validating Azure DevOps organization"
         );
-        let client = AdoClient::new(&organization, Arc::new(PatProvider::new(pat)))?;
+        let client = crate::dev_overrides::apply(
+            AdoClient::new(&organization, Arc::new(PatProvider::new(pat)))?,
+            &organization,
+        );
         let connection_data = client.connection_data().await?;
         let credential_key = credential_key(&organization);
         self.purge_stale_credential(&organization, &credential_key)?;
@@ -71,7 +74,7 @@ impl OrganizationService {
             id: organization.clone(),
             name: organization.clone(),
             display_name: Some(organization.clone()),
-            base_url: format!("https://dev.azure.com/{organization}"),
+            base_url: crate::dev_overrides::organization_base_url(&organization),
             auth_provider: "pat".to_string(),
             credential_key,
             authenticated_user_id: Some(connection_data.authenticated_user.id),
@@ -130,7 +133,10 @@ impl OrganizationService {
             auth_provider = "azure_cli",
             "validating Azure DevOps organization"
         );
-        let client = AdoClient::new(&organization, Arc::new(AzureCliProvider::new()))?;
+        let client = crate::dev_overrides::apply(
+            AdoClient::new(&organization, Arc::new(AzureCliProvider::new()))?,
+            &organization,
+        );
         let connection_data = client.connection_data().await?;
         let credential_key = azure_cli_credential_key(&organization);
         self.purge_stale_credential(&organization, &credential_key)?;
@@ -141,7 +147,7 @@ impl OrganizationService {
             id: organization.clone(),
             name: organization.clone(),
             display_name: Some(organization.clone()),
-            base_url: format!("https://dev.azure.com/{organization}"),
+            base_url: crate::dev_overrides::organization_base_url(&organization),
             auth_provider: "azure_cli".to_string(),
             credential_key,
             authenticated_user_id: Some(connection_data.authenticated_user.id),

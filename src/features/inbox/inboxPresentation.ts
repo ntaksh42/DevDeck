@@ -46,19 +46,23 @@ export function inboxAgentSubject(entry: InboxEntry): AgentSubject | null {
 // stay in the Done list for up to 30 days.
 const KIND_LABELS: Record<string, string> = {
   pr_mention: "Mention",
+  pr_group_mention: "Team",
   pr_reply: "Reply",
   pr_review_request: "Review",
   pr_returned: "Returned",
   wi_mention: "WI mention",
+  wi_reply: "WI reply",
   wi_assigned: "Assigned",
 };
 
 const KIND_CLASSES: Record<string, string> = {
-  pr_mention: "text-amber-700 dark:text-amber-300",
+  pr_mention: "text-amber-800 dark:text-amber-300",
+  pr_group_mention: "text-orange-700 dark:text-orange-300",
   pr_reply: "text-sky-700 dark:text-sky-300",
   pr_review_request: "text-blue-700 dark:text-blue-300",
   pr_returned: "text-violet-700 dark:text-violet-300",
   wi_mention: "text-emerald-700 dark:text-emerald-300",
+  wi_reply: "text-teal-700 dark:text-teal-300",
   wi_assigned: "text-emerald-700 dark:text-emerald-300",
 };
 
@@ -77,7 +81,7 @@ export function isPullRequestItem(item: Pick<InboxItem, "kind">): boolean {
 
 /** A comment on a pull request thread the user can answer in place. */
 export function isThreadItem(item: Pick<InboxItem, "kind">): boolean {
-  return item.kind === "pr_mention" || item.kind === "pr_reply";
+  return item.kind === "pr_mention" || item.kind === "pr_group_mention" || item.kind === "pr_reply";
 }
 
 export function isWorkItemItem(item: Pick<InboxItem, "kind">): boolean {

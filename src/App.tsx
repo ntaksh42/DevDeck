@@ -175,8 +175,7 @@ function AppShell() {
     setPaletteSearchText,
     paletteSearchItems,
     paletteRecentItems,
-    paletteSearchEnabled,
-    searchAllQueryIsFetching,
+    searchAllQueryIsFetching, paletteSearchStatus, paletteSearchError,
   } = usePaletteSearch(commandPaletteOpen, organizations, {
     setWorkItemSearchRequest,
     setPullRequestSearchRequest,
@@ -446,7 +445,8 @@ function AppShell() {
           onSync={() => syncMutation.mutate({ scope: "all", force: true })}
         />
         <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Settings scrolls the view pane itself, so the focus frame is painted here. */}
+        <div data-focus-frame className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppContent
           activeView={activeView}
           organizations={organizations}
@@ -481,8 +481,9 @@ function AppShell() {
             organizations.length > 0
               ? {
                   items: [...paletteSearchItems, ...paletteRecentItems],
-                  pending: paletteSearchEnabled && searchAllQueryIsFetching,
+                  pending: searchAllQueryIsFetching,
                   onQueryChange: setPaletteSearchText,
+                  status: paletteSearchStatus, error: paletteSearchError,
                 }
               : undefined
           }

@@ -6,7 +6,6 @@ import type { WorkItemSummary } from '@/lib/azdoCommands';
 import {
   wiSortLabels,
   isFilterableColumn,
-  extraColumnLabel,
   type WiSortKey,
   type WiSortState,
   type FilterableColumn,
@@ -92,6 +91,7 @@ export function WiGridHeader({
   onFilterOpen,
   columnResizeProps,
   extraColumns,
+  extraColumnLabel,
 }: {
   displayed: WorkItemSummary[];
   checkedIds: Set<string>;
@@ -105,6 +105,7 @@ export function WiGridHeader({
   onFilterOpen: (col: FilterableColumn, anchorEl: HTMLButtonElement) => void;
   columnResizeProps: (key: WiSortKey) => ColumnResizeProps;
   extraColumns: string[];
+  extraColumnLabel: (referenceName: string) => string;
 }) {
   return (
     <div

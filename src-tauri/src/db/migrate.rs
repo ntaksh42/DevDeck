@@ -702,5 +702,8 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if current < 29 {
         super::merge_readiness::migrate_v29(conn)?;
     }
+    if current < 30 {
+        super::inbox_threads::migrate_v30(conn)?;
+    }
     Ok(())
 }

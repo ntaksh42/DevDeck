@@ -98,10 +98,11 @@ export function CommentComposer({
     },
   });
 
-  // Switching work items clears the unsent draft.
+  // Switching work items clears the unsent draft and the last post's status.
   useEffect(() => {
     setCommentText("");
     mentionPicker.resetMentions();
+    commentMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem?.id]);
 

@@ -69,7 +69,7 @@ export const WorkItemGridRow = forwardRef<
         openExternalUrl(item.webUrl);
       }
     }}
-    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({
+    className={`grid h-[29px] cursor-pointer select-none items-center gap-2 overflow-hidden border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({
       selected,
       inMultiSelection: checked,
       isStale,

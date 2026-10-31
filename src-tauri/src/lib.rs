@@ -3,8 +3,10 @@ use std::str::FromStr;
 mod agent_notes;
 mod app_state;
 mod auth;
+mod auto_agent;
 mod commands;
 mod db;
+mod dev_overrides;
 mod diagnostics;
 mod error;
 mod github;
@@ -108,9 +110,15 @@ pub fn run() {
             // Surface setup failures (e.g. a failed DB migration) to stderr;
             // otherwise the window stays blank with no clue why state was never
             // managed and every command fails.
-            let app_data_dir = app.path().app_data_dir().inspect_err(|e| {
-                eprintln!("DevDeck setup failed (app_data_dir): {e}");
-            })?;
+            let app_data_dir = match dev_overrides::data_dir() {
+                Some(dir) => {
+                    std::fs::create_dir_all(&dir)?;
+                    dir
+                }
+                None => app.path().app_data_dir().inspect_err(|e| {
+                    eprintln!("DevDeck setup failed (app_data_dir): {e}");
+                })?,
+            };
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
             db.initialize().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (db.initialize): {e}");
