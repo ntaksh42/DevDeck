@@ -1,23 +1,23 @@
 //! Feeds the Inbox from the review-PR comment threads fetched during sync.
 //!
-//! Detection reuses the notification rules (a comment that replies in a thread
-//! the user took part in, or mentions the user) but keeps its own seen cursor,
-//! so the Inbox works whether or not desktop notifications are enabled.
+//! Detection (see `inbox_hits`) keeps its own seen cursor, so the Inbox works
+//! whether or not desktop notifications are enabled.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use azdo_client::GitThread;
 
 use crate::db::{AppDatabase, NewInboxItem, Organization};
 
-use super::notifications::{pr_comment_hits, ScannedPr};
+use super::inbox_hits::inbox_comment_hits;
+use super::notifications::ScannedPr;
 
 pub(crate) const KIND_PR_MENTION: &str = "pr_mention";
 pub(crate) const KIND_PR_REPLY: &str = "pr_reply";
 const INBOX_SNIPPET_CHARS: usize = 140;
 
 /// Thread statuses that mean "someone still has to act".
-fn thread_needs_action(status: Option<&str>) -> bool {
+pub(super) fn thread_needs_action(status: Option<&str>) -> bool {
     matches!(
         status.map(str::to_ascii_lowercase).as_deref(),
         None | Some("active") | Some("pending") | Some("unknown")
@@ -150,6 +150,7 @@ pub(crate) fn update_action_inbox(
     db: &AppDatabase,
     org: &Organization,
     scanned: &[ScannedPr],
+    groups: &HashSet<String>,
 ) -> InboxUpdate {
     let me = org.authenticated_user_id.as_deref();
     let mut update = InboxUpdate::default();
@@ -162,7 +163,10 @@ pub(crate) fn update_action_inbox(
         let last_seen = db
             .get_inbox_comment_cursor(&org.id, &pr.repository_id, pr.pull_request_id)
             .unwrap_or(None);
-        let (hits, max_id) = pr_comment_hits(threads, me, last_seen, *authored);
+        let (hits, max_id) = match me {
+            Some(me) => inbox_comment_hits(threads, me, groups, last_seen, *authored),
+            None => (Vec::new(), None),
+        };
         let locations: HashMap<i64, (String, Option<i64>)> = threads
             .iter()
             .filter_map(|thread| thread_location(thread).map(|location| (thread.id, location)))
@@ -173,12 +177,7 @@ pub(crate) fn update_action_inbox(
                 let location = locations.get(&hit.thread_id).cloned();
                 NewInboxItem {
                     organization_id: org.id.clone(),
-                    kind: if hit.mentions_me {
-                        KIND_PR_MENTION
-                    } else {
-                        KIND_PR_REPLY
-                    }
-                    .to_string(),
+                    kind: hit.kind.to_string(),
                     subject_id: pr.pull_request_id,
                     project_id: pr.project_id.clone(),
                     project_name: pr.project_name.clone(),

@@ -29,10 +29,11 @@ test-results/
 *.sln
 *.sw?
 
-# Local tooling and artifacts (release.ps1 is tracked: package.json and the
-# README reference it as the release flow)
+# Local tooling and artifacts (release.ps1 and fake-ado/ are tracked:
+# package.json references them as the release flow and `pnpm tauri:fake`)
 scripts/*
 !scripts/release.ps1
+!scripts/fake-ado/
 .claude/*
 !.claude/skills/
 .claude/skills/*

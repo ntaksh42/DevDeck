@@ -205,12 +205,21 @@ describe("InboxView", () => {
     expect(openExternalUrl).toHaveBeenCalledWith("https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42");
   });
 
-  it("replies in place with R and Ctrl+Enter, then finishes the item", async () => {
+  it("focuses the reply box with Ctrl+M like Focus comment elsewhere", async () => {
     renderView();
     const list = await openList();
     fireEvent.click(rowFor(list, "!42"));
     const input = await screen.findByPlaceholderText("Reply…");
-    fireEvent.keyDown(list, { key: "r" });
+    fireEvent.keyDown(list, { key: "m", ctrlKey: true });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
+  it("replies in place with M and Ctrl+Enter, then finishes the item", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    const input = await screen.findByPlaceholderText("Reply…");
+    fireEvent.keyDown(list, { key: "m" });
     await waitFor(() => expect(document.activeElement).toBe(input));
     fireEvent.change(input, { target: { value: "Confirmed the null handling." } });
     fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });

@@ -48,6 +48,10 @@ pub const SYNCED_BY: &str = "devdeck";
 
 #[cfg(not(test))]
 pub fn path() -> Option<PathBuf> {
+    // A fake-server session keeps its shared cache next to its own database.
+    if let Some(dir) = crate::dev_overrides::data_dir() {
+        return Some(dir.join(DIR_NAME).join(FILE_NAME));
+    }
     std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join(DIR_NAME).join(FILE_NAME))
 }
 

@@ -132,11 +132,20 @@ async fn sync_org_prs(
     }
     // One thread fetch feeds both the reply notifications and the Inbox. The
     // Inbox is always fed, whatever the notification settings are.
-    let scanned = crate::prs::fetch_pr_threads(db, client, org, budget).await;
+    let crate::prs::PrThreadScan {
+        prs: scanned,
+        warning: scan_warning,
+    } = crate::prs::fetch_pr_threads(db, client, org, budget).await;
     if should_collect && settings.notify_pr_comment_replies {
         items.extend(crate::prs::pr_comment_notifications_from(db, org, &scanned));
     }
-    let inbox_update = crate::prs::update_action_inbox(db, org, &scanned);
+    // Cached for an hour by the PR sync above, so this is normally no request.
+    let groups = match org.authenticated_user_id.as_deref() {
+        Some(me) => crate::prs::member_group_ids(db, client, org, me).await.0,
+        None => Default::default(),
+    };
+    let inbox_update = crate::prs::update_action_inbox(db, org, &scanned, &groups);
+    super::inbox::record_inbox_health(db, org, "inbox_prs", scan_warning.as_deref());
     let state_update = super::inbox::retire_condition_items(db, org);
     let closed_update = crate::prs::finish_inbox_items_of_closed_prs(db, org);
     if inbox_update.changed() || state_update.changed() || closed_update.changed() {
@@ -260,9 +269,10 @@ async fn sync_org_work_items(
     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
     match db.list_my_work_items(&org.id) {
         Ok(current_my_work_items) => {
-            let inbox_update =
+            let (inbox_update, scan_warning) =
                 super::wi_mentions::update_work_item_mentions(db, client, org, projects, budget)
                     .await;
+            super::inbox::record_inbox_health(db, org, "inbox_wi", scan_warning.as_deref());
             let closed_update =
                 super::wi_mentions::finish_closed_work_item_mentions(db, client, org, budget).await;
             if inbox_update.changed() || closed_update.changed() {

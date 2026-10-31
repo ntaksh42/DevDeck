@@ -48,7 +48,7 @@ import { useInboxStateChanges } from "./useInboxStateChanges";
 
 const OVERSCAN = 8;
 /** Comment kinds Claude can write notes for (matches the backend). */
-const INSIGHT_KINDS: string[] = ["pr_mention", "pr_reply", "wi_mention"];
+const INSIGHT_KINDS: string[] = ["pr_mention", "pr_group_mention", "pr_reply", "wi_mention", "wi_reply"];
 const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
 
 export function InboxView() {
