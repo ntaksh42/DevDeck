@@ -12,10 +12,12 @@ import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
 import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { useRangeSelection } from '@/lib/useRangeSelection';
-import { copyRowsAsTable } from '@/lib/clipboardTable';
-import { prSearchCopyColumns } from './prCopyColumns';
+import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
+import { prLinkTarget, prSearchCopyColumns } from './prCopyColumns';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
+import { parkGridFocus } from '@/lib/parkGridFocus';
+import { usePendingRowFocus } from '@/lib/usePendingRowFocus';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
@@ -87,14 +89,14 @@ export function PullRequestResults({
   });
   const {
     template: columnTemplate,
-    minWidth: gridMinWidth,
+    minWidth: gridMinWidth, autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_SEARCH_KEYS,
     visibleColumns,
-    flexibleKey: "title",
+    flexibleKey: "title", autoHide: ["branch", "date"],
     defaults: DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
     min: PR_SEARCH_COLUMN_MIN_WIDTHS,
     max: PR_SEARCH_COLUMN_MAX_WIDTHS,
@@ -173,6 +175,7 @@ export function PullRequestResults({
   // starts a fresh single-row selection.
   function moveSelectionTo(index: number, extend = false) {
     const next = clamp(index, 0, filteredResults.length - 1);
+    parkGridFocus(rowRefs.current[next]);
     restoreFocusRef.current = true;
     scrollRowIntoView(next);
     setSelectedIndex(next);
@@ -184,15 +187,8 @@ export function PullRequestResults({
     moveSelectionTo(selectedIndex + delta);
   }
 
-  // Rows outside the virtual window unmount, so roving focus is restored once
-  // the row for the new selection is mounted again.
-  useEffect(() => {
-    if (!restoreFocusRef.current) return;
-    const row = rowRefs.current[selectedIndex];
-    if (!row) return;
-    restoreFocusRef.current = false;
-    row.focus({ preventScroll: true });
-  });
+  // Rows outside the virtual window unmount; refocus the selection once mounted.
+  usePendingRowFocus(restoreFocusRef, rowRefs, selectedIndex);
 
   function openFilter(col: PrSearchFilterableColumn, anchorEl: HTMLButtonElement) {
     filterButtonRef.current = anchorEl;
@@ -241,7 +237,7 @@ export function PullRequestResults({
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
       } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
         e.preventDefault();
-        void copyRowsAsTable(selection.selectedRows, prSearchCopyColumns(visibleColumns), setCopyToast);
+        void (e.shiftKey ? copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast) : copyRowsAsTable(selection.selectedRows, prSearchCopyColumns(visibleColumns), setCopyToast));
       }
       return;
     }
@@ -360,9 +356,9 @@ export function PullRequestResults({
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: columnTemplate }}
           >
-            {visibleColumns.map((key, i) => {
+            {shownColumns.map((key, i) => {
               const filterKey = PR_SEARCH_COLUMN_FILTER_KEY[key];
-              const isLast = i === visibleColumns.length - 1;
+              const isLast = i === shownColumns.length - 1;
               return (
                 <div key={key} role="columnheader" className="relative min-w-0 px-1">
                   <div className="flex min-w-0 items-center">
@@ -417,7 +413,7 @@ export function PullRequestResults({
                       `${pr.repositoryId}:${pr.pullRequestId}`,
                     )}
                     columnTemplate={columnTemplate}
-                    visibleColumns={visibleColumns}
+                    visibleColumns={shownColumns}
                     rowRefs={rowRefs}
                     handleRowClick={selection.handleRowClick}
                     setSelectedIndex={setSelectedIndex}
@@ -434,6 +430,7 @@ export function PullRequestResults({
       <ListStatusBar
         summary={[countLabel, selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null]}
         filters={<ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />}
+        fitWidths={{ auto: autoColumnWidths, onFit: resetColumnWidths }}
         onColumns={setColumnMenuRect}
         helpSection="pr-search"
       />
@@ -491,7 +488,6 @@ export function PullRequestResults({
           requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
           onToggle={toggleColumn}
           onReset={resetColumns}
-          onAutoFitWidths={resetColumnWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

@@ -165,7 +165,7 @@ export function InboxListPane({
               title="Undo (U)"
               className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring"
             >
-              Undo <kbd className="font-mono text-[10px]">U</kbd>
+              Undo <kbd className="font-mono text-3xs">U</kbd>
             </button>
           </span>
         ) : null}

@@ -98,10 +98,11 @@ export function CommentComposer({
     },
   });
 
-  // Switching work items clears the unsent draft.
+  // Switching work items clears the unsent draft and the last post's status.
   useEffect(() => {
     setCommentText("");
     mentionPicker.resetMentions();
+    commentMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem?.id]);
 
@@ -222,7 +223,7 @@ export function CommentComposer({
         showActions={active}
         status={
           commentMutation.isSuccess ? (
-            <span className="text-[11px] text-muted-foreground">Comment posted</span>
+            <span className="text-2xs text-muted-foreground">Comment posted</span>
           ) : null
         }
         submitLabel="Comment"

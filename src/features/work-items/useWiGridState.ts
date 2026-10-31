@@ -60,13 +60,16 @@ export function useWiGridState({
   const {
     template: wiColTemplate,
     minWidth: gridMinWidth,
+    autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
     gridRef,
+    shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: WI_GRID_KEYS,
     visibleColumns,
     flexibleKey: "title",
+    autoHide: ["tags", "projectName", "changedDate"],
     defaults: DEFAULT_WI_COLUMN_WIDTHS,
     min: WI_COLUMN_MIN_WIDTHS,
     max: WI_COLUMN_MAX_WIDTHS,
@@ -202,9 +205,9 @@ export function useWiGridState({
 
   return {
     sort, setWiSort, applyWiSort,
-    visibleColumns, setVisibleColumns,
+    visibleColumns, setVisibleColumns, shownColumns,
     toggleColumnVisibility, resetColumnVisibility,
-    wiColTemplate, gridMinWidth, resetColumnWidths, gridRef, columnResizeProps,
+    wiColTemplate, gridMinWidth, autoColumnWidths, resetColumnWidths, gridRef, columnResizeProps,
     copyToast, setCopyToast,
     checkedIds, setCheckedIds,
     lastCheckedIndex, setLastCheckedIndex,

@@ -17,13 +17,13 @@ import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
-import { copyRowsAsTable } from "@/lib/clipboardTable";
+import { copyRowsAsLinks, copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
 import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
 import { DraftsCheckbox } from "./DraftsCheckbox";
 import { prAgentList, usePrReviewPanels } from "./usePrReviewPanels";
-import { createdCopyColumns } from "./prCopyColumns";
+import { createdCopyColumns, prLinkTarget } from "./prCopyColumns";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
   MAX_REVIEW_PREVIEW_WIDTH,
@@ -146,13 +146,14 @@ export function MyPullRequestsGrid() {
   const {
     template,
     minWidth: gridMinWidth,
+    autoWidths,
     resetWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: GRID_KEYS,
     visibleColumns,
-    flexibleKey: "title",
+    flexibleKey: "title", autoHide: ["targetRefName", "creationDate"],
     defaults: DEFAULT_COLUMN_WIDTHS,
     min: COLUMN_MIN_WIDTHS,
     max: COLUMN_MAX_WIDTHS,
@@ -230,7 +231,8 @@ export function MyPullRequestsGrid() {
     if (event.ctrlKey || event.metaKey) {
       if ((event.key === "c" || event.key === "C") && !event.altKey) {
         event.preventDefault();
-        void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
+        if (event.shiftKey) void copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast);
+        else void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
       } else if (event.key === "Enter" && pr?.webUrl) {
         event.preventDefault();
         openExternalUrl(pr.webUrl);
@@ -373,7 +375,7 @@ export function MyPullRequestsGrid() {
   const gridPane = (
     <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
       {query.data && query.data.warnings.length > 0 && (
-        <p role="status" className="shrink-0 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">
+        <p role="status" className="shrink-0 px-2 py-1 text-xs text-warning">
           Could not fetch {query.data.warnings.length} project(s): {query.data.warnings.join(", ")}.
         </p>
       )}
@@ -390,14 +392,14 @@ export function MyPullRequestsGrid() {
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: template }}
             >
-              {visibleColumns.map((col, i) => (
+              {shownColumns.map((col, i) => (
                 <SortHeaderButton
                   key={col}
                   column={col}
                   sort={sort}
                   onSort={applySort}
                   resizeHandle={
-                    i === visibleColumns.length - 1 ? undefined : (
+                    i === shownColumns.length - 1 ? undefined : (
                       <ColumnResizeHandle {...columnResizeProps(col)} />
                     )
                   }
@@ -417,7 +419,7 @@ export function MyPullRequestsGrid() {
                     index={index}
                     pr={pr}
                     columnTemplate={template}
-                    visibleColumns={visibleColumns}
+                    visibleColumns={shownColumns}
                     selected={index === selectedIndex}
                     inMultiSelection={selection.selectedKeys.has(
                       `${pr.repositoryId}:${pr.pullRequestId}`,
@@ -439,6 +441,7 @@ export function MyPullRequestsGrid() {
           selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null,
           query.isFetching ? "refreshing…" : null,
         ]}
+        fitWidths={{ auto: autoWidths, onFit: resetWidths }}
         onColumns={setColumnMenuRect}
         helpSection="reviews"
       />
@@ -489,7 +492,6 @@ export function MyPullRequestsGrid() {
             resetColumns();
             resetWidths();
           }}
-          onAutoFitWidths={resetWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

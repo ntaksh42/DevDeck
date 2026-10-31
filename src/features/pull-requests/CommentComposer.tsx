@@ -268,7 +268,7 @@ export function CommentComposer({
                   >
                     <span className="font-medium">{candidate.displayName}</span>
                     {candidate.uniqueName ? (
-                      <span className="text-[11px] text-muted-foreground">{candidate.uniqueName}</span>
+                      <span className="text-2xs text-muted-foreground">{candidate.uniqueName}</span>
                     ) : null}
                   </button>
                 </li>

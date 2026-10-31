@@ -22,9 +22,9 @@ export function AgentNotesBadge({ target, itemId }: { target: AgentNoteTarget; i
       role="img"
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1 text-[11px] leading-4 ${
+      className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1 text-2xs leading-4 ${
         needs
-          ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+          ? "border-destructive/30 bg-destructive/10 text-destructive"
           : "border-border bg-muted text-muted-foreground"
       } ${unread ? "font-bold" : ""}`}
     >

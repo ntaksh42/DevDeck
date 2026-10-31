@@ -275,7 +275,7 @@ export function AgentResultPanel({
   }
   if (error) {
     return (
-      <p className="p-3 text-[11px] leading-4 text-destructive">
+      <p className="p-3 text-2xs leading-4 text-destructive">
         {commandErrorMessage(error)}
       </p>
     );
@@ -300,16 +300,16 @@ export function AgentResultPanel({
         ? { "data-primary-preview": "true", "aria-keyshortcuts": "Control+P", tabIndex: -1 }
         : {})}
     >
-      {openError ? <p className="shrink-0 text-[11px] leading-4 text-destructive">{openError}</p> : null}
-      {preview?.warning ? <p role="status" className="text-[11px] text-amber-600">{preview.warning}</p> : null}
-      <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+      {openError ? <p className="shrink-0 text-2xs leading-4 text-destructive">{openError}</p> : null}
+      {preview?.warning ? <p role="status" className="text-2xs text-warning">{preview.warning}</p> : null}
+      <div className="flex shrink-0 items-center gap-1.5 text-2xs text-muted-foreground">
         <span>
           Select text and press C (or the Comment button) to ask the agent about it.
           {reattachId ? " Re-attach: select the new text for the note (Esc cancels)." : ""}
         </span>
         <span className="flex-1" />
-        {needs ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] text-white">{needs} needs you</span> : null}
-        {open ? <span className="rounded-full bg-yellow-400 px-1.5 text-[10px] text-gray-900">{open} open</span> : null}
+        {needs ? <span className="rounded-full bg-red-500 px-1.5 text-3xs text-white">{needs} needs you</span> : null}
+        {open ? <span className="rounded-full bg-yellow-400 px-1.5 text-3xs text-gray-900">{open} open</span> : null}
         <button
           type="button"
           onClick={() => openAgentPanel()}
@@ -334,7 +334,7 @@ export function AgentResultPanel({
       <div ref={bodyRef} className="flex min-h-0 flex-1">
         {preview?.tooLarge ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded border border-border p-4">
-            <p className="text-[11px]">ファイルが大きすぎます（上限 5 MiB）。</p>
+            <p className="text-2xs">ファイルが大きすぎます（上限 5 MiB）。</p>
             <button type="button" onClick={openInBrowser} className={headerButton}>
               外部ブラウザで開く (o)
             </button>

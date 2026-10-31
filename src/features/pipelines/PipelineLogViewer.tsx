@@ -42,7 +42,7 @@ function highlight(line: string, query: string, current: boolean): ReactNode {
 }
 
 const TOOL_BUTTON =
-  "inline-flex h-5 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-medium normal-case tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
+  "inline-flex h-5 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs font-medium normal-case tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 // The selected node's log tail: line numbers, search (/), wrap (W), follow,
 // copy, and an errors/warnings-only filter. Mount it with a `key` per log so
@@ -196,7 +196,7 @@ export function PipelineLogViewer({
         Log — {title}
       </PreviewBand>
 
-      <div className="flex flex-wrap items-center gap-2 px-3 pb-1 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-1 text-2xs text-muted-foreground">
         {searchOpen ? (
           <span className="inline-flex h-6 items-center gap-1.5 rounded border border-primary bg-background px-2 text-foreground">
             <Search className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
@@ -255,7 +255,7 @@ export function PipelineLogViewer({
           tabIndex={0}
           onScroll={onScroll}
           aria-label="Log output"
-          className="min-h-0 flex-1 overflow-auto rounded bg-zinc-950 py-1 font-mono text-[11px] leading-relaxed text-zinc-100 outline-none focus:ring-2 focus:ring-ring"
+          className="min-h-0 flex-1 overflow-auto rounded bg-zinc-950 py-1 font-mono text-2xs leading-relaxed text-zinc-100 outline-none focus:ring-2 focus:ring-ring"
         >
           {shown.length === 0 ? (
             <div className="px-2">{errorsOnly ? "(no error or warning lines)" : "(empty log)"}</div>

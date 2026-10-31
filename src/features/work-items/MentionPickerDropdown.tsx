@@ -50,7 +50,7 @@ export function MentionPickerDropdown({
   }
   if (errorMessage) {
     return (
-      <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive shadow-lg">
+      <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-2xs text-destructive shadow-lg">
         Search failed: {errorMessage}
       </div>
     );

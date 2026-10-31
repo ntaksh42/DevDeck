@@ -18,7 +18,7 @@ import { type AddReviewerRequest, PrReviewerAdder } from "./PrReviewerAdder";
 import { PrLabelsRow } from "./PrLabelsRow";
 
 const BADGE_BASE =
-  "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium";
+  "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-2xs font-medium";
 
 function shortRef(refName: string): string {
   return refName.replace(/^refs\/heads\//, "");
@@ -36,7 +36,7 @@ function StateBadge({ isDraft }: { isDraft: boolean }) {
   }
   return (
     <span
-      className={`${BADGE_BASE} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300`}
+      className={`${BADGE_BASE} border-success/30 bg-success/10 text-success`}
     >
       <span
         className="h-1.5 w-1.5 rounded-full bg-emerald-500"
@@ -56,7 +56,7 @@ function ciBadge(pr: ReviewPullRequestSummary) {
     return (
       <span
         key="ci"
-        className={`${BADGE_BASE} border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300`}
+        className={`${BADGE_BASE} border-destructive/30 bg-destructive/10 text-destructive`}
       >
         <XCircle className="h-3 w-3" aria-hidden="true" />
         CI failed · {pr.ciCheckCount}
@@ -67,7 +67,7 @@ function ciBadge(pr: ReviewPullRequestSummary) {
     return (
       <span
         key="ci"
-        className={`${BADGE_BASE} border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300`}
+        className={`${BADGE_BASE} border-success/30 bg-success/10 text-success`}
       >
         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
         CI passed
@@ -78,7 +78,7 @@ function ciBadge(pr: ReviewPullRequestSummary) {
     return (
       <span
         key="ci"
-        className={`${BADGE_BASE} border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300`}
+        className={`${BADGE_BASE} border-warning/30 bg-warning/10 text-warning`}
       >
         <Loader className="h-3 w-3 animate-spin" aria-hidden="true" />
         CI running
@@ -114,13 +114,13 @@ function approvedBadge(review: PullRequestReview | null) {
       key="approved"
       className={`${BADGE_BASE} ${
         complete
-          ? "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
+          ? "border-success/30 bg-success/10 text-success"
           : "border-border bg-muted text-muted-foreground"
       }`}
       title={`${approved} of ${total} reviewers approved`}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${approved > 0 ? "bg-emerald-500" : "bg-gray-300"}`}
+        className={`h-1.5 w-1.5 rounded-full ${approved > 0 ? "bg-emerald-500" : "bg-muted-foreground/30"}`}
         aria-hidden="true"
       />
       {approved} / {total} approved
@@ -148,7 +148,7 @@ function commentsBadge(review: PullRequestReview | null) {
       key="comments"
       className={`${BADGE_BASE} ${
         hasUnresolved
-          ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+          ? "border-warning/30 bg-warning/10 text-warning"
           : "border-border bg-muted text-muted-foreground"
       }`}
       title={`${commentThreads.length} comment thread${
@@ -267,7 +267,7 @@ export function PrReviewHeader({
               {reviewers.map((reviewer) => (
                 <span
                   key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
-                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground [overflow-wrap:anywhere]"
+                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-2xs text-foreground [overflow-wrap:anywhere]"
                   title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
                 >
                   {reviewer.displayName}
@@ -284,7 +284,7 @@ export function PrReviewHeader({
                         onClick={() => onToggleReviewerRequired(reviewer)}
                         title={reviewer.isRequired ? "Make optional" : "Make required"}
                         aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
-                        className="rounded px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
+                        className="rounded px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
                       >
                         {reviewer.isRequired ? "Req" : "Opt"}
                       </button>

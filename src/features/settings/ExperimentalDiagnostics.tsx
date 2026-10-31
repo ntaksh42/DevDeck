@@ -65,7 +65,7 @@ export function ExperimentalDiagnostics() {
 
         {result ? (
           <div className="grid gap-2">
-            <p className="text-sm text-green-700 dark:text-green-400">
+            <p className="text-sm text-success">
               Diagnostics saved to {result.filePath}
             </p>
             {isTauriRuntime() ? (

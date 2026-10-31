@@ -64,7 +64,7 @@ export function WorkItemResultFolderSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Work item result folder saved.</p>
+          <p className="text-sm text-success">Work item result folder saved.</p>
         ) : null}
 
         <div>

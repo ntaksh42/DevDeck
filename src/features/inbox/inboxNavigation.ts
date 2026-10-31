@@ -19,12 +19,12 @@ export function openInboxEntryInBrowser(entry: InboxEntry) {
   if (entry.webUrl) void openExternalUrl(entry.webUrl);
 }
 
-/** 1-9: a numbered link from the comment, resolved in the entry's organization. */
+/** 1-9 or a click on a related link, resolved in the entry's organization. */
 export function openInboxLink(link: InboxLink, organizationId: string) {
   if (link.kind === "workItem") {
     navigateToWorkItem({ workItemId: link.id, organizationId });
   } else if (link.kind === "pullRequest") {
-    navigateToPullRequest({ organizationId, pullRequestId: link.id });
+    navigateToPullRequest({ organizationId, repositoryId: link.repositoryId, pullRequestId: link.id });
   } else {
     void openExternalUrl(link.url);
   }

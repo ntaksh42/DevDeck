@@ -64,7 +64,7 @@ export function ReviewResultFolderSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Review result folder saved.</p>
+          <p className="text-sm text-success">Review result folder saved.</p>
         ) : null}
 
         <div>

@@ -28,15 +28,15 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
               className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary disabled:cursor-default disabled:opacity-60"
               title={pr.webUrl ?? "Pull request link unavailable"}
             >
-              <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">
+              <span className="w-16 shrink-0 truncate text-2xs font-bold text-muted-foreground">
                 {inReviews ? "Review" : "PR"}
               </span>
-              <span className="shrink-0 font-mono text-[11px] font-extrabold text-primary">
+              <span className="shrink-0 font-mono text-2xs font-extrabold text-primary">
                 !{pr.pullRequestId}
               </span>
               <span className="min-w-0 flex-1 truncate">{pr.title ?? "(not synced — opens in browser)"}</span>
               {pr.myVoteLabel ? (
-                <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-[11px] text-muted-foreground">
+                <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-2xs text-muted-foreground">
                   {pr.myVoteLabel}
                 </span>
               ) : null}
@@ -52,7 +52,7 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
 export function WorkItemAttachmentsSection({ preview }: { preview: WorkItemPreview }) {
   return (
     <PreviewSection
-      accentColor="border-l-amber-400 dark:border-l-amber-500"
+      accentColor="border-l-warning"
       collapseId="attachments"
       title={`Attachments (${preview.attachments.length})`}
     >
@@ -67,7 +67,7 @@ export function WorkItemAttachmentsSection({ preview }: { preview: WorkItemPrevi
             className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
           >
             <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
-            <span className="shrink-0 text-[11px] text-primary">Download</span>
+            <span className="shrink-0 text-2xs text-primary">Download</span>
           </button>
         ))}
       </div>

@@ -1,4 +1,5 @@
 mod group_reviews;
+mod group_reviews_capped;
 mod inbox;
 mod live_results;
 mod notifications;

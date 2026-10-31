@@ -31,7 +31,7 @@ function FilterList({ label, filters }: { label: string; filters: string[] }) {
       {filters.map((filter) => (
         <code
           key={filter}
-          className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]"
+          className="rounded bg-muted px-1.5 py-0.5 font-mono text-2xs"
         >
           {filter}
         </code>
@@ -47,7 +47,7 @@ function TriggerCard({ trigger }: { trigger: PipelineTrigger }) {
     <div className="rounded-md border border-border p-2.5">
       <div className="text-xs font-medium">{triggerLabel(trigger.triggerType)}</div>
       {hasFilters && (
-        <div className="mt-1.5 flex flex-col gap-1 text-[11px]">
+        <div className="mt-1.5 flex flex-col gap-1 text-2xs">
           <FilterList label="Branches" filters={trigger.branchFilters} />
           <FilterList label="Paths" filters={trigger.pathFilters} />
         </div>
@@ -60,7 +60,7 @@ function VariableRow({ variable }: { variable: PipelineVariable }) {
   return (
     <tr className="border-b border-border/50 last:border-0">
       <td className="py-1 pr-3 align-top font-medium">{variable.name}</td>
-      <td className="py-1 pr-3 align-top font-mono text-[11px]">
+      <td className="py-1 pr-3 align-top font-mono text-2xs">
         {variable.isSecret ? (
           <span className="text-muted-foreground">••••••</span>
         ) : (
@@ -70,12 +70,12 @@ function VariableRow({ variable }: { variable: PipelineVariable }) {
       <td className="py-1 align-top">
         <div className="flex flex-wrap gap-1">
           {variable.isSecret && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+            <span className="rounded bg-warning/10 px-1.5 py-0.5 text-2xs font-medium text-warning">
               Secret
             </span>
           )}
           {variable.allowOverride && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
               Overridable
             </span>
           )}
@@ -183,7 +183,7 @@ export function PipelineDefinitionPanel({
               ) : (
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-2xs uppercase tracking-wide text-muted-foreground">
                       <th className="py-1 pr-3 font-medium">Name</th>
                       <th className="py-1 pr-3 font-medium">Value</th>
                       <th className="py-1 font-medium">Flags</th>
@@ -198,7 +198,7 @@ export function PipelineDefinitionPanel({
               )}
             </section>
 
-            <p className="mt-auto text-[11px] text-muted-foreground">
+            <p className="mt-auto text-2xs text-muted-foreground">
               YAML パイプラインでは一部のトリガー・変数がここに表示されないことがあります。
             </p>
           </>

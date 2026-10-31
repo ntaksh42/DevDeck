@@ -77,6 +77,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   agentWorkspacePath: null,
   inboxInsightEnabled: false,
   inboxInsightModel: null,
+  autoAgentEnabled: false,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
@@ -180,6 +181,10 @@ export function applyDemoSettingsUpdate(
       input && "inboxInsightModel" in input
         ? input.inboxInsightModel?.trim() || null
         : current.inboxInsightModel,
+    autoAgentEnabled:
+      input && "autoAgentEnabled" in input
+        ? input.autoAgentEnabled === true
+        : current.autoAgentEnabled,
     readOnlyValidationModeEnabled:
       input && "readOnlyValidationModeEnabled" in input
         ? Boolean(input.readOnlyValidationModeEnabled)

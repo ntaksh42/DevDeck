@@ -31,8 +31,14 @@ export function useGridVirtualizer({
     if (!scrollerEl) return;
     const element = scrollerEl;
 
+    // The window only moves a whole row at a time; skip re-rendering the
+    // owner on every scrolled pixel while the top row stays the same.
     function updateViewport() {
-      setViewport({ height: element.clientHeight, scrollTop: element.scrollTop });
+      const height = element.clientHeight;
+      const scrollTop = snapToRow(element.scrollTop, rowHeight);
+      setViewport((prev) =>
+        prev.height === height && prev.scrollTop === scrollTop ? prev : { height, scrollTop },
+      );
     }
 
     updateViewport();
@@ -44,7 +50,7 @@ export function useGridVirtualizer({
       element.removeEventListener("scroll", updateViewport);
       resizeObserver?.disconnect();
     };
-  }, [scrollerEl]);
+  }, [scrollerEl, rowHeight]);
 
   const firstRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
   const visibleRowCount = Math.ceil(Math.max(viewport.height, rowHeight) / rowHeight);
@@ -55,16 +61,9 @@ export function useGridVirtualizer({
   // Scrolls the row at `index` just into view (no-op if already visible).
   const scrollRowIntoView = useCallback(
     (index: number) => {
-      if (!scrollerEl) return;
-      const rowTop = index * rowHeight;
-      const rowBottom = rowTop + rowHeight;
-      if (rowTop < scrollerEl.scrollTop) {
-        scrollerEl.scrollTop = rowTop;
-      } else if (rowBottom > scrollerEl.scrollTop + scrollerEl.clientHeight) {
-        scrollerEl.scrollTop = rowBottom - scrollerEl.clientHeight;
-      }
+      if (scrollerEl) scrollGridRowIntoView(scrollerEl, index, rowHeight, rowCount);
     },
-    [scrollerEl, rowHeight],
+    [scrollerEl, rowHeight, rowCount],
   );
 
   return {
@@ -76,4 +75,34 @@ export function useGridVirtualizer({
     bottomPadding,
     scrollRowIntoView,
   };
+}
+
+/**
+ * Scrolls a fixed-height virtualized row just into view (no-op if visible).
+ *
+ * Rows usually sit below a column header that scrolls with them, so a row's
+ * position is the header height plus `index * rowHeight`. The header height is
+ * whatever the scroller holds besides the rows; without it, End stops short and
+ * leaves the last row partly cut off.
+ */
+export function scrollGridRowIntoView(
+  scroller: HTMLElement,
+  index: number,
+  rowHeight: number,
+  rowCount: number,
+): void {
+  const headerHeight = Math.max(0, scroller.scrollHeight - rowCount * rowHeight);
+  const rowBottom = headerHeight + (index + 1) * rowHeight;
+  // Scrolling up keeps the old target (index * rowHeight), which leaves a
+  // header-height of context above the row and shows the header on Home.
+  if (headerHeight + index * rowHeight < scroller.scrollTop) {
+    scroller.scrollTop = index * rowHeight;
+  } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+    scroller.scrollTop = rowBottom - scroller.clientHeight;
+  }
+}
+
+/** Rounds a scroll offset down to the top of its row. */
+export function snapToRow(scrollTop: number, rowHeight: number): number {
+  return Math.floor(scrollTop / rowHeight) * rowHeight;
 }

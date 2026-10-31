@@ -19,6 +19,7 @@ import { navigateToWorkItem } from "@/lib/crossLinks";
 import { openExternalUrl } from "@/lib/openExternal";
 import { clamp } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import { parkGridFocus } from "@/lib/parkGridFocus";
 import { HeaderToolbarPortal } from "@/components/HeaderToolbarSlot";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { NotificationRow, NOTIFICATION_ROW_HEIGHT } from "./NotificationRow";
@@ -195,6 +196,7 @@ export function NotificationsView({
 
   function moveSelectionTo(index: number) {
     const next = clamp(index, 0, items.length - 1);
+    parkGridFocus(rowRefs.current[next]);
     restoreFocusRef.current = true;
     scrollRowIntoView(entryIndexOf[next] ?? next);
     setSelectedIndex(next);

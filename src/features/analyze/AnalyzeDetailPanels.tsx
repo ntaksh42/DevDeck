@@ -78,7 +78,7 @@ export function QueryDetailPanel({
                         : delta > 0
                           ? "text-destructive"
                           : delta < 0
-                            ? "text-emerald-600 dark:text-emerald-400"
+                            ? "text-success"
                             : "text-muted-foreground"
                     }`}
                   >

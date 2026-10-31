@@ -3,12 +3,19 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useMemo,
   useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
 import { clamp, gridColumnTemplate, gridColumnsMinWidth, storedNumbers } from "@/lib/utils";
-import { gridRows, measureColumnContentWidths, shrinkToFit } from "@/lib/gridAutoFit";
+import {
+  gridRows,
+  hideColumnsToFit,
+  measureColumnContentWidths,
+  mutatedGridRows,
+  shrinkToFit,
+} from "@/lib/gridAutoFit";
 
 export type ColumnResizeProps = {
   columnIndex: number;
@@ -21,10 +28,13 @@ export type ColumnResizeProps = {
   onAutoFit: () => void;
 };
 
+/** How far the flexible column (the title) may shrink in a narrow pane. */
+const FLEXIBLE_SHRINK_FLOOR = 200;
+
 /**
  * Whether a grid's widths are auto-managed. Grids start in auto mode, and so
  * do users whose stored widths are still the untouched defaults; a manual
- * resize switches to manual until "Auto-fit widths" is chosen again.
+ * resize switches to manual until the status bar's "Fit" is chosen again.
  */
 function readAutoMode(storageKey: string, defaults: number[]): boolean {
   const mode = localStorage.getItem(`${storageKey}:mode`);
@@ -44,8 +54,9 @@ function readAutoMode(storageKey: string, defaults: number[]): boolean {
  * Attach `gridRef` to the element wrapping the header and rows (the one sized
  * with `minWidth`). With it the hook also (a) sizes columns to their content
  * while in auto mode, (b) fits a single column on handle double-click, and
- * (c) when the pane is narrower than the columns, shrinks the non-flexible
- * columns first so the flexible one (the title) keeps its room.
+ * (c) when the pane is narrower than the columns, hides the `autoHide`
+ * columns in order until they fit, then shrinks the flexible column (the
+ * title) first so the short columns keep their content readable.
  */
 export function useGridColumns<K extends string>(options: {
   /** Full column order; width arrays are indexed by this. */
@@ -64,11 +75,17 @@ export function useGridColumns<K extends string>(options: {
   suffixColumns?: string[];
   /** Grid `gap` in px between tracks; used to size `minWidth`. */
   gap?: number;
+  /** Columns hidden first-to-last while the pane is too narrow for the rest. */
+  autoHide?: readonly K[];
 }): {
   widths: number[];
   setWidths: Dispatch<SetStateAction<number[]>>;
+  /** `visibleColumns` minus those auto-hidden for width; render these. */
+  shownColumns: K[];
   template: string;
   minWidth: number;
+  /** True while widths follow the content (no manual resize since the last fit). */
+  autoWidths: boolean;
   /** Returns to auto mode and re-fits the columns to their content. */
   resetWidths: () => void;
   gridRef: (element: HTMLElement | null) => void;
@@ -76,7 +93,7 @@ export function useGridColumns<K extends string>(options: {
 } {
   const {
     keys,
-    visibleColumns,
+    visibleColumns: requestedColumns,
     flexibleKey,
     defaults,
     min,
@@ -85,6 +102,7 @@ export function useGridColumns<K extends string>(options: {
     prefixColumns = [],
     suffixColumns = [],
     gap = 8,
+    autoHide = [],
   } = options;
 
   const [widths, setWidths] = useState(() =>
@@ -93,6 +111,23 @@ export function useGridColumns<K extends string>(options: {
   const [autoMode, setAutoMode] = useState(() => readAutoMode(storageKey, defaults));
   const [gridElement, setGridElement] = useState<HTMLElement | null>(null);
   const [availableWidth, setAvailableWidth] = useState<number | null>(null);
+  // Display only: the user's column choice is untouched and the hidden
+  // columns return when the pane widens.
+  const visibleColumns = hideColumnsToFit(
+    requestedColumns,
+    autoHide,
+    availableWidth,
+    (columns) =>
+      gridColumnsMinWidth(
+        columns.map((column) => {
+          const width = widths[keys.indexOf(column)];
+          return column === flexibleKey ? Math.min(width, FLEXIBLE_SHRINK_FLOOR) : width;
+        }),
+        prefixColumns,
+        suffixColumns,
+        gap,
+      ),
+  );
   const autoFittedRef = useRef(false);
   // Natural header-label widths: the narrow-pane shrink never goes below them,
   // so column titles stay readable.
@@ -141,13 +176,22 @@ export function useGridColumns<K extends string>(options: {
   }, [gridElement]);
 
   const visibleKey = visibleColumns.join("|");
+  // hideColumnsToFit returns a new array on every render. Keep one identity per
+  // column set: the rows are memoized on it, and a fresh array re-rendered
+  // every visible row on every scroll event.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shownColumns = useMemo(() => visibleColumns, [visibleKey]);
   const fitColumns = useCallback(
-    (targets: readonly K[]) => {
+    (
+      targets: readonly K[],
+      { growOnly = false, rows }: { growOnly?: boolean; rows?: HTMLElement[] } = {},
+    ) => {
       if (!gridElement) return false;
       const measured = measureColumnContentWidths(
         gridElement,
         prefixColumns.length,
         visibleColumns.length,
+        { rows },
       );
       if (measured.every((width) => width === null)) return false;
       setWidths((prev) => {
@@ -156,9 +200,10 @@ export function useGridColumns<K extends string>(options: {
           const width = measured[visibleIndex];
           if (width === null || !targets.includes(column)) return;
           const index = keys.indexOf(column);
-          next[index] = clamp(Math.ceil(width) + 2, min[index], max[index]);
+          const fitted = clamp(Math.ceil(width) + 2, min[index], max[index]);
+          next[index] = growOnly ? Math.max(prev[index], fitted) : fitted;
         });
-        return next;
+        return next.every((width, i) => width === prev[i]) ? prev : next;
       });
       return true;
     },
@@ -183,6 +228,37 @@ export function useGridColumns<K extends string>(options: {
     if (autoFittedRef.current) return;
     autoFittedRef.current = fitColumns(visibleColumns.filter((column) => column !== flexibleKey));
   });
+
+  // Auto mode: rows that appear later (group expanded, sync, scrolled into the
+  // window) widen a column when their content needs it. Grow-only, so scrolling
+  // past shorter rows does not make the columns jump back and forth.
+  useEffect(() => {
+    if (!autoMode || !gridElement || typeof MutationObserver === "undefined") return;
+    let frame = 0;
+    // Grow-only, so only the rows that just appeared or changed can widen a
+    // column; measuring every rendered row forced a layout per scrolled row.
+    let pending = new Set<HTMLElement>();
+    const observer = new MutationObserver((records) => {
+      mutatedGridRows(records).forEach((row) => pending.add(row));
+      if (pending.size === 0) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rows = [...pending].filter((row) => row.isConnected);
+        pending = new Set();
+        if (!autoFittedRef.current || rows.length === 0) return;
+        fitColumns(
+          visibleColumns.filter((column) => column !== flexibleKey),
+          { growOnly: true, rows },
+        );
+      });
+    });
+    observer.observe(gridElement, { childList: true, subtree: true, characterData: true });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoMode, gridElement, fitColumns, flexibleKey]);
 
   useLayoutEffect(() => {
     if (!gridElement) return;
@@ -219,7 +295,10 @@ export function useGridColumns<K extends string>(options: {
       ? shrinkToFit(
           storedVisibleWidths,
           visibleColumns.map((column, i) =>
-            Math.max(min[keys.indexOf(column)], headerFloors[i] ?? 0),
+            Math.max(
+              column === flexibleKey ? FLEXIBLE_SHRINK_FLOOR : min[keys.indexOf(column)],
+              headerFloors[i] ?? 0,
+            ),
           ),
           flexibleIndex,
           requiredWidth - availableWidth,
@@ -239,8 +318,10 @@ export function useGridColumns<K extends string>(options: {
   return {
     widths,
     setWidths,
+    shownColumns,
     template,
     minWidth,
+    autoWidths: autoMode,
     resetWidths: () => {
       setWidths([...defaults]);
       setAutoMode(true);

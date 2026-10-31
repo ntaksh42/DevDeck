@@ -1,11 +1,11 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Search, X } from 'lucide-react';
 
 export type DockFilterChip = { label: string; onClear: () => void; onEdit?: () => void };
 
 function FilterChip({ label, onEdit, onClear }: DockFilterChip) {
   return (
-    <span className="inline-flex h-4 max-w-[12rem] items-center rounded-full bg-primary/10 text-[11px] text-link">
+    <span className="inline-flex h-4 max-w-[12rem] items-center rounded-full bg-primary/10 text-2xs text-link">
       <button type="button" onClick={onEdit} disabled={!onEdit} className="truncate pl-2 pr-1 disabled:cursor-default">
         {label}
       </button>
@@ -71,11 +71,16 @@ export function DockFilterBar({
   // Keyboard users must never be stranded on <body>: when the grid has no row
   // to take focus back (e.g. the filter matched nothing) or a clicked chip
   // disappears, focus lands on the "Ctrl+F" button instead.
+  const focusTimerRef = useRef<number | undefined>(undefined);
   function keepFocusInStrip() {
-    window.setTimeout(() => {
+    window.clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = window.setTimeout(() => {
       if (document.activeElement === document.body || !document.activeElement) revealRef.current?.focus();
     }, 50);
   }
+  // A pending check must not outlive the bar (it would touch `document` after
+  // the component, or a test's jsdom environment, is already gone).
+  useEffect(() => () => window.clearTimeout(focusTimerRef.current), []);
 
   // Focus as soon as the input exists, so keys typed right after Ctrl+F go
   // into the filter instead of reaching the grid's single-key shortcuts.
@@ -105,7 +110,7 @@ export function DockFilterBar({
           data-filter-reveal="true"
           aria-label={label}
           title={`${label} (Ctrl+F or /)`}
-          className="flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <Search className="h-3 w-3" aria-hidden="true" />
           Ctrl+F

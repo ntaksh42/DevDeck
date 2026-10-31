@@ -67,7 +67,7 @@ export function FiltersToggle({
       <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
       Filters
       {count > 0 ? (
-        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none text-primary-foreground">
+        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold leading-none text-primary-foreground">
           {count}
         </span>
       ) : null}
@@ -107,7 +107,7 @@ export function SearchSubmitButton({ pending, disabled }: { pending: boolean; di
 export function FilterField({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
   return (
     <label className={`grid gap-0.5 ${className}`}>
-      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="text-2xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );

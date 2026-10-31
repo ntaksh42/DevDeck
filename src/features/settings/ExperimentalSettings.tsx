@@ -161,7 +161,7 @@ export function ExperimentalSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">
+          <p className="text-sm text-success">
             Experimental settings saved.
           </p>
         ) : null}

@@ -115,7 +115,7 @@ function QueryStatus({
   return empty ? <p className="text-muted-foreground">{emptyText}</p> : null;
 }
 
-const BADGE = "rounded border border-border px-1 text-[10px] text-muted-foreground";
+const BADGE = "rounded border border-border px-1 text-3xs text-muted-foreground";
 
 function TeamsList({ organizationId, projectId }: { organizationId: string; projectId: string }) {
   const query = useQuery({

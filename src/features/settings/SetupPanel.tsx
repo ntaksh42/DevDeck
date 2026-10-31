@@ -238,7 +238,7 @@ export function SetupPanel({
         ) : null}
 
         {patMutation.isSuccess || azureCliMutation.isSuccess || githubMutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Connection added.</p>
+          <p className="text-sm text-success">Connection added.</p>
         ) : null}
 
         <div className="flex flex-wrap gap-3">

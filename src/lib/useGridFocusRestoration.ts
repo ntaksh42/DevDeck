@@ -111,6 +111,7 @@ export function useGridFocusRestoration({
     clearBlurTimer();
     let cancelled = false;
     let timer = 0;
+    let frame = 0;
     const attempt = (remaining: number) => {
       if (cancelled) return;
       // The user may have moved focus into the preview pane (an editor in the
@@ -119,14 +120,16 @@ export function useGridFocusRestoration({
       if (focusMovedOffGrid()) return;
       if (restoreFocusRef.current()) return;
       if (remaining <= 0) return;
-      // A row scrolled out of the virtual window mounts on the next frame after
-      // we nudge the scroller; give it a couple of retries to appear.
-      timer = window.setTimeout(() => attempt(remaining - 1), 16);
+      // A row scrolled out of the virtual window mounts after we nudge the
+      // scroller, and on a busy machine that can take several frames; retry
+      // once per frame so the attempt never runs ahead of rendering.
+      frame = window.requestAnimationFrame(() => attempt(remaining - 1));
     };
-    timer = window.setTimeout(() => attempt(2), 0);
+    timer = window.setTimeout(() => attempt(10), 0);
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      if (frame) window.cancelAnimationFrame(frame);
     };
   }, [restoreSignature, clearBlurTimer, focusMovedOffGrid]);
 

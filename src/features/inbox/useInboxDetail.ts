@@ -1,10 +1,11 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addWorkItemComment,
   commandErrorMessage,
   getPullRequestReview,
   getWorkItemPreview,
+  listPullRequestWorkItems,
   postPullRequestComment,
   prLocator,
   setPullRequestThreadStatus,
@@ -12,13 +13,17 @@ import {
   type PullRequestReview,
   type WorkItemPreview,
 } from "@/lib/azdoCommands";
+import { workItemQueryKeys } from "@/features/work-items/queryKeys";
+import { isPullRequestItem, isWorkItemItem, type InboxEntry, type InboxLink } from "./inboxPresentation";
 import {
-  extractInboxLinks,
-  isPullRequestItem,
-  isWorkItemItem,
-  type InboxEntry,
-  type InboxLink,
-} from "./inboxPresentation";
+  pullRequestInboxLinks,
+  pullRequestWorkItemIds,
+  workItemInboxLinks,
+  type LinkedWorkItem,
+} from "./inboxLinks";
+
+/** Titles are looked up for this many linked work items; the rest are listed by number. */
+const LINKED_TITLE_LIMIT = 8;
 
 export type InboxDetail = {
   review: PullRequestReview | null;
@@ -76,19 +81,39 @@ export function useInboxDetail(item: InboxEntry | null): InboxDetail {
   });
   const workItem = isWorkItem ? (workItemQuery.data ?? null) : null;
 
+  // Work items on the PR's Development section (same cache as the PR's linked-items tab).
+  const prWorkItemsQuery = useQuery({
+    queryKey: ["prWorkItems", item?.organizationId, item?.repositoryId, item?.subjectId],
+    queryFn: () => listPullRequestWorkItems(locator as NonNullable<typeof locator>),
+    enabled: isPr,
+    staleTime: 60_000,
+  });
+  const linkedIds = useMemo(
+    () => (isPr ? pullRequestWorkItemIds(prWorkItemsQuery.data ?? [], review?.description) : []),
+    [isPr, prWorkItemsQuery.data, review?.description],
+  );
+  const linkedPreviews = useQueries({
+    queries: linkedIds.slice(0, LINKED_TITLE_LIMIT).map((id) => ({
+      queryKey: workItemQueryKeys.preview(item?.organizationId, item?.projectId, id, ""),
+      queryFn: () =>
+        getWorkItemPreview({ organizationId: item?.organizationId, projectId: item?.projectId ?? "", workItemId: id }),
+      staleTime: 30_000,
+    })),
+  });
+
+  // Fixed-length deps: the lookups' results as one string (the query array is new every render).
+  const linkedSignature = JSON.stringify(
+    linkedPreviews.map((query) => [query.data?.title ?? null, query.data?.state ?? null]),
+  );
+  const linked: LinkedWorkItem[] = useMemo(() => {
+    const looked: [string | null, string | null][] = JSON.parse(linkedSignature);
+    return linkedIds.map((id, index) => ({ id, title: looked[index]?.[0] ?? null, state: looked[index]?.[1] ?? null }));
+  }, [linkedIds, linkedSignature]);
+
   const links: InboxLink[] = useMemo(() => {
     if (!item) return [];
-    if (isPr && thread) {
-      return extractInboxLinks(
-        thread.comments.filter((comment) => !comment.isSystem).map((comment) => comment.content),
-      );
-    }
-    if (isWorkItem && workItem) {
-      const mention = workItem.comments.find((comment) => comment.id === item.commentId);
-      return extractInboxLinks([mention?.text ?? item.snippet]);
-    }
-    return extractInboxLinks([item.snippet]);
-  }, [item, isPr, isWorkItem, thread, workItem]);
+    return isPr ? pullRequestInboxLinks(item, review, thread, linked) : workItemInboxLinks(item, workItem);
+  }, [item, isPr, review, thread, workItem, linked]);
 
   function invalidateReview() {
     if (!item) return;

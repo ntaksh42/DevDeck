@@ -2,7 +2,7 @@ import type { ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
 
 export const commentSecondaryButtonClass =
-  "rounded border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded border border-border bg-card px-2 py-0.5 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * The one comment input look shared by PR comments/replies/edits, work item
@@ -60,7 +60,7 @@ export function CommentField({
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       {showActions ? (
         <div className="flex items-center gap-1.5">
-          <span className="mr-auto text-[11px] text-muted-foreground">{hint}</span>
+          <span className="mr-auto text-2xs text-muted-foreground">{hint}</span>
           {status}
           {extraActions}
           {onCancel ? (
@@ -78,11 +78,17 @@ export function CommentField({
             onClick={onSubmit}
             disabled={submitDisabled || pending}
             aria-label={submitAriaLabel}
-            className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 text-2xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             {submitLabel}
           </button>
+        </div>
+      ) : status ? (
+        // Keep a status (e.g. "Comment posted") visible after a successful
+        // submit collapses the actions row.
+        <div role="status" className="flex justify-end">
+          {status}
         </div>
       ) : null}
     </div>

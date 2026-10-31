@@ -122,7 +122,7 @@ export function WiFieldColumnsSection({
               title={field.referenceName}
             >
               <span className="min-w-0 truncate">{field.name}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">{field.fieldType}</span>
+              <span className="shrink-0 text-3xs text-muted-foreground">{field.fieldType}</span>
             </button>
           ))}
         </div>

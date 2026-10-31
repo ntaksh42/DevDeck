@@ -136,13 +136,15 @@ export function useMyReviewsGrid({
   const {
     template: COLS,
     minWidth: gridMinWidth,
+    autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_GRID_KEYS,
     visibleColumns,
     flexibleKey: 'title',
+    autoHide: ['targetRefName', 'myIsRequired', 'creationDate', 'reviewAge'],
     defaults: DEFAULT_PR_GRID_COLUMN_WIDTHS,
     min: PR_GRID_COLUMN_MIN_WIDTHS,
     max: PR_GRID_COLUMN_MAX_WIDTHS,
@@ -270,11 +272,11 @@ export function useMyReviewsGrid({
   // Virtualizer — must come after reviewRows is computed.
   const {
     scrollerRef,
-    scrollerEl,
     firstRow: firstVirtualRow,
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: reviewRows.length,
     rowHeight: PR_GRID_ROW_HEIGHT,
@@ -304,7 +306,7 @@ export function useMyReviewsGrid({
     sortedPrs,
     visibleSortedIndexes,
     prFlatIndexes,
-    scrollerEl,
+    scrollRowIntoView,
     containerRef,
     rowRefs,
     returnedKeys,
@@ -431,7 +433,7 @@ export function useMyReviewsGrid({
     // queries
     query, queryClient, staleThresholdDays, snoozeMutation,
     // grid layout
-    COLS, gridMinWidth, columnResizeProps, resetColumnWidths, gridRef, scrollerRef,
+    COLS, gridMinWidth, columnResizeProps, autoColumnWidths, resetColumnWidths, gridRef, scrollerRef,
     virtualTopPadding, virtualBottomPadding, virtualRows,
     maximized, setMaximized,
     columnMenuRect, setColumnMenuRect,
@@ -445,7 +447,7 @@ export function useMyReviewsGrid({
     filterButtonRef, filterInputRef,
     showDone, setShowDone, showSnoozed, setShowSnoozed, snoozedCount, leaveStateView,
     // columns
-    visibleColumns, toggleColumn, resetColumns,
+    visibleColumns, shownColumns, toggleColumn, resetColumns,
     // data
     allPrs, sortedPrs, filterSuggestionPool, columnUniqueValues,
     returnedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,

@@ -6,12 +6,12 @@ export function RowShortcutHints({ hints }: { hints: RowShortcut[] }) {
   if (hints.length === 0) return null;
   return (
     <span
-      className="hidden flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground lg:flex"
+      className="hidden flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground lg:flex"
       aria-label="Shortcuts for the selected row"
     >
       {hints.map((hint) => (
         <span key={hint.keys} className="inline-flex items-center gap-1">
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[11px] leading-4 text-foreground">
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-2xs leading-4 text-foreground">
             {hint.keys}
           </kbd>
           {hint.label}

@@ -217,7 +217,7 @@ export function LinkedWorkItemsToggle({
       aria-expanded={!collapsed}
       aria-label={collapsed ? "Show linked work items" : "Hide linked work items"}
       title={collapsed ? "Show linked work items (t)" : "Hide linked work items"}
-      className="flex h-4 items-center gap-1 rounded px-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      className="flex h-4 items-center gap-1 rounded px-1 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
     >
       {pr ? <LinkedCount pr={pr} /> : null}
       {collapsed ? <ChevronUp className="h-3 w-3" aria-hidden="true" /> : <ChevronDown className="h-3 w-3" aria-hidden="true" />}

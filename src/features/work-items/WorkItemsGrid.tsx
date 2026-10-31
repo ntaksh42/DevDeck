@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { focusPrimaryGrid, isEditableTarget } from '@/lib/utils';
 import { ListStateChip } from '@/components/ListStatusBar';
@@ -9,9 +9,10 @@ import { DockableWorkspace, type DockablePanelSpec } from '@/components/Dockable
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { PreviewToolbarSlotProvider, usePreviewToolbarSlot } from '@/components/PreviewToolbarSlot';
-import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
+import { MemoWorkItemPreviewPanel } from './MemoWorkItemPreviewPanel';
+import type { WorkItemDuplicateDraft } from './workItemChanges';
 import { WorkItemResultSection } from './WorkItemResultSection';
-import { storeCustomPreviewFields } from './previewFieldsStorage';
+import { storeCustomPreviewFields, type CustomPreviewField } from './previewFieldsStorage';
 import { workItemQueryKeys } from './queryKeys';
 import {
   DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
@@ -190,7 +191,7 @@ export function WorkItemsGrid({
             setCheckedIds={state.setCheckedIds}
             setLastCheckedIndex={state.setLastCheckedIndex}
             wiColTemplate={state.wiColTemplate}
-            visibleColumns={state.visibleColumns}
+            visibleColumns={state.shownColumns}
             sort={state.sort}
             onSort={state.applyWiSort}
             columnFilters={state.columnFilters}
@@ -213,7 +214,7 @@ export function WorkItemsGrid({
             checkedIds={state.checkedIds}
             unreadKeys={g.unreadKeys}
             wiColTemplate={state.wiColTemplate}
-            visibleColumns={state.visibleColumns}
+            visibleColumns={state.shownColumns}
             extraColumns={extraColumns}
             staleThresholdDays={g.staleThresholdDays}
             rowColorRules={g.rowColorRules}
@@ -251,21 +252,36 @@ export function WorkItemsGrid({
         setStaleOnly={state.setStaleOnly}
         staleCount={g.staleCount}
         staleThresholdDays={g.staleThresholdDays}
+        fitWidths={{ auto: state.autoColumnWidths, onFit: state.resetColumnWidths }}
         setColumnMenuRect={state.setColumnMenuRect}
       />
     </div>
   );
 
   const previewToolbar = usePreviewToolbarSlot();
+  const { setCustomPreviewFields } = state;
+  // Stable so the memoized preview skips re-rendering while the grid scrolls.
+  const handleCustomPreviewFieldsChange = useCallback((fields: CustomPreviewField[]) => {
+    storeCustomPreviewFields(fields);
+    setCustomPreviewFields(fields);
+  }, [setCustomPreviewFields]);
+  const handleDuplicate = useCallback((draft: WorkItemDuplicateDraft) =>
+    setDuplicateDraft({
+      projectId: draft.projectId,
+      workItemType: draft.workItemType ?? undefined,
+      title: draft.title,
+      priority: draft.priority ?? undefined,
+      areaPath: draft.areaPath ?? undefined,
+      iterationPath: draft.iterationPath ?? undefined,
+      tags: draft.tags.join("; "),
+      assignedTo: draft.assignedTo ?? undefined,
+    }), []);
   const previewPane = (
     <PreviewToolbarSlotProvider value={previewToolbar.element}>
-      <WorkItemPreviewPanel
+      <MemoWorkItemPreviewPanel
         customPreviewFields={state.customPreviewFields}
         focusCommentRequest={state.focusCommentRequest}
-        onCustomPreviewFieldsChange={(fields) => {
-          storeCustomPreviewFields(fields);
-          state.setCustomPreviewFields(fields);
-        }}
+        onCustomPreviewFieldsChange={handleCustomPreviewFieldsChange}
         openAssigneeRequest={state.openAssigneeRequest}
         openFieldRequest={state.openFieldRequest}
         openPriorityRequest={state.openPriorityRequest}
@@ -275,18 +291,7 @@ export function WorkItemsGrid({
         previewLoading={g.previewQuery.isFetching}
         selectedItem={g.selectedItem}
         onPreviewUpdated={g.handlePreviewUpdated}
-        onDuplicate={(draft) =>
-          setDuplicateDraft({
-            projectId: draft.projectId,
-            workItemType: draft.workItemType ?? undefined,
-            title: draft.title,
-            priority: draft.priority ?? undefined,
-            areaPath: draft.areaPath ?? undefined,
-            iterationPath: draft.iterationPath ?? undefined,
-            tags: draft.tags.join("; "),
-            assignedTo: draft.assignedTo ?? undefined,
-          })
-        }
+        onDuplicate={handleDuplicate}
       />
     </PreviewToolbarSlotProvider>
   );
@@ -442,7 +447,6 @@ export function WorkItemsGrid({
           requiredColumns={WI_GRID_REQUIRED_COLUMNS}
           onToggle={state.toggleColumnVisibility}
           onReset={state.resetColumnVisibility}
-          onAutoFitWidths={state.resetColumnWidths}
           onClose={() => state.setColumnMenuRect(null)}
         >
           {fieldColumnsSource && onExtraColumnsChange ? (
