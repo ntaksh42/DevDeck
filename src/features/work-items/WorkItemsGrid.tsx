@@ -25,6 +25,7 @@ import {
 } from './workItemsGridHelpers';
 import { BulkActionBar, BulkFailurePanel } from './BulkActionBar';
 import { WiGridHeader } from './WiGridHeader';
+import { useExtraColumnLabel } from './useWorkItemFields';
 import { WiGridBody } from './WiGridBody';
 import { WiGridStatusBar } from './WiGridStatusBar';
 import { WiColumnFilterDropdown } from './WiColumnFilterDropdown';
@@ -110,8 +111,9 @@ export function WorkItemsGrid({
     state.setStaleOnly(false);
   }, [filterResetKey]);
 
+  const extraColumnLabel = useExtraColumnLabel(fieldColumnsSource?.organizationId);
   const g = useWiGridLogic(
-    { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
+    { results, loading, triageScope, extraColumns, extraColumnLabel, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
   usePublishAgentListScope(
@@ -198,6 +200,7 @@ export function WorkItemsGrid({
             onFilterOpen={g.openFilter}
             columnResizeProps={state.columnResizeProps}
             extraColumns={extraColumns}
+            extraColumnLabel={extraColumnLabel}
           />
           <WiGridBody
             paneWidth={state.gridViewport.width}

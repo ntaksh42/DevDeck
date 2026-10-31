@@ -795,7 +795,7 @@ export function DockableWorkspace({
   return (
     // Below the panels' combined floor dockview overflows its container and the
     // right pane is clipped with no way to reach it; scroll instead.
-    <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden p-2">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
       <div className="flex min-w-0 flex-1" style={{ minWidth: minRowWidth(panels) + agentWidth }}>
       <DockviewReact
         key={layoutStorageKey}

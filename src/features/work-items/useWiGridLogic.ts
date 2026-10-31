@@ -38,6 +38,7 @@ export interface WiGridLogicProps {
   loading: boolean;
   triageScope?: string;
   extraColumns: string[];
+  extraColumnLabel?: (referenceName: string) => string;
   activeExternalFilterCount?: number;
   onClearExternalFilters?: () => void;
   autoFocus: boolean;
@@ -48,7 +49,7 @@ export function useWiGridLogic(
   state: WiGridState,
 ) {
   const {
-    results, triageScope, extraColumns, loading, activeExternalFilterCount = 0,
+    results, triageScope, extraColumns, extraColumnLabel, loading, activeExternalFilterCount = 0,
     onClearExternalFilters, autoFocus,
   } = props;
   const {
@@ -423,6 +424,7 @@ export function useWiGridLogic(
     checkedItems,
     visibleColumns,
     extraColumns,
+    extraColumnLabel,
     openFilterCol,
     triageScope,
     snoozeEnabled,
