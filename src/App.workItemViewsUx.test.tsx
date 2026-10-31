@@ -302,6 +302,34 @@ describe("App — Work Item Views UX", () => {
     ).toBe(false);
   });
 
+  it("switches between the URL and existing-query tabs with the arrow keys", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Tab view");
+
+    const urlTab = screen.getByRole("tab", { name: "Paste URL" });
+    const queryTab = screen.getByRole("tab", { name: "From existing query" });
+    expect(urlTab.getAttribute("aria-selected")).toBe("true");
+    expect(queryTab.getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.keyDown(urlTab, { key: "ArrowRight" });
+    await waitFor(() => expect(queryTab.getAttribute("aria-selected")).toBe("true"));
+    await waitFor(() => expect(document.activeElement).toBe(queryTab));
+    expect(screen.getByRole("combobox", { name: /Import an Azure DevOps query/ })).toBeTruthy();
+
+    fireEvent.keyDown(queryTab, { key: "ArrowLeft" });
+    await waitFor(() => expect(urlTab.getAttribute("aria-selected")).toBe("true"));
+  });
+
+  it("keeps the rarely used settings in a collapsed section", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Advanced view");
+
+    const details = screen.getByText("Advanced settings").closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    fireEvent.click(details.querySelector("summary") as HTMLElement);
+    await waitFor(() => expect(details.open).toBe(true));
+  });
+
   it("expands the WIQL editor and shrinks it again", async () => {
     const main = await openViewsScreen();
     await addView(main, "Expanded view");
