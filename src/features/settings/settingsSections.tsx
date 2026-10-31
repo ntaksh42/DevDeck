@@ -9,6 +9,7 @@ import { QuickPipelinesSettings } from './QuickPipelinesSettings';
 import { SyncHealthSettings } from './SyncHealthSettings';
 import { ThemeSettings } from './ThemeSettings';
 import { DataCacheSettings } from './DataCacheSettings';
+import { SettingsTransferSettings } from './SettingsTransferSettings';
 import { ValidationModeSettings } from './ValidationModeSettings';
 import { ExperimentalSettings } from './ExperimentalSettings';
 import { ExperimentalUsageStats } from './ExperimentalUsageStats';
@@ -178,6 +179,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Data cache",
         keywords: "clear cached responses reset storage",
         render: () => <DataCacheSettings />,
+      },
+      {
+        id: "settings-transfer",
+        title: "Export / import settings",
+        keywords: "backup restore migrate profile json transfer layout views keybindings",
+        render: () => <SettingsTransferSettings />,
       },
       {
         id: "software-update",

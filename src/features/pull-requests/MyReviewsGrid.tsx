@@ -367,6 +367,7 @@ export function MyReviewsGrid({
                           selected={row.prIndex === g.selectedIndex}
                           inMultiSelection={g.selectedKeys.has(reviewTriageKey(row.pr))}
                           returned={g.returnedKeys.has(reviewTriageKey(row.pr))}
+                          updated={g.updatedKeys.has(reviewTriageKey(row.pr))}
                           visibleColumns={g.shownColumns}
                           staleThresholdDays={g.staleThresholdDays}
                           rowRefs={g.rowRefs}

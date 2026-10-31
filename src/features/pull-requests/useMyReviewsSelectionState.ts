@@ -6,8 +6,10 @@ import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { useKeyedGridSelection } from '@/lib/useKeyedGridSelection';
 import { useLatestRef } from '@/lib/useLatestRef';
 import { detectFileOverlaps } from '@/lib/prOverlap';
+import { markSeen } from '@/lib/lastSeen';
 import { parkGridFocus } from '@/lib/parkGridFocus';
 import { acknowledgeReturn } from './reviewReturnTracking';
+import { reviewFingerprint } from './reviewFingerprint';
 import { reviewTriageKey } from './myReviewsHelpers';
 import type { MyReviewsSelectRequest } from './myReviewsTypes';
 
@@ -20,6 +22,7 @@ type SelectionStateInput = {
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;
   returnedKeys: Set<string>;
   setReturnedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setUpdatedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
   resultKeysSignature: string;
   organizationId: string;
   selectRequest: MyReviewsSelectRequest | null | undefined;
@@ -36,6 +39,7 @@ export function useMyReviewsSelectionState({
   rowRefs,
   returnedKeys,
   setReturnedKeys,
+  setUpdatedKeys,
   resultKeysSignature,
   selectRequest,
   onSelectRequestHandled,
@@ -167,6 +171,13 @@ export function useMyReviewsSelectionState({
     if (!selectedPr) return;
     recordRecentPullRequest(selectedPr);
     const key = reviewTriageKey(selectedPr);
+    markSeen(key, reviewFingerprint(selectedPr));
+    setUpdatedKeys((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
     if (returnedKeys.has(key)) {
       acknowledgeReturn(key);
       setReturnedKeys((prev) => {

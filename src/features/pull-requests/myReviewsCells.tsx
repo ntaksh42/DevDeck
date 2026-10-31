@@ -97,6 +97,7 @@ export function renderPrCell(
   pr: ReviewPullRequestSummary,
   isStale: boolean,
   returned: boolean,
+  updated = false,
 ): ReactNode {
   switch (key) {
     case 'pullRequestId':
@@ -129,6 +130,14 @@ export function renderPrCell(
               title="The author pushed new changes after your review — returned to you"
             >
               Returned
+            </span>
+          ) : null}
+          {updated && !returned ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-2xs font-medium text-info"
+              title="Changed since you last viewed this pull request"
+            >
+              Updated
             </span>
           ) : null}
           {pr.isDraft && (

@@ -21,6 +21,7 @@ export const MemoReviewPrRow = memo(function MemoReviewPrRow({
   selected,
   inMultiSelection,
   returned,
+  updated,
   columnTemplate,
   visibleColumns,
   staleThresholdDays,
@@ -35,6 +36,7 @@ export const MemoReviewPrRow = memo(function MemoReviewPrRow({
   selected: boolean;
   inMultiSelection: boolean;
   returned: boolean;
+  updated: boolean;
   columnTemplate: string;
   visibleColumns: SortKey[];
   staleThresholdDays: number;
@@ -75,6 +77,7 @@ export const MemoReviewPrRow = memo(function MemoReviewPrRow({
       selected={selected}
       inMultiSelection={inMultiSelection}
       returned={returned}
+      updated={updated}
       visibleColumns={visibleColumns}
       staleThresholdDays={staleThresholdDays}
       onSelect={onSelect}
