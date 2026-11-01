@@ -118,7 +118,6 @@ export function useWiGridState({
   }, []);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const previousResultKeysRef = useRef<string | null>(null);
-  const [gridViewport, setGridViewport] = useState({ width: 0, height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
   const [showDone, setShowDone] = useState(false);
   const [triageVersion, setTriageVersion] = useState(0);
@@ -226,7 +225,6 @@ export function useWiGridState({
     filterButtonRef,
     staleOnly, setStaleOnly,
     containerRef, gridScrollRef, setGridScrollNode, scrollerAttached, rowRefs, previousResultKeysRef,
-    gridViewport, setGridViewport,
     queryClient,
     showDone, setShowDone,
     triageVersion, setTriageVersion,
