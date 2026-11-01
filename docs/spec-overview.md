@@ -323,7 +323,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     (保存もダイアログを閉じることもしない)。WIQL 未入力・`validateWiql` エラー・プロジェクト未選択は
     バックエンドを呼ばずにその場でエラーを返す。結果は WIQL 編集で破棄し、実行が競合した場合は
     最新の実行結果のみを反映する。
-  - **レイアウト**: 上から「入力方法のタブ (Paste URL / From existing query)」→ Name・Project →
+  - **レイアウト**: 上から「入力方法のタブ (Paste URL / From existing query / Build conditions)」→ Name・Project →
     WIQL (マクロチップ + Test + Format / Expand) → 折りたたみの「Advanced settings」→ Cancel / Save。
     タブは `role="tablist"` で `←` `→` `Home` `End` により切替 (フォーカスはタブに残り、クリック時は
     パネルの入力欄へ移る)。初期は Paste URL でその入力欄にフォーカスする。「Advanced settings」
@@ -338,6 +338,16 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     絞り込み。日本語可) から選択できる。↑/↓ で移動し Enter で確定 (IME 変換中の Enter は
     無視)、Escape はフィルタが空でなければクリアのみ行う。選択すると WIQL を
     常に上書きし、Name は未入力の場合のみクエリ名で補完する (保存は別途「Save」操作が必要)。
+  - **条件グリッド** (「Build conditions」タブ, `ViewConditionGrid` / `wiqlConditions.ts`): WIQL の
+    WHERE 句を「And/Or・Field・Operator・Value」の行として表示し、行の編集は WHERE 句だけを書き換える
+    (SELECT / ORDER BY / ASOF は文面のまま)。グリッドは毎回 WIQL から組み立てるため、WIQL 欄を手で
+    編集しても行に反映される (双方向)。括弧グループ・`NOT` 前置・`EVER`・フィールド同士の比較・
+    リンククエリ (`[Source].[...]`) を含む WIQL は行にできず、理由を表示して WIQL 欄での編集を促す。
+    Field は選択中プロジェクトのフィールド一覧 (`list_work_item_fields`) を候補に出す入力欄、Operator は
+    フィールド型で絞った選択肢、Value は `@Me` / `@Today - 7` などのマクロ・数値・文字列 (`IN` / `NOT IN`
+    はカンマ区切り) を受け付ける。文字列型のフィールドの値は数字でも引用符で囲む。「Add condition」で
+    `[System.Title] CONTAINS ''` の行を追加してその Field 欄へ、行末の × で削除して隣の行へフォーカスを移す。
+    タブを開くと先頭行の Field 欄 (行が無ければ「Add condition」) にフォーカスする。
 - **作業項目の一括操作**: 複数項目の状態変更・割当・優先度設定をまとめて適用。
 - **作業項目編集**: state / assignee / priority / フィールドをステージし 1 リクエストで適用。
   タイトルはプレビューヘッダーからインライン編集し即時適用 (System.Title を `update_fields` で更新)。
