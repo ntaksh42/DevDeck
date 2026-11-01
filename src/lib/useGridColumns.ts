@@ -30,6 +30,8 @@ export type ColumnResizeProps = {
 
 /** How far the flexible column (the title) may shrink in a narrow pane. */
 const FLEXIBLE_SHRINK_FLOOR = 200;
+// Quiet time after the last row change before new rows are measured (see below).
+const GROW_FIT_SETTLE_MS = 150;
 
 /**
  * Whether a grid's widths are auto-managed. Grids start in auto mode, and so
@@ -234,15 +236,18 @@ export function useGridColumns<K extends string>(options: {
   // past shorter rows does not make the columns jump back and forth.
   useEffect(() => {
     if (!autoMode || !gridElement || typeof MutationObserver === "undefined") return;
-    let frame = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     // Grow-only, so only the rows that just appeared or changed can widen a
     // column; measuring every rendered row forced a layout per scrolled row.
+    // Measured once the rows settle rather than every frame: a fast scroll
+    // swaps in new rows each frame, and measuring them all mid-scroll (each
+    // cell resized and laid out) made the scrolling stutter.
     let pending = new Set<HTMLElement>();
     const observer = new MutationObserver((records) => {
       mutatedGridRows(records).forEach((row) => pending.add(row));
       if (pending.size === 0) return;
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
         const rows = [...pending].filter((row) => row.isConnected);
         pending = new Set();
         if (!autoFittedRef.current || rows.length === 0) return;
@@ -250,12 +255,12 @@ export function useGridColumns<K extends string>(options: {
           visibleColumns.filter((column) => column !== flexibleKey),
           { growOnly: true, rows },
         );
-      });
+      }, GROW_FIT_SETTLE_MS);
     });
     observer.observe(gridElement, { childList: true, subtree: true, characterData: true });
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(frame);
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoMode, gridElement, fitColumns, flexibleKey]);
