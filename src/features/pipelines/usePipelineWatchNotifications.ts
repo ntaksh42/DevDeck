@@ -4,6 +4,12 @@ import { type AppSettings, listPipelineRuns, recordNotification } from "@/lib/az
 import { showPipelineWatchNotification } from "@/lib/desktopNotifications";
 import { isInProgressStatus, pipelineRunVisual, shortBranch } from "./pipelineStatus";
 import {
+  claimInvestigation,
+  enqueuePipelineInvestigation,
+  investigationKey,
+  isInvestigableFailure,
+} from "./pipelineAutoInvestigate";
+import {
   loadPipelineSubscriptions,
   pipelineSubscriptionHistoryQueryKey,
   PIPELINE_SUBSCRIPTIONS_CHANGED_EVENT,
@@ -40,12 +46,16 @@ export function detectPipelineTransition(
 
 // Polls every watched pipeline app-wide (regardless of the active view) and
 // raises a desktop notification when a watched pipeline's latest run starts
-// running or finishes. Polling is gated on desktop notifications being enabled,
-// so it issues no requests when the feature is off. Query keys mirror
+// running or finishes, and (setting `autoAgentPipelinesEnabled`) hands a run
+// that finished as failed to the agent. Polling runs only while one of the two
+// is on, so it issues no requests otherwise. Query keys mirror
 // PipelineSubscriptionsBoard so the two share one cache entry — and one network
 // request — whenever the Pipelines view is open.
 export function usePipelineWatchNotifications(settings: AppSettings | null): void {
-  const enabled = !!settings?.desktopNotificationsEnabled;
+  const notify = !!settings?.desktopNotificationsEnabled;
+  const investigate =
+    !!settings?.autoAgentPipelinesEnabled && !settings?.readOnlyValidationModeEnabled;
+  const enabled = notify || investigate;
   const queryClient = useQueryClient();
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
     loadPipelineSubscriptions(),
@@ -114,6 +124,33 @@ export function usePipelineWatchNotifications(settings: AppSettings | null): voi
       const transition = detectPipelineTransition(lastSeenRef.current.get(key), next);
       lastSeenRef.current.set(key, next);
       if (!transition) return;
+      if (
+        settingsValue.autoAgentPipelinesEnabled &&
+        !settingsValue.readOnlyValidationModeEnabled &&
+        isInvestigableFailure(transition, latest) &&
+        claimInvestigation(investigationKey(latest))
+      ) {
+        void enqueuePipelineInvestigation(latest, () => {
+          recordNotification({
+            organizationId: sub.organizationId,
+            kind: "pipelineInvestigationStarted",
+            title: `Agent investigating: ${sub.definitionName}`,
+            body: latest.buildNumber
+              ? `#${latest.buildNumber} failed\n${sub.projectName}`
+              : sub.projectName,
+            payload: {
+              definitionName: sub.definitionName,
+              projectName: sub.projectName,
+              buildNumber: latest.buildNumber,
+              sourceBranch: latest.sourceBranch,
+              webUrl: latest.webUrl,
+            },
+          })
+            .then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }))
+            .catch((error) => console.error("Failed to record investigation notification", error));
+        });
+      }
+      if (!settingsValue.desktopNotificationsEnabled) return;
       const visual = pipelineRunVisual(latest.status, latest.result);
       void showPipelineWatchNotification(
         {

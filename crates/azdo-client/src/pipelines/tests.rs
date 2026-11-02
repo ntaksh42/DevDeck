@@ -35,6 +35,7 @@ async fn list_builds_passes_filters_as_query() {
                 "status": "completed",
                 "result": "failed",
                 "sourceBranch": "refs/heads/main",
+                "sourceVersion": "abc123",
                 "reason": "individualCI",
                 "queueTime": "2026-06-13T10:00:00Z",
                 "startTime": "2026-06-13T10:00:05Z",
@@ -65,6 +66,7 @@ async fn list_builds_passes_filters_as_query() {
     assert_eq!(builds.len(), 1);
     assert_eq!(builds[0].id, 101);
     assert_eq!(builds[0].result.as_deref(), Some("failed"));
+    assert_eq!(builds[0].source_version.as_deref(), Some("abc123"));
     assert_eq!(builds[0].definition.as_ref().unwrap().name, "CI");
 }
 

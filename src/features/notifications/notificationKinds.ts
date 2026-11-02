@@ -13,6 +13,7 @@ const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   pipelineWatchStarted: "Pipeline started",
   pipelineWatchFinished: "Pipeline finished",
   pipelineRunQueued: "Pipeline queued",
+  pipelineInvestigationStarted: "Agent investigating",
 };
 
 export function notificationKindLabel(kind: string): string {

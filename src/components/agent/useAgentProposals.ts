@@ -6,6 +6,7 @@ import { workItemQueryKeys } from "@/features/work-items/queryKeys";
 import type { Conversation } from "./useAgentPanelData";
 import { needsApproval, pendingProposals } from "./agentProposals";
 import type { AgentSubject } from "./agentSubject";
+import type { ProposalCodeContext } from "./AgentProposal";
 
 /**
  * Where a conversation's comments go. Only the subject the panel is showing
@@ -25,6 +26,17 @@ function locatorFor(subject: AgentSubject | null, item: AgentNoteItem) {
     return { organizationId: subject.organizationId ?? null, projectId: subject.projectId };
   }
   return null;
+}
+
+/** The pull request a conversation's line comments point into, when the panel shows it. */
+export function proposalCodeContext(subject: AgentSubject | null, item: AgentNoteItem): ProposalCodeContext | null {
+  if (subject?.kind !== "pull-request" || item.target !== "pull-request" || subject.id !== item.itemId) return null;
+  return {
+    organizationId: subject.organizationId ?? null,
+    projectId: subject.projectId,
+    repositoryId: subject.repositoryId,
+    pullRequestId: subject.id,
+  };
 }
 
 /**
@@ -74,11 +86,18 @@ export function useAgentProposals(
     }
   }, [options.autoPost, options.readOnly, isPending, conversations, subject, mutate]);
 
+  const errorFor = (key: string) =>
+    post.isError && post.variables?.conversation.key === key ? commandErrorMessage(post.error) : null;
   return {
     post: (conversation: Conversation, replyIndex: number) => mutate({ conversation, replyIndex }),
     busy: isPending,
     /** The last failure of a post in this conversation, as text. */
-    errorFor: (key: string) =>
-      post.isError && post.variables?.conversation.key === key ? commandErrorMessage(post.error) : null,
+    errorFor,
+    /** What a conversation shows about posting: busy, its last error, and the PR its line comments are on. */
+    viewProps: (conversation: Conversation) => ({
+      postBusy: isPending,
+      postError: errorFor(conversation.key),
+      codeContext: proposalCodeContext(subject, conversation.item),
+    }),
   };
 }

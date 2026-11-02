@@ -4,17 +4,20 @@ import { type WorkItemProjectOption } from '@/lib/azdoCommands';
 import type { ViewEditorDraftReturn } from './useViewEditorDraft';
 import { ProjectQueryPicker } from './ProjectQueryPicker';
 import { ViewAdvancedSettings } from './ViewAdvancedSettings';
+import { CONDITION_GRID_FOCUS_ID, ViewConditionGrid } from './ViewConditionGrid';
 import { WiqlEditor } from './WiqlEditor';
 import { isImeComposing } from '@/lib/utils';
 
-type SourceTab = "url" | "query";
+type SourceTab = "url" | "query" | "conditions";
 const SOURCE_TABS: { id: SourceTab; label: string }[] = [
   { id: "url", label: "Paste URL" },
   { id: "query", label: "From existing query" },
+  { id: "conditions", label: "Build conditions" },
 ];
 const SOURCE_TAB_FOCUS_ID: Record<SourceTab, string> = {
   url: "view-url-input",
   query: "view-project-query-filter",
+  conditions: CONDITION_GRID_FOCUS_ID,
 };
 
 export type ViewEditorDialogProps = {
@@ -220,6 +223,22 @@ export function ViewEditorDialog({
                 error={projectQueriesError}
                 onSelect={onProjectQuerySelect}
               />
+            </div>
+
+            <div
+              id="view-source-panel-conditions"
+              role="tabpanel"
+              aria-labelledby="view-source-tab-conditions"
+              hidden={sourceTab !== "conditions"}
+            >
+              {sourceTab === "conditions" ? (
+                <ViewConditionGrid
+                  wiql={draftWiql}
+                  onWiqlChange={updateDraftWiql}
+                  fields={draft.fields}
+                  hasProject={Boolean(draftProjectId)}
+                />
+              ) : null}
             </div>
           </div>
 

@@ -25,38 +25,11 @@ export function useGridVirtualizer({
   scrollRowIntoView: (index: number) => void;
 } {
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
-  const [viewport, setViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    if (!scrollerEl) return;
-    const element = scrollerEl;
-
-    // The window only moves a whole row at a time; skip re-rendering the
-    // owner on every scrolled pixel while the top row stays the same.
-    function updateViewport() {
-      const height = element.clientHeight;
-      const scrollTop = snapToRow(element.scrollTop, rowHeight);
-      setViewport((prev) =>
-        prev.height === height && prev.scrollTop === scrollTop ? prev : { height, scrollTop },
-      );
-    }
-
-    updateViewport();
-    element.addEventListener("scroll", updateViewport, { passive: true });
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
-    resizeObserver?.observe(element);
-    return () => {
-      element.removeEventListener("scroll", updateViewport);
-      resizeObserver?.disconnect();
-    };
-  }, [scrollerEl, rowHeight]);
-
-  const firstRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
-  const visibleRowCount = Math.ceil(Math.max(viewport.height, rowHeight) / rowHeight);
-  const lastRow = Math.min(rowCount, firstRow + visibleRowCount + overscan * 2);
-  const topPadding = firstRow * rowHeight;
-  const bottomPadding = Math.max(0, rowCount - lastRow) * rowHeight;
+  const { firstRow, lastRow, topPadding, bottomPadding } = useVirtualRowWindow(scrollerEl, {
+    rowCount,
+    rowHeight,
+    overscan,
+  });
 
   // Scrolls the row at `index` just into view (no-op if already visible).
   const scrollRowIntoView = useCallback(
@@ -74,6 +47,69 @@ export function useGridVirtualizer({
     topPadding,
     bottomPadding,
     scrollRowIntoView,
+  };
+}
+
+/**
+ * The slice of fixed-height rows to render for `scroller`'s current viewport.
+ *
+ * Call it from the component that renders the rows, not from a grid's owner:
+ * the scroll state lives here, so each window move re-renders only the caller.
+ * Holding it in the owner re-rendered the header, status bar, preview, and the
+ * dock panels on every row scrolled, which made fast scrolling stutter.
+ */
+export function useVirtualRowWindow(
+  scroller: HTMLElement | null,
+  { rowCount, rowHeight, overscan }: { rowCount: number; rowHeight: number; overscan: number },
+): {
+  /** Visible width of the scroller. */
+  width: number;
+  firstRow: number;
+  lastRow: number;
+  topPadding: number;
+  bottomPadding: number;
+} {
+  const [viewport, setViewport] = useState({ width: 0, height: 0, scrollTop: 0 });
+
+  useEffect(() => {
+    if (!scroller) return;
+    const element = scroller;
+
+    // The window only moves a whole row at a time; skip re-rendering on every
+    // scrolled pixel while the top row stays the same.
+    function updateViewport() {
+      const next = {
+        width: element.clientWidth,
+        height: element.clientHeight,
+        scrollTop: snapToRow(element.scrollTop, rowHeight),
+      };
+      setViewport((prev) =>
+        prev.width === next.width && prev.height === next.height && prev.scrollTop === next.scrollTop
+          ? prev
+          : next,
+      );
+    }
+
+    updateViewport();
+    element.addEventListener("scroll", updateViewport, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
+    resizeObserver?.observe(element);
+    return () => {
+      element.removeEventListener("scroll", updateViewport);
+      resizeObserver?.disconnect();
+    };
+  }, [scroller, rowHeight]);
+
+  const firstRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
+  const visibleRowCount = Math.ceil(Math.max(viewport.height, rowHeight) / rowHeight);
+  const lastRow = Math.min(rowCount, firstRow + visibleRowCount + overscan * 2);
+  return {
+    width: viewport.width,
+    firstRow,
+    lastRow,
+    topPadding: firstRow * rowHeight,
+    bottomPadding: Math.max(0, rowCount - lastRow) * rowHeight,
   };
 }
 

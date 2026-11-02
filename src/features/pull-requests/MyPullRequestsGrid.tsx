@@ -5,7 +5,6 @@ import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import {
   focusPrimaryPreview,
   isEditableTarget,
-  markdownLink,
   matchesAllSearchTerms,
   splitSearchTerms,
 } from "@/lib/utils";
@@ -24,6 +23,8 @@ import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
 import { DraftsCheckbox } from "./DraftsCheckbox";
 import { prAgentList, usePrReviewPanels } from "./usePrReviewPanels";
 import { createdCopyColumns, prLinkTarget } from "./prCopyColumns";
+import { copyPrMarkdownLink } from "./copyPrMarkdownLink";
+import { createdNextAction, nextActionableIndex } from "./nextAction";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
   MAX_REVIEW_PREVIEW_WIDTH,
@@ -296,21 +297,15 @@ export function MyPullRequestsGrid() {
       case "l":
       case "L":
         event.preventDefault();
-        if (pr?.webUrl) {
-          void navigator.clipboard
-            ?.writeText(markdownLink(`!${pr.pullRequestId} ${pr.title}`, pr.webUrl))
-            .then(
-              () => {
-                setCopyToast("Markdown link copied");
-                window.setTimeout(() => setCopyToast(null), 1500);
-              },
-              () => {
-                setCopyToast("Copy failed");
-                window.setTimeout(() => setCopyToast(null), 1500);
-              },
-            );
-        }
+        if (pr) copyPrMarkdownLink(pr, setCopyToast);
         break;
+      case "n":
+      case "N": {
+        event.preventDefault();
+        const target = nextActionableIndex(rows.map(createdNextAction), selectedIndex, event.key === "N" ? -1 : 1);
+        if (target >= 0) moveSelection(target);
+        break;
+      }
       default:
         break;
     }

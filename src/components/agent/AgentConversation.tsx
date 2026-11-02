@@ -5,7 +5,7 @@ import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { CommentAvatar } from "@/features/pull-requests/PrThreadCard";
 import { formatRelativeDate } from "@/lib/utils";
-import { AgentProposal } from "./AgentProposal";
+import { AgentProposal, type ProposalCodeContext } from "./AgentProposal";
 
 const KIND_LABELS: Record<string, string> = {
   investigate: "Investigate",
@@ -103,6 +103,8 @@ export const AgentConversation = forwardRef<
     postBusy?: boolean;
     postError?: string | null;
     autoPost?: boolean;
+    /** The pull request on screen, for the code around line comments; null elsewhere. */
+    codeContext?: ProposalCodeContext | null;
   }
 >(function AgentConversation(
   {
@@ -120,6 +122,7 @@ export const AgentConversation = forwardRef<
     postBusy = false,
     postError = null,
     autoPost = false,
+    codeContext = null,
   },
   ref,
 ) {
@@ -181,6 +184,7 @@ export const AgentConversation = forwardRef<
                 busy={postBusy}
                 autoPost={autoPost}
                 error={postError}
+                codeContext={codeContext}
               />
             ) : (
               <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />

@@ -31,6 +31,8 @@ export type CommandPaletteSearch = {
   items: CommandPaletteSearchItem[];
   onQueryChange: (query: string) => void;
   pending: boolean;
+  status?: string;
+  error?: string;
 };
 
 type PaletteRow = {
@@ -141,7 +143,7 @@ export function CommandPalette({
           : undefined,
       };
     });
-    return [...actionRows, ...searchRows];
+    return [...searchRows, ...actionRows];
   }, [filteredActions, onClose, search?.items]);
 
   useEffect(() => {
@@ -181,7 +183,21 @@ export function CommandPalette({
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     // Enter/Escape/arrows during IME composition drive the IME, not the palette.
+    event.stopPropagation();
     if (event.nativeEvent.isComposing) return;
+    if (event.key === "Tab") {
+      const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("input, button"));
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       onClose();
@@ -242,10 +258,12 @@ export function CommandPalette({
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
+        {search?.status && <p role="status" className="border-b border-border px-3 py-2 text-xs text-muted-foreground">{search.status}</p>}
+        {search?.error && <p role="alert" className="border-b border-border px-3 py-2 text-xs text-destructive">{search.error}</p>}
         <div className="max-h-[50vh] overflow-auto p-1">
           {rows.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-              {search?.pending ? "Searching…" : "No commands found."}
+              {search?.pending ? "Searching…" : "No matching items or commands. Try an exact ID or title (2+ characters)."}
             </div>
           ) : (
             rows.map((row, index) => {
@@ -298,7 +316,7 @@ export function CommandPalette({
         </div>
         {search ? (
           <div className="border-t border-border px-3 py-1.5 text-2xs text-muted-foreground">
-            Search work items, PRs, wiki, and Inbox — filter with{" "}
+            Search exact IDs or title text. Filter with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">wi:</kbd>{" "}
             <kbd className="rounded bg-muted px-1 font-mono">pr:</kbd>{" "}
             <kbd className="rounded bg-muted px-1 font-mono">wiki:</kbd>{" "}

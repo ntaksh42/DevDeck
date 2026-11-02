@@ -3,10 +3,10 @@ use tauri::State;
 use crate::app_state::{ensure_write_enabled, AppState};
 use crate::error::Result;
 use crate::pipelines::{
-    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    CancelPipelineRunInput, FlakyTestReport, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListFlakyTestsInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
@@ -73,6 +73,15 @@ pub async fn list_pipeline_test_results(
         .await?
         .list_pipeline_test_results(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_flaky_tests(
+    input: ListFlakyTestsInput,
+    state: State<'_, AppState>,
+) -> Result<FlakyTestReport> {
+    state.provider().await?.list_flaky_tests(input).await
 }
 
 #[tauri::command]

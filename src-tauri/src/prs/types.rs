@@ -89,7 +89,7 @@ pub struct SearchPullRequestsInput {
     pub sort_by: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequestSummary {
     pub organization_id: String,

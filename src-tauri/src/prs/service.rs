@@ -15,12 +15,17 @@ use crate::secrets::SecretStore;
 pub struct PullRequestService {
     db: AppDatabase,
     #[allow(dead_code)]
-    secrets: SecretStore,
+    pub(super) secrets: SecretStore,
+    pub(super) palette_cache: super::palette::PalettePrCache,
 }
 
 impl PullRequestService {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
-        Self { db, secrets }
+        Self {
+            db,
+            secrets,
+            palette_cache: Default::default(),
+        }
     }
 
     pub fn list_my_reviews(
@@ -330,7 +335,7 @@ impl PullRequestService {
         collect_project_prs(tasks).await
     }
 
-    fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
+    pub(super) fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
     }
 }

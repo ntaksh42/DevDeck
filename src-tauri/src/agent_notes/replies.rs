@@ -36,6 +36,10 @@ pub struct NoteReply {
     /// When DevDeck posted a `post` reply, and where it landed (`thread-12`).
     pub posted_at: Option<String>,
     pub posted_ref: Option<String>,
+    /// A `post` reply on a pull request line: the file (`/src/a.ts`) and the
+    /// 1-based line on the new side, from `file=` / `line=` in the marker.
+    pub file_path: Option<String>,
+    pub line: Option<i64>,
 }
 
 enum Marker {
@@ -43,6 +47,8 @@ enum Marker {
         kind: &'static str,
         author: String,
         created_at: String,
+        file_path: Option<String>,
+        line: Option<i64>,
     },
     Posted {
         at: String,
@@ -69,10 +75,23 @@ fn parse_marker(line: &str) -> Option<Marker> {
     };
     let author = words.next().unwrap_or("agent").to_string();
     let created_at = words.next().unwrap_or_default().to_string();
+    let mut file_path = None;
+    let mut line = None;
+    if kind == "post" {
+        for word in words {
+            if let Some(path) = word.strip_prefix("file=") {
+                file_path = Some(path.replace("%20", " "));
+            } else if let Some(number) = word.strip_prefix("line=") {
+                line = number.parse().ok();
+            }
+        }
+    }
     Some(Marker::Reply {
         kind,
         author,
         created_at,
+        file_path,
+        line,
     })
 }
 
@@ -105,6 +124,8 @@ pub(crate) fn split_replies(text: &str) -> (String, Vec<NoteReply>) {
                 kind,
                 author,
                 created_at,
+                file_path,
+                line,
             }) => {
                 replies.push(NoteReply {
                     author,
@@ -113,6 +134,8 @@ pub(crate) fn split_replies(text: &str) -> (String, Vec<NoteReply>) {
                     kind: kind.to_string(),
                     posted_at: None,
                     posted_ref: None,
+                    file_path,
+                    line,
                 });
                 continue;
             }

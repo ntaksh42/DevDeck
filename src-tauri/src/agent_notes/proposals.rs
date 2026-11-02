@@ -65,6 +65,8 @@ impl Drop for PostGuard {
 pub(crate) struct PreparedPost {
     /// The comment with the agent's signature appended.
     pub body: String,
+    /// For a pull request line comment: the file and the 1-based line on the new side.
+    pub location: Option<(String, i64)>,
     input: PostAgentProposalInput,
     agent: String,
     hash: u64,
@@ -98,6 +100,47 @@ fn text_hash(text: &str) -> u64 {
     text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
         (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
     })
+}
+
+/// Longest file path accepted in a proposal's `file=`.
+const MAX_PATH_CHARS: usize = 1_000;
+
+/// The file and line a proposal is about, checked. `None` for a plain comment.
+fn proposal_location(
+    target: NoteTarget,
+    auto: bool,
+    file_path: Option<&str>,
+    line: Option<i64>,
+) -> Result<Option<(String, i64)>> {
+    let (file_path, line) = match (file_path, line) {
+        (None, None) => return Ok(None),
+        (Some(file_path), Some(line)) => (file_path, line),
+        _ => {
+            return Err(AppError::InvalidInput(
+                "a line comment needs both file= and line=".to_string(),
+            ))
+        }
+    };
+    let valid_path = file_path.starts_with('/')
+        && file_path.chars().count() <= MAX_PATH_CHARS
+        && !file_path.chars().any(char::is_control)
+        && !file_path.split('/').any(|segment| segment == "..");
+    if !valid_path || line < 1 {
+        return Err(AppError::InvalidInput(
+            "the proposed comment's file or line is not valid".to_string(),
+        ));
+    }
+    if target != NoteTarget::PullRequest {
+        return Err(AppError::InvalidInput(
+            "a line comment can only be posted to a pull request".to_string(),
+        ));
+    }
+    if auto {
+        return Err(AppError::InvalidInput(
+            "a line comment needs your approval".to_string(),
+        ));
+    }
+    Ok(Some((file_path.to_string(), line)))
 }
 
 /// Automatic posts must not carry anything a hostile pull request could use to
@@ -203,6 +246,12 @@ pub(super) fn prepare_post_in(
             reply.author
         ))
     })?;
+    let location = proposal_location(
+        input.target,
+        input.auto,
+        reply.file_path.as_deref(),
+        reply.line,
+    )?;
     let text = strip_signature(&reply.body);
     if text.is_empty() {
         return Err(AppError::InvalidInput(
@@ -241,9 +290,15 @@ pub(super) fn prepare_post_in(
             ));
         }
     }
+    // The notes root is part of the key so that separate roots never share a
+    // slot: the app has one root, but tests run in parallel, each in its own
+    // temporary root, and reuse the same ids.
     let key = format!(
-        "{target}:{}:{}:{}",
-        input.item_id, input.note_id, input.reply_index
+        "{}:{target}:{}:{}:{}",
+        root.display(),
+        input.item_id,
+        input.note_id,
+        input.reply_index
     );
     if !in_flight()
         .lock()
@@ -256,6 +311,7 @@ pub(super) fn prepare_post_in(
     }
     Ok(PreparedPost {
         body: format!("{text}\n\n{}", signature(label)),
+        location,
         agent: reply.author.clone(),
         hash,
         input,

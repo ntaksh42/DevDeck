@@ -379,8 +379,7 @@ export function AgentPanel({
             }}
             onReplyCollapse={() => headerRefs.current.get(c.key)?.focus()}
             onPostProposal={c.section === "item" ? (replyIndex) => proposals.post(c, replyIndex) : null}
-            postBusy={proposals.busy}
-            postError={proposals.errorFor(c.key)}
+            {...proposals.viewProps(c)}
             autoPost={data.autoPost}
           />
         ))}

@@ -43,7 +43,7 @@ const urgency = (note: AgentNote) => (noteNeedsYou(note) ? 0 : note.status === "
 const activityTime = (note: AgentNote) => Date.parse(note.replies[note.replies.length - 1]?.createdAt ?? note.createdAt) || 0;
 
 /** A new request's id: its local timestamp, `yyyyMMddHHmmss`. */
-function newAskId(): number {
+export function newAskId(): number {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return Number(

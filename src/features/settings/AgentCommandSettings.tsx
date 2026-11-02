@@ -43,6 +43,7 @@ export function AgentCommandSettings() {
   const [insightEnabled, setInsightEnabled] = useState(false);
   const [insightModel, setInsightModel] = useState("");
   const [autoAgent, setAutoAgent] = useState(false);
+  const [autoPipelines, setAutoPipelines] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
     claudeModelChoices: "",
@@ -73,6 +74,9 @@ export function AgentCommandSettings() {
     setAutoAgent(settingsQuery.data?.autoAgentEnabled ?? false);
   }, [settingsQuery.data?.autoAgentEnabled]);
   useEffect(() => {
+    setAutoPipelines(settingsQuery.data?.autoAgentPipelinesEnabled ?? false);
+  }, [settingsQuery.data?.autoAgentPipelinesEnabled]);
+  useEffect(() => {
     const data = settingsQuery.data;
     setModels({
       claudeModel: data?.claudeModel ?? "",
@@ -99,6 +103,7 @@ export function AgentCommandSettings() {
         inboxInsightEnabled: insightEnabled,
         inboxInsightModel: insightModel,
         autoAgentEnabled: autoAgent,
+        autoAgentPipelinesEnabled: autoPipelines,
         ...models,
       }),
     );
@@ -258,6 +263,25 @@ export function AgentCommandSettings() {
             HTML into the result folder and is told not to change code or propose comments. A
             type without a result folder is skipped. The item's fields, description and comments
             are sent to the agent.
+          </span>
+        </div>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoPipelines}
+              onChange={(event) => setAutoPipelines(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Investigate failed watched pipelines automatically
+          </label>
+          <span className="text-xs text-muted-foreground">
+            When the latest run of a pipeline you watch fails, the default agent starts an
+            Investigate request about it in the Agent panel: why it failed, and whether a retry is
+            enough (flaky tests), the code needs a fix, or the environment broke. Each run is
+            investigated once, at most 5 per hour. The run's timeline, the tail of its failed logs
+            and its failed tests are sent to the agent. Not started in read-only validation mode.
           </span>
         </div>
 

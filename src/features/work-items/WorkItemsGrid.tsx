@@ -203,7 +203,7 @@ export function WorkItemsGrid({
             extraColumnLabel={extraColumnLabel}
           />
           <WiGridBody
-            paneWidth={state.gridViewport.width}
+            scroller={state.scrollerAttached}
             showBlockingLoading={g.showBlockingLoading}
             searched={searched}
             sorted={g.sorted}
@@ -211,8 +211,6 @@ export function WorkItemsGrid({
             emptyMessage={emptyMessage}
             emptyContent={emptyContent}
             clearAllFilters={g.clearAllFilters}
-            firstVirtualRow={g.firstVirtualRow}
-            virtualRows={g.virtualRows}
             selectedIndex={g.selectedIndex}
             checkedIds={state.checkedIds}
             unreadKeys={g.unreadKeys}
@@ -222,8 +220,6 @@ export function WorkItemsGrid({
             staleThresholdDays={g.staleThresholdDays}
             rowColorRules={g.rowColorRules}
             rowRefs={state.rowRefs}
-            virtualTopPadding={g.virtualTopPadding}
-            virtualBottomPadding={g.virtualBottomPadding}
             setSelectedIndex={g.setSelectedIndex}
             handleCheckboxChange={g.handleCheckboxChange}
             onShiftRangeSelect={g.selectRangeTo}

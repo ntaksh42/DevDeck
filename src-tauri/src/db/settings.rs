@@ -74,6 +74,10 @@ pub struct AppSettings {
     /// requests newly awaiting my review and work items newly assigned to me,
     /// up to three per organization and sync. Off by default.
     pub auto_agent_enabled: bool,
+    /// When a watched pipeline's latest run fails, starts the agent on an
+    /// `investigate` request about it (the frontend watches pipelines and
+    /// starts it). Off by default.
+    pub auto_agent_pipelines_enabled: bool,
     pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
@@ -129,6 +133,7 @@ impl Default for AppSettings {
             inbox_insight_enabled: false,
             inbox_insight_model: None,
             auto_agent_enabled: false,
+            auto_agent_pipelines_enabled: false,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
@@ -194,6 +199,11 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         inbox_insight_enabled: get_bool_setting(conn, "inbox_insight_enabled", false)?,
         inbox_insight_model: get_setting(conn, "inbox_insight_model")?,
         auto_agent_enabled: get_bool_setting(conn, "auto_agent_enabled", false)?,
+        auto_agent_pipelines_enabled: get_bool_setting(
+            conn,
+            "auto_agent_pipelines_enabled",
+            false,
+        )?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
             "read_only_validation_mode_enabled",
@@ -331,6 +341,11 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         settings.inbox_insight_enabled,
     )?;
     set_bool_setting(conn, "auto_agent_enabled", settings.auto_agent_enabled)?;
+    set_bool_setting(
+        conn,
+        "auto_agent_pipelines_enabled",
+        settings.auto_agent_pipelines_enabled,
+    )?;
     set_bool_setting(
         conn,
         "read_only_validation_mode_enabled",

@@ -19,10 +19,10 @@ use serde::Serialize;
 
 use crate::error::Result;
 use crate::pipelines::{
-    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    CancelPipelineRunInput, FlakyTestReport, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListFlakyTestsInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
@@ -237,6 +237,7 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: ListPipelineTestResultsInput,
     ) -> Result<PipelineTestResults>;
+    async fn list_flaky_tests(&self, input: ListFlakyTestsInput) -> Result<FlakyTestReport>;
     async fn get_pipeline_definition(
         &self,
         input: GetPipelineDefinitionInput,

@@ -21,7 +21,21 @@ export function pendingProposals(note: AgentNote): Proposal[] {
     .filter(({ reply }) => reply.kind === "post" && !reply.postedAt && proposalSignature(reply.author) !== null);
 }
 
-/** Links and @mentions are never posted on their own (the backend refuses them too). */
+/** A proposal about one line of a pull request file (posted as a new thread there). */
+export function isLineProposal(reply: NoteReply): boolean {
+  return !!reply.filePath || reply.line != null;
+}
+
+/**
+ * Why a proposal is never posted on its own (the backend refuses these too):
+ * links and @mentions, and line comments. Null when it may be posted automatically.
+ */
+export function approvalReason(reply: NoteReply): string | null {
+  if (isLineProposal(reply)) return "A line comment always needs your approval.";
+  if (/https?:\/\/|@/.test(reply.body)) return "Has a link or @mention, so it needs your approval.";
+  return null;
+}
+
 export function needsApproval(reply: NoteReply): boolean {
-  return /https?:\/\/|@/.test(reply.body);
+  return approvalReason(reply) !== null;
 }

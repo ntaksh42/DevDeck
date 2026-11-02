@@ -106,6 +106,8 @@ pub struct Build {
     pub status: Option<String>,
     pub result: Option<String>,
     pub source_branch: Option<String>,
+    /// The commit the build ran on.
+    pub source_version: Option<String>,
     pub reason: Option<String>,
     pub queue_time: Option<DateTime<Utc>>,
     pub start_time: Option<DateTime<Utc>>,

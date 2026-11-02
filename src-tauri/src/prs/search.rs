@@ -229,7 +229,7 @@ pub(crate) fn cached_pr_to_summary(pr: CachedPr) -> PullRequestSummary {
 
 /// Maps a live Azure DevOps PR into a search summary, falling back to the
 /// queried project's id/name when the PR omits repository project metadata.
-fn live_pr_to_summary(
+pub(super) fn live_pr_to_summary(
     org: &Organization,
     default_project_id: &str,
     default_project_name: &str,

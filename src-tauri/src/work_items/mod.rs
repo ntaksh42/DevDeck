@@ -26,6 +26,7 @@ mod follows;
 mod metadata;
 mod mutations;
 mod query;
+mod search;
 mod sync;
 mod types;
 pub(crate) use candidates::*;
@@ -70,34 +71,6 @@ impl WorkItemService {
         }
     }
 
-    pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
-        let states = normalize_filter_set(input.states);
-        let work_item_types = normalize_filter_set(input.work_item_types);
-        let project_ids = normalize_filter_set(input.project_ids);
-
-        let cached = if query.is_empty() {
-            self.db.search_work_items(
-                &organization.id,
-                project_ids.as_deref(),
-                states.as_deref(),
-                work_item_types.as_deref(),
-                None,
-            )?
-        } else {
-            let mut results = self.db.search_work_items_fts(&organization.id, &query)?;
-            results.retain(|item| {
-                filter_matches(&project_ids, Some(item.project_id.as_str()))
-                    && filter_matches(&states, item.state.as_deref())
-                    && filter_matches(&work_item_types, item.work_item_type.as_deref())
-            });
-            results
-        };
-
-        Ok(cached.into_iter().map(cached_wi_to_summary).collect())
-    }
-
     pub fn list_my(&self, input: ListMyWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let cached = self.db.list_my_work_items(&organization.id)?;
@@ -117,26 +90,6 @@ impl WorkItemService {
             .filter(|item| !snoozed.contains(&item.id.to_string()))
             .map(cached_wi_to_summary)
             .collect())
-    }
-
-    pub async fn list_projects(
-        &self,
-        input: ListWorkItemProjectsInput,
-    ) -> Result<Vec<WorkItemProjectOption>> {
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let mut projects = self
-            .projects
-            .list(&client, &organization.id)
-            .await?
-            .into_iter()
-            .map(|project| WorkItemProjectOption {
-                project_id: project.id,
-                project_name: project.name,
-            })
-            .collect::<Vec<_>>();
-        projects.sort_by(|a, b| a.project_name.cmp(&b.project_name));
-        Ok(projects)
     }
 
     pub async fn run_query(&self, input: RunWorkItemQueryInput) -> Result<Vec<WorkItemSummary>> {

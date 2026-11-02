@@ -320,6 +320,22 @@ describe("App — Work Item Views UX", () => {
     await waitFor(() => expect(urlTab.getAttribute("aria-selected")).toBe("true"));
   });
 
+  it("builds WHERE conditions from the Build conditions tab", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Grid view");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Build conditions" }));
+    const field = screen.getByLabelText("Field for condition 1") as HTMLInputElement;
+    await waitFor(() => expect(document.activeElement).toBe(field));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    const rows = screen.getAllByLabelText(/^Value for condition/);
+    fireEvent.change(rows[rows.length - 1], { target: { value: "login" } });
+    expect((main.getByLabelText("WIQL") as HTMLTextAreaElement).value).toBe(
+      "SELECT [System.Id] FROM WorkItems\nWHERE [System.WorkItemType] = 'Bug'\n  AND [System.Title] CONTAINS 'login'",
+    );
+  });
+
   it("keeps the rarely used settings in a collapsed section", async () => {
     const main = await openViewsScreen();
     await addView(main, "Advanced view");
