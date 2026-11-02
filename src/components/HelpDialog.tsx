@@ -128,6 +128,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Comment on the review result (Result tab, also PR Search)</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Focus PR comment</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
+          <div className={row}><span>Jump to next / previous PR needing action (My Pull Requests)</span><kbd className={kbd}>N / Shift+N</kbd></div>
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
 
         </div>

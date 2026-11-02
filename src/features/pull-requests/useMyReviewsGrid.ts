@@ -27,6 +27,8 @@ import {
 } from '@/lib/columnFilters';
 import { activeArchivedKeys } from '@/lib/triage';
 import { reconcileReturns, seedDemoReturn } from './reviewReturnTracking';
+import { changedSince } from '@/lib/lastSeen';
+import { reviewFingerprint } from './reviewFingerprint';
 import {
   compareReviewPrs,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
@@ -183,6 +185,21 @@ export function useMyReviewsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voteSignature]);
 
+  // PRs whose observable state changed since the user last opened them.
+  const [updatedKeys, setUpdatedKeys] = useState<Set<string>>(new Set());
+  const fingerprintSignature = useMemo(
+    () => allPrs.map((pr) => `${reviewTriageKey(pr)}:${reviewFingerprint(pr)}`).join('|'),
+    [allPrs],
+  );
+  useEffect(() => {
+    setUpdatedKeys(
+      changedSince(
+        allPrs.map((pr) => ({ key: reviewTriageKey(pr), fingerprint: reviewFingerprint(pr) })),
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fingerprintSignature]);
+
   const triageScope = `myReviews:${organizationId}`;
   const archivedKeys = useMemo(() => {
     const snapshots = new Map(
@@ -311,6 +328,7 @@ export function useMyReviewsGrid({
     rowRefs,
     returnedKeys,
     setReturnedKeys,
+    setUpdatedKeys,
     resultKeysSignature,
     organizationId,
     selectRequest,
@@ -450,7 +468,7 @@ export function useMyReviewsGrid({
     visibleColumns, shownColumns, toggleColumn, resetColumns,
     // data
     allPrs, sortedPrs, filterSuggestionPool, columnUniqueValues,
-    returnedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,
+    returnedKeys, updatedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,
     visibleSortedIndexes,
     // snooze
     snoozeTargetRef, snoozeAnchorRect, setSnoozeAnchorRect,
