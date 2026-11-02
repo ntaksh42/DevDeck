@@ -164,13 +164,20 @@ fn line_proposals_carry_their_file_and_line() {
 
     let prepared = prepare_post_in(temp.path(), input(0, false), false, at(0)).unwrap();
     assert_eq!(prepared.location, Some(("/src/my app.ts".to_string(), 42)));
+    let plain = prepare_post_in(temp.path(), input(1, false), false, at(0)).unwrap();
+    assert_eq!(plain.location, None);
+    drop(plain);
     record_posted_in(temp.path(), prepared, "thread-3", at(1)).unwrap();
     let note = load(temp.path());
     assert_eq!(note.replies[0].posted_ref.as_deref(), Some("thread-3"));
     assert_eq!(note.replies[0].line, Some(42));
 
-    let plain = prepare_post_in(temp.path(), input(1, false), false, at(2)).unwrap();
-    assert_eq!(plain.location, None);
+    let error = prepare_post_in(temp.path(), input(1, false), false, at(2))
+        .err()
+        .unwrap();
+    assert!(error
+        .to_string()
+        .contains("same comment was already posted"));
 }
 
 #[test]
