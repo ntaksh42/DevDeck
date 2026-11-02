@@ -8,8 +8,8 @@ export const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 export const MIN_REVIEW_PREVIEW_WIDTH = 280;
 export const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 export const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-export const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 240, 82, 68, 84, 76, 68, 84];
-export const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 240, 72, 68, 84, 68, 62, 84];
+export const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 240, 48, 68, 84, 76, 68, 84];
+export const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 240, 44, 68, 84, 68, 62, 84];
 export const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 120, 240, 180, 240];
 export const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY =
   'azdodeck:layout:myReviewsGridColumnWidths:v4';
@@ -37,15 +37,15 @@ export const REVIEW_SECTION_ORDER: ReviewSection[] = [
 ];
 
 export const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
-  needsReview: 'Needs your review',
-  waitingAuthor: 'Waiting for author',
-  approved: 'Approved by you',
-  rejected: 'Rejected by you',
+  needsReview: 'Needs review',
+  waitingAuthor: 'Waiting',
+  approved: 'Approved',
+  rejected: 'Rejected',
   draft: 'Drafts',
 };
 
 export type ReviewRow =
-  | { kind: 'header'; key: ReviewSection; label: string; count: number; preview: string }
+  | { kind: 'header'; key: ReviewSection; label: string; count: number }
   | { kind: 'pr'; pr: ReviewPullRequestSummary; prIndex: number };
 
 // ── Sort ────────────────────────────────────────────────────────────────────

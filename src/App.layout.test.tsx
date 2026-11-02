@@ -97,7 +97,7 @@ describe("App — Layout", () => {
             repositoryId: "api",
             repositoryName: "api",
             pullRequestId: 101,
-            title: "Needs review",
+            title: "Review me",
             createdBy: "Alice",
             creationDate: "2026-05-24T00:00:00Z",
             targetRefName: "main",
@@ -114,7 +114,7 @@ describe("App — Layout", () => {
 
     renderApp();
 
-    await findReviewGridText("Needs review");
+    await findReviewGridText("Review me");
     const navResize = screen.getByRole("separator", { name: "Resize navigation" });
     expect(navResize.getAttribute("aria-valuenow")).toBe("232");
     fireEvent.keyDown(navResize, { key: "ArrowRight" });
@@ -158,7 +158,7 @@ describe("App — Layout", () => {
             repositoryId: "api",
             repositoryName: "api",
             pullRequestId: 101,
-            title: "Needs review",
+            title: "Review me",
             createdBy: "Alice",
             creationDate: "2026-05-24T00:00:00Z",
             targetRefName: "main",
@@ -175,7 +175,7 @@ describe("App — Layout", () => {
 
     renderApp();
 
-    await findReviewGridText("Needs review");
+    await findReviewGridText("Review me");
     const previewResize = screen.getByRole("separator", { name: "Resize Conversation" });
 
     fireEvent.pointerDown(previewResize, { clientX: 100, pointerId: 1 });

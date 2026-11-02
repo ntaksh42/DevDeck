@@ -10,6 +10,7 @@ import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { STALE_TEXT_CLASS } from '@/lib/gridRowState';
+import { CommentAvatar } from './PrThreadCard';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 import { reviewAgeDays } from './myReviewsHelpers';
 import type { SortKey, VoteValue } from './myReviewsTypes';
@@ -107,7 +108,7 @@ export function renderPrCell(
             e.stopPropagation();
             if (pr.webUrl) openExternalUrl(pr.webUrl);
           }}
-          className="truncate text-left font-mono text-xs text-link hover:underline"
+          className="truncate text-left font-mono text-xs text-muted-foreground/80 hover:text-link hover:underline"
           title={`PR #${pr.pullRequestId} (Ctrl+Enter)`}
           tabIndex={-1}
         >
@@ -116,7 +117,7 @@ export function renderPrCell(
       );
     case 'repositoryName':
       return (
-        <span className="truncate text-sm text-foreground" title={pr.repositoryName}>
+        <span className="truncate text-xs text-muted-foreground" title={pr.repositoryName}>
           {pr.repositoryName}
         </span>
       );
@@ -136,7 +137,7 @@ export function renderPrCell(
               Draft
             </span>
           )}
-          <span className="truncate font-medium text-foreground" title={pr.title}>
+          <span className="truncate font-semibold text-foreground" title={pr.title}>
             {pr.title}
           </span>
           {pr.mergeStatus === 'conflicts' ? (
@@ -151,12 +152,12 @@ export function renderPrCell(
         </div>
       );
     case 'createdBy':
+      // Initials keep the column narrow; the full name stays in the tooltip
+      // and for screen readers.
       return (
-        <span
-          className="truncate text-sm text-muted-foreground"
-          title={pr.createdBy ?? 'Unknown'}
-        >
-          {pr.createdBy ?? 'Unknown'}
+        <span className="flex justify-center" title={pr.createdBy ?? 'Unknown'}>
+          <CommentAvatar name={pr.createdBy} />
+          <span className="sr-only">{pr.createdBy ?? 'Unknown'}</span>
         </span>
       );
     case 'creationDate':

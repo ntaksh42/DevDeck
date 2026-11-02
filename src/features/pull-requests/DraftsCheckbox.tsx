@@ -1,5 +1,5 @@
 /**
- * Always-visible "Show Drafts" toggle for the PR grids' tab strip, placed next
+ * Always-visible "Drafts" toggle for the PR grids' tab strip, placed next
  * to the folded filter so draft visibility is never hidden behind Ctrl+F.
  */
 export function DraftsCheckbox({
@@ -22,7 +22,7 @@ export function DraftsCheckbox({
         onChange={(e) => onChange(e.target.checked)}
         className="h-3 w-3 rounded border-input"
       />
-      Show Drafts{draftCount > 0 ? ` (${draftCount})` : ''}
+      Drafts{draftCount > 0 ? ` (${draftCount})` : ''}
     </label>
   );
 }

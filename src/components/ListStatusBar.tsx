@@ -1,9 +1,11 @@
 import { Fragment, type ReactNode } from "react";
-import { AlertTriangle, X } from "lucide-react";
+import { AlarmClock, AlertTriangle, CheckCheck, Columns3, X } from "lucide-react";
 import { requestHelp, type HelpSection } from "@/lib/helpEvents";
 import { focusPrimaryGrid } from "@/lib/utils";
 
 const BUTTON = "rounded border px-2 py-0.5 text-xs";
+/** Icon buttons keep the 22px height of the text buttons beside them. */
+const COMPACT = "inline-flex h-[22px] items-center";
 const IDLE = "border-border bg-card hover:bg-secondary";
 const PRESSED = "border-primary bg-primary/10 text-primary";
 /** A toggle with nothing behind it: no frame, so the bar reads as text until there is something to look at. */
@@ -37,6 +39,7 @@ export function ListStatusBar({
   fitWidths,
   onColumns,
   helpSection,
+  compact = false,
 }: {
   /** Parts of the left summary; falsy entries are skipped. */
   summary: ReactNode[];
@@ -50,7 +53,14 @@ export function ListStatusBar({
   fitWidths?: { auto: boolean; onFit: () => void };
   onColumns?: (rect: DOMRect) => void;
   helpSection?: HelpSection;
+  /**
+   * Denser right side: Done / Snoozed / Columns become icon buttons (name in
+   * the tooltip), and Done / Snoozed are hidden while empty and not active.
+   */
+  compact?: boolean;
 }) {
+  const showToggle = (toggle: StateToggle | undefined): toggle is StateToggle =>
+    !!toggle && (!compact || toggle.active || toggle.count > 0);
   const parts = summary.filter((part) => part !== null && part !== undefined && part !== false && part !== "");
   return (
     <div className="mt-auto flex shrink-0 items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
@@ -67,26 +77,30 @@ export function ListStatusBar({
       </span>
       <span className="flex shrink-0 items-center gap-2">
         {filters}
-        {done ? (
+        {showToggle(done) ? (
           <button
             type="button"
             aria-pressed={done.active}
+            aria-label={compact ? `Done ${done.count}` : undefined}
             title="Toggle done view (E marks the selected row done)"
             onClick={done.onToggle}
-            className={`${BUTTON} ${toggleClass(done)}`}
+            className={`${compact ? `${COMPACT} gap-1 ` : ""}${BUTTON} ${toggleClass(done)}`}
           >
-            Done {done.count}
+            {compact ? <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" /> : "Done "}
+            {done.count}
           </button>
         ) : null}
-        {snoozed ? (
+        {showToggle(snoozed) ? (
           <button
             type="button"
             aria-pressed={snoozed.active}
+            aria-label={compact ? `Snoozed ${snoozed.count}` : undefined}
             title="Toggle snoozed view (Z snoozes the selected row)"
             onClick={snoozed.onToggle}
-            className={`${BUTTON} ${toggleClass(snoozed)}`}
+            className={`${compact ? `${COMPACT} gap-1 ` : ""}${BUTTON} ${toggleClass(snoozed)}`}
           >
-            Snoozed {snoozed.count}
+            {compact ? <AlarmClock className="h-3.5 w-3.5" aria-hidden="true" /> : "Snoozed "}
+            {snoozed.count}
           </button>
         ) : null}
         {stale ? (
@@ -119,9 +133,11 @@ export function ListStatusBar({
           <button
             type="button"
             onClick={(event) => onColumns(event.currentTarget.getBoundingClientRect())}
-            className={`${BUTTON} ${IDLE}`}
+            aria-label={compact ? "Columns" : undefined}
+            title={compact ? "Columns" : undefined}
+            className={`${compact ? `${COMPACT} ` : ""}${BUTTON} ${IDLE}`}
           >
-            Columns
+            {compact ? <Columns3 className="h-3.5 w-3.5" aria-hidden="true" /> : "Columns"}
           </button>
         ) : null}
         <button

@@ -33,6 +33,33 @@ describe("ListStatusBar", () => {
     expect(screen.getByText("1 item")).toBeTruthy();
   });
 
+  it("compact mode uses icon buttons and hides empty, inactive toggles", () => {
+    const { rerender } = render(
+      <ListStatusBar
+        compact
+        summary={[itemCount(5)]}
+        done={{ count: 2, active: false, onToggle: () => undefined }}
+        snoozed={{ count: 0, active: false, onToggle: () => undefined }}
+        onColumns={() => undefined}
+      />,
+    );
+    const names = () => screen.getAllByRole("button").map((button) => button.getAttribute("aria-label") ?? button.textContent);
+    expect(names()).toEqual(["Done 2", "Columns", "Show keyboard shortcuts for this view"]);
+    expect(screen.getByRole("button", { name: "Done 2" }).textContent).toBe("2");
+    expect(screen.getByRole("button", { name: "Columns" }).getAttribute("title")).toBe("Columns");
+
+    // An empty toggle stays reachable while its view is open, so it can be turned off.
+    rerender(
+      <ListStatusBar
+        compact
+        summary={[itemCount(5)]}
+        done={{ count: 0, active: false, onToggle: () => undefined }}
+        snoozed={{ count: 0, active: true, onToggle: () => undefined }}
+      />,
+    );
+    expect(names()).toEqual(["Snoozed 0", "Show keyboard shortcuts for this view"]);
+  });
+
   it("shows Fit only after a manual resize and re-fits from it", () => {
     const onFit = vi.fn();
     const { rerender } = render(<ListStatusBar summary={["1 item"]} fitWidths={{ auto: true, onFit }} />);

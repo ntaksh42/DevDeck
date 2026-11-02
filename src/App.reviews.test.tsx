@@ -143,7 +143,7 @@ describe("App — Reviews", () => {
             repositoryId: "api",
             repositoryName: "api",
             pullRequestId: 101,
-            title: "Needs review",
+            title: "Review me",
             createdBy: "Alice",
             creationDate: "2026-05-24T00:00:00Z",
             targetRefName: "main",
@@ -200,17 +200,17 @@ describe("App — Reviews", () => {
     // The vote-filter tabs are gone; rows group into collapsible sections.
     expect(main.queryByRole("tab", { name: "All" })).toBeNull();
 
-    // Section headers always show; "Needs your review" is expanded by default
+    // Section headers always show; "Needs review" is expanded by default
     // while the other sections start collapsed (their rows hidden).
-    expect(await main.findByRole("button", { name: /Needs your review/ })).toBeTruthy();
-    expect(main.getByText("Needs review")).toBeTruthy();
-    expect(main.getByRole("button", { name: /Waiting for author/ })).toBeTruthy();
-    expect(main.getByRole("button", { name: /Rejected by you/ })).toBeTruthy();
+    expect(await main.findByRole("button", { name: /Needs review/ })).toBeTruthy();
+    expect(main.getByText("Review me")).toBeTruthy();
+    expect(main.getByRole("button", { name: /^Waiting/ })).toBeTruthy();
+    expect(main.getByRole("button", { name: /^Rejected/ })).toBeTruthy();
     expect(main.queryByText("Waiting on author")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
 
     // Expanding a section reveals its rows.
-    fireEvent.click(main.getByRole("button", { name: /Waiting for author/ }));
+    fireEvent.click(main.getByRole("button", { name: /^Waiting/ }));
     expect(await main.findByText("Waiting on author")).toBeTruthy();
     expect(main.getByText("Conflicts")).toBeTruthy();
 
@@ -375,27 +375,30 @@ describe("App — Reviews", () => {
     });
     expect(within(grid).getByText("Beta review")).toBeTruthy();
 
-    // The done view lists it; E restores it back to the inbox.
+    // The done view lists it; Escape leaves the Done list.
     fireEvent.click(screen.getByRole("button", { name: "Done 1" }));
     expect(await within(grid).findByText("Alpha review")).toBeTruthy();
     expect(within(grid).queryByText("Beta review")).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to open list (leave done view)" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Done 1" }), { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
+    });
+    expect(within(grid).getByText("Beta review")).toBeTruthy();
+
+    // E restores it back to the inbox.
+    fireEvent.click(screen.getByRole("button", { name: "Done 1" }));
+    expect(await within(grid).findByText("Alpha review")).toBeTruthy();
     fireEvent.keyDown(grid, { key: "e" });
     await waitFor(() => {
       expect(within(grid).queryByText("Alpha review")).toBeNull();
     });
-    // The Done button toggles the list back; the tab-band chip shows while it is active.
-    expect(screen.getByRole("button", { name: "Back to open list (leave done view)" })).toBeTruthy();
+    // The Done button stays while its view is active and toggles the list back;
+    // once empty and inactive it is hidden.
     fireEvent.click(screen.getByRole("button", { name: "Done 0" }));
     expect(await within(grid).findByText("Alpha review")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
-
-    // Escape also leaves the Done list.
-    fireEvent.click(screen.getByRole("button", { name: "Done 0" }));
-    expect(await screen.findByRole("button", { name: /Back to open list/ })).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole("button", { name: "Done 0" }), { key: "Escape" });
-    await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
-    });
+    expect(screen.queryByRole("button", { name: "Done 0" })).toBeNull();
     expect(within(grid).getByText("Beta review")).toBeTruthy();
   });
 });

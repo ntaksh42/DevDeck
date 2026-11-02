@@ -61,16 +61,18 @@ export function ReviewStatusBar({
       // selection state would describe rows that are not on screen.
       [itemCount(snoozedCount, 'snoozed')]
     : [
-        itemCount(visiblePrs.length),
-        <span key="not-voted">
-          <span className="font-medium text-foreground">{noVoteCount}</span> not voted
-        </span>,
+        `${visiblePrs.length} PR${visiblePrs.length === 1 ? '' : 's'}`,
+        noVoteCount > 0 ? (
+          <span key="to-vote">
+            <span className="font-medium text-foreground">{noVoteCount}</span> to vote
+          </span>
+        ) : null,
         returnedKeys.size > 0 ? (
           <span key="returned">
             <span className="font-medium text-purple-700 dark:text-purple-300">{returnedKeys.size}</span> returned
           </span>
         ) : null,
-        !isMultiSelect && singleFileCount != null
+        !isMultiSelect && singleFileCount != null && singleFileCount > 0
           ? `${singleFileCount} changed file${singleFileCount === 1 ? '' : 's'}`
           : null,
       ];
@@ -85,6 +87,7 @@ export function ReviewStatusBar({
       fitWidths={fitWidths}
       onColumns={onOpenColumnMenu}
       helpSection="reviews"
+      compact
     >
       {!showSnoozed && isMultiSelect ? (
         <>
