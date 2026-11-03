@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 // Fixed-row-height windowing for the grids that virtualize their rows (My
 // Reviews, PR search). Owns the scroll container element via a callback ref,
@@ -70,6 +71,10 @@ export function useVirtualRowWindow(
   bottomPadding: number;
 } {
   const [viewport, setViewport] = useState({ width: 0, height: 0, scrollTop: 0 });
+  const renderedViewport = useRef(viewport);
+  useLayoutEffect(() => {
+    renderedViewport.current = viewport;
+  }, [viewport]);
 
   useEffect(() => {
     if (!scroller) return;
@@ -77,29 +82,45 @@ export function useVirtualRowWindow(
 
     // The window only moves a whole row at a time; skip re-rendering on every
     // scrolled pixel while the top row stays the same.
-    function updateViewport() {
+    function updateViewport(scrolling = false) {
       const next = {
         width: element.clientWidth,
         height: element.clientHeight,
         scrollTop: snapToRow(element.scrollTop, rowHeight),
       };
-      setViewport((prev) =>
-        prev.width === next.width && prev.height === next.height && prev.scrollTop === next.scrollTop
-          ? prev
-          : next,
-      );
+      const update = () => {
+        setViewport((prev) =>
+          prev.width === next.width && prev.height === next.height && prev.scrollTop === next.scrollTop
+            ? prev
+            : next,
+        );
+      };
+      // A deferred update can leave a fast scroll outside the mounted rows for
+      // a paint. Flush only when movement since the last *commit* consumes the
+      // overscan, keeping one row of slack for rounding and the column header.
+      // Small scrolls stay batched, and mounting/resizing never flushes effects.
+      if (
+        scrolling && Math.abs(next.scrollTop - renderedViewport.current.scrollTop)
+          > Math.max(0, overscan - 1) * rowHeight
+      ) {
+        flushSync(update);
+      } else {
+        update();
+      }
     }
 
+    const handleScroll = () => updateViewport(true);
+
     updateViewport();
-    element.addEventListener("scroll", updateViewport, { passive: true });
+    element.addEventListener("scroll", handleScroll, { passive: true });
     const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => updateViewport());
     resizeObserver?.observe(element);
     return () => {
-      element.removeEventListener("scroll", updateViewport);
+      element.removeEventListener("scroll", handleScroll);
       resizeObserver?.disconnect();
     };
-  }, [scroller, rowHeight]);
+  }, [scroller, rowHeight, overscan]);
 
   const firstRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
   const visibleRowCount = Math.ceil(Math.max(viewport.height, rowHeight) / rowHeight);
