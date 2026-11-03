@@ -14,7 +14,7 @@ import { dispatchWorkItemCommand, gotoViewMapFromKeybindings } from "./appHelper
 import { GOTO_CHAIN_TIMEOUT_MS } from "./types";
 import { toggleAgentPanel } from "@/components/agent/agentSubject";
 import { resetUiScale, stepUiScale } from "@/lib/uiScale";
-import { bindFramePaneFocus } from "@/lib/paneFocus";
+import { bindFramePaneFocus, handlePaneCycleKey } from "@/lib/paneFocus";
 import type { View } from "./types";
 
 export interface UseKeyboardShortcutsParams {
@@ -59,8 +59,13 @@ export function useKeyboardShortcuts({
         bindFramePaneFocus(frame);
       }
     }
+    const onPaneCycleKey = (event: KeyboardEvent) => { handlePaneCycleKey(event); };
     window.addEventListener("blur", onWindowBlur);
-    return () => window.removeEventListener("blur", onWindowBlur);
+    window.addEventListener("keydown", onPaneCycleKey, true);
+    return () => {
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("keydown", onPaneCycleKey, true);
+    };
   }, []);
   // Stable ref so the effects below don't need syncAll in their dep arrays
   // (it's a new lambda every render). The ref is always current.

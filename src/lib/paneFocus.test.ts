@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bindFramePaneFocus, handlePaneFocusKey } from "./paneFocus";
+import { bindFramePaneFocus, handlePaneCycleKey, handlePaneFocusKey } from "./paneFocus";
 
 function pane(id: string, x: number, y = 0, width = 200, height = 300) {
   const root = document.createElement("div");
@@ -23,13 +23,154 @@ function press(target: HTMLElement, key: string, options: KeyboardEventInit = {}
   return event;
 }
 
-const onKeyDown = (event: KeyboardEvent) => { handlePaneFocusKey(event); };
+const onKeyDown = (event: KeyboardEvent) => {
+  if (!handlePaneCycleKey(event)) handlePaneFocusKey(event);
+};
 
 beforeEach(() => document.addEventListener("keydown", onKeyDown, true));
 afterEach(() => {
   document.removeEventListener("keydown", onKeyDown, true);
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+});
+
+describe("Ctrl+Tab pane cycle", () => {
+  it("cycles in screen order including read-only Result and wraps in both directions", () => {
+    const result = pane("result", 400);
+    delete result.root.dataset.paneEditable;
+    const preview = pane("preview", 200);
+    const grid = pane("grid", 0);
+    const lower = pane("lower", 0, 400);
+    press(grid.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(preview.surface);
+    press(preview.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(result.surface);
+    press(result.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(lower.surface);
+    press(lower.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(grid.surface);
+    press(grid.surface, "Tab", { ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(lower.surface);
+    press(lower.surface, "Tab", { ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(result.surface);
+  });
+
+  it("returns to the grid selection without changing the editor draft", () => {
+    const grid = pane("grid", 0);
+    grid.surface.dataset.primaryGrid = "true";
+    const row = document.createElement("div");
+    row.setAttribute("role", "row");
+    row.setAttribute("aria-selected", "true");
+    row.tabIndex = 0;
+    grid.surface.appendChild(row);
+    const preview = pane("preview", 200);
+    const input = document.createElement("textarea");
+    input.value = "draft";
+    preview.surface.appendChild(input);
+    press(input, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(row);
+    expect(input.value).toBe("draft");
+  });
+
+  it("cycles from a dock tab or toolbar relative to its own pane", () => {
+    const grid = pane("grid", 0);
+    const preview = pane("preview", 200);
+    const result = pane("result", 400);
+    const group = document.createElement("div");
+    group.className = "dv-groupview";
+    const tab = document.createElement("button");
+    group.append(tab, preview.root);
+    document.body.appendChild(group);
+    press(tab, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(result.surface);
+    press(tab, "Tab", { ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(grid.surface);
+  });
+
+  it("skips hidden panes and outer wrappers while including visible nested panes", () => {
+    const grid = pane("grid", 0);
+    pane("hidden", 200, 0, 0, 0);
+    const preview = pane("preview", 400);
+    const nested = pane("details", 400);
+    preview.root.appendChild(nested.root);
+    const side = pane("side", 600);
+    preview.root.appendChild(side.root);
+    const inactive = pane("inactive", 800);
+    inactive.root.setAttribute("aria-hidden", "true");
+    press(grid.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(nested.surface);
+    press(nested.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(side.surface);
+    press(side.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(grid.surface);
+  });
+
+  it("skips content clipped by a collapsed group", () => {
+    const grid = pane("grid", 0);
+    const collapsed = pane("collapsed", 200, 0, 200, 0);
+    collapsed.root.style.overflowY = "hidden";
+    const child = pane("details", 200);
+    collapsed.root.appendChild(child.root);
+    const result = pane("result", 400);
+    press(grid.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(result.surface);
+  });
+
+  it.each(["dialog", "alertdialog", "menu"])("does not leave an open %s", (role) => {
+    const grid = pane("grid", 0);
+    pane("preview", 200);
+    const overlay = pane("overlay", 0);
+    overlay.root.setAttribute("role", role);
+    expect(press(grid.surface, "Tab", { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(grid.surface);
+    overlay.root.style.visibility = "hidden";
+    press(grid.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).not.toBe(grid.surface);
+  });
+
+  it.each(["altKey", "metaKey", "isComposing"])("preserves %s Ctrl+Tab gestures", (modifier) => {
+    const grid = pane("grid", 0);
+    pane("preview", 200);
+    expect(press(grid.surface, "Tab", { ctrlKey: true, [modifier]: true }).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(grid.surface);
+  });
+
+  it.each([false, true])("preserves ordinary Tab navigation with shiftKey %s", (shiftKey) => {
+    const grid = pane("grid", 0);
+    pane("preview", 200);
+    expect(press(grid.surface, "Tab", { ctrlKey: false, shiftKey }).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(grid.surface);
+  });
+
+  it("enters at either end from outside the panes, and handles a single pane or no panes", () => {
+    expect(press(document.body, "Tab", { ctrlKey: true }).defaultPrevented).toBe(false);
+    const grid = pane("grid", 0);
+    press(document.body, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(grid.surface);
+    press(grid.surface, "Tab", { ctrlKey: true });
+    expect(document.activeElement).toBe(grid.surface);
+    const result = pane("result", 200);
+    press(document.body, "Tab", { ctrlKey: true, shiftKey: true });
+    expect(document.activeElement).toBe(result.surface);
+  });
+
+  it("cycles from iframe links and selections as well as its body", () => {
+    const preview = pane("preview", 0);
+    const result = pane("result", 200);
+    const frame = document.createElement("iframe");
+    preview.surface.appendChild(frame);
+    const doc = frame.contentDocument!;
+    const link = doc.createElement("a");
+    link.href = "https://example.com";
+    doc.body.appendChild(link);
+    bindFramePaneFocus(frame);
+    vi.spyOn(doc, "getSelection").mockReturnValue({ isCollapsed: false } as Selection);
+    link.focus();
+    link.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(result.surface);
+    doc.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(result.surface);
+  });
 });
 
 describe("pane focus", () => {
