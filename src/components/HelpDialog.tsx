@@ -108,6 +108,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Command palette</span><kbd className={kbd}>{combo("commandPalette")}</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>{combo("focusGrid")}</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>{combo("focusPreview")}</kbd></div>
+          <div className={row}><span>Next / previous visible pane (wraps around, includes Result)</span><kbd className={kbd}>Ctrl+Tab / Ctrl+Shift+Tab</kbd></div>
           <div className={row}><span>Adjacent grid / editable pane (from rows / preview body)</span><kbd className={kbd}>← →</kbd></div>
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>{combo("focusViewsPanel")}</kbd></div>

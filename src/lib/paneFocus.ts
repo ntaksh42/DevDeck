@@ -29,6 +29,56 @@ function focusPane(pane: HTMLElement): void {
   if (document.activeElement !== target) pane.focus();
 }
 
+/** Ctrl+Tab visits every visible leaf pane, including read-only previews. */
+export function handlePaneCycleKey(event: PaneKeyEvent, target: EventTarget | null = event.target): boolean {
+  if (
+    event.defaultPrevented || event.key !== "Tab" || !event.ctrlKey || event.metaKey || event.altKey ||
+    isImeComposing(event)
+  ) return false;
+  // A panel shortcut must not escape an open dialog or menu's focus scope.
+  if (Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], [role="menu"], [aria-modal="true"]')).some(visible)) return false;
+
+  const panes = Array.from(document.querySelectorAll<HTMLElement>(PANE)).filter((pane) => {
+    if (!visible(pane) || pane.closest("[inert], [aria-hidden='true']")) return false;
+    const rect = pane.getBoundingClientRect();
+    let { left, right, top, bottom } = rect;
+    for (let parent = pane.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      const clip = parent.getBoundingClientRect();
+      if (/(hidden|clip|auto|scroll)/.test(style.overflowX)) {
+        left = Math.max(left, clip.left);
+        right = Math.min(right, clip.right);
+      }
+      if (/(hidden|clip|auto|scroll)/.test(style.overflowY)) {
+        top = Math.max(top, clip.top);
+        bottom = Math.min(bottom, clip.bottom);
+      }
+    }
+    return right > left && bottom > top;
+  });
+  const leaves = panes
+    .filter((pane) => !panes.some((other) => other !== pane && pane.contains(other)))
+    .sort((a, b) => {
+      const from = a.getBoundingClientRect();
+      const to = b.getBoundingClientRect();
+      return from.top - to.top || from.left - to.left;
+    });
+  if (!leaves.length) return false;
+  const source = target instanceof HTMLElement ? target.closest(PANE) : null;
+  let current = leaves.findIndex((pane) => pane === source);
+  if (current < 0 && target instanceof HTMLElement) {
+    const group = target.closest(".dv-groupview");
+    current = leaves.findIndex((pane) => group?.contains(pane));
+  }
+  const next = current < 0
+    ? (event.shiftKey ? leaves.length - 1 : 0)
+    : (current + (event.shiftKey ? -1 : 1) + leaves.length) % leaves.length;
+  event.preventDefault();
+  event.stopPropagation();
+  focusPane(leaves[next]);
+  return true;
+}
+
 /** Plain left/right follows the visible layout to editable panes and grids.
  * Editors, trees, menus and other controls retain their existing arrow keys. */
 export function handlePaneFocusKey(event: PaneKeyEvent, target: EventTarget | null = event.target): boolean {
@@ -77,16 +127,17 @@ export function handlePaneFocusKey(event: PaneKeyEvent, target: EventTarget | nu
   return true;
 }
 
-/** Sandboxed read-only HTML has its own document, so body key events do not
- * bubble to the surrounding preview. Controls and text selections stay local. */
+/** Sandboxed HTML has its own document: forward pane shortcuts to the host.
+ * Plain arrows on controls and text selections stay local. */
 export function bindFramePaneFocus(frame: HTMLIFrameElement): void {
   const doc = frame.contentDocument;
   if (!doc || boundFrameDocuments.has(doc)) return;
   boundFrameDocuments.add(doc);
   doc.addEventListener("keydown", (event) => {
+    if (handlePaneCycleKey(event, frame)) return;
     if (event.target !== doc.body && event.target !== doc.documentElement) return;
     if (doc.getSelection()?.isCollapsed === false) return;
     const surface = frame.closest<HTMLElement>(TARGET) ?? frame.closest<HTMLElement>(PANE);
     if (surface) handlePaneFocusKey(event, surface);
-  });
+  }, true);
 }
