@@ -223,7 +223,9 @@ export function CommandPalette({
     <div
       aria-hidden="false"
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 px-3 pt-[12vh] backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div
         role="dialog"

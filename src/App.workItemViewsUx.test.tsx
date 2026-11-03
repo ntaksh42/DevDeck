@@ -238,6 +238,22 @@ describe("App — Work Item Views UX", () => {
     expect(screen.getByRole("dialog", { name: "Add View" })).toBeTruthy();
   });
 
+  it("stays open when a text selection drag ends on the backdrop", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Drag view");
+
+    const dialog = screen.getByRole("dialog", { name: "Add View" });
+    const backdrop = dialog.parentElement as HTMLElement;
+    // A drag that starts in the WIQL box and is released outside the dialog
+    // makes the browser fire the click on the backdrop.
+    fireEvent.mouseDown(main.getByLabelText("WIQL"));
+    fireEvent.click(backdrop);
+    expect(screen.getByRole("dialog", { name: "Add View" })).toBeTruthy();
+
+    fireEvent.mouseDown(backdrop);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add View" })).toBeNull());
+  });
+
   it("reformats the draft query from the Format button", async () => {
     const main = await openViewsScreen();
     await addView(main, "Format view");
