@@ -353,7 +353,6 @@ export function MyReviewsGrid({
                             label={row.label}
                             count={row.count}
                             collapsed={collapsed}
-                            preview={row.preview}
                             onToggle={() => g.toggleSection(row.key)}
                           />
                         );

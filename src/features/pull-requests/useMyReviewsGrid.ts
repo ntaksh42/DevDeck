@@ -35,7 +35,6 @@ import {
   defaultSortDirection,
   loadMyReviewsGridViewState,
   reviewSectionOf,
-  sectionPreview,
   reviewTriageKey,
   reviewTriageSnapshot,
   storeMyReviewsGridViewState,
@@ -275,7 +274,6 @@ export function useMyReviewsGrid({
           key: section,
           label: REVIEW_SECTION_LABELS[section],
           count: sectionPrs.get(section)?.length ?? 0,
-          preview: collapsedSections.has(section) ? sectionPreview(sectionPrs.get(section) ?? []) : '',
         });
       }
       if (!collapsedSections.has(section)) {

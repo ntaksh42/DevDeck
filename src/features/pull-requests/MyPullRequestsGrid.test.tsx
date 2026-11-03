@@ -93,7 +93,7 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     expect(document.activeElement).toBe(await screen.findByRole("combobox", { name: "Filter pull requests" }));
   });
 
-  it("hides draft PRs with the always-visible Show Drafts checkbox", async () => {
+  it("hides draft PRs with the always-visible Drafts checkbox", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     client.setQueryData(["activeOrganization"], { id: "contoso" });
     const draft = { ...pr, pullRequestId: 78, title: "WIP refactor", isDraft: true };
@@ -106,7 +106,7 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
 
     const grid = await screen.findByRole("grid", { name: "My pull requests" });
     expect(within(grid).getByText("WIP refactor")).toBeTruthy();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (1)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Drafts (1)" }));
     expect(within(grid).queryByText("WIP refactor")).toBeNull();
     expect(within(grid).getByText(pr.title)).toBeTruthy();
     expect(screen.getByText("1 of 2 items")).toBeTruthy();
@@ -140,7 +140,7 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     expect(screen.getByTestId("subject").textContent).toBe("pull-request:77");
     expect(screen.getByTestId("markdown").textContent).toContain("| !78 | WIP refactor |");
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (1)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Drafts (1)" }));
     await waitFor(() => expect(screen.getByTestId("scope").textContent).toBe("my-pull-requests:1"));
   });
 });

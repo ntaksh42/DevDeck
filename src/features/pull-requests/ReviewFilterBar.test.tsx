@@ -42,14 +42,14 @@ describe("ReviewFilterBar", () => {
     expect(onTextFilterChange).toHaveBeenCalledWith("");
   });
 
-  it("shows the Show Drafts checkbox with the draft count while the filter is folded", () => {
+  it("shows the Drafts checkbox with the draft count while the filter is folded", () => {
     const onShowDraftsChange = vi.fn();
     const { rerender } = render(<Harness draftCount={2} onShowDraftsChange={onShowDraftsChange} />);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (2)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Drafts (2)" }));
     expect(onShowDraftsChange).toHaveBeenCalledWith(true);
     rerender(<Harness draftCount={0} />);
-    expect(screen.getByRole("checkbox", { name: "Show Drafts" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Drafts" })).toBeTruthy();
   });
 
   it("focuses the input when opened and folds back on Escape, returning focus", () => {

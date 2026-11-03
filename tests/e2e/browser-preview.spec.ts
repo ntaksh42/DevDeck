@@ -22,7 +22,7 @@ test.describe("browser preview", () => {
     await expect(
       reviewGrid.getByText("Add rate limiting middleware to all endpoints"),
     ).toBeVisible();
-    await expect(main.getByText(/6 items\s*·\s*2 not voted/)).toBeVisible();
+    await expect(main.getByText(/6 PRs\s*·\s*2 to vote/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
 
     // The PR review panel shows the selected PR with vote actions and comments.
@@ -45,17 +45,17 @@ test.describe("browser preview", () => {
     await expect(reviewGrid.getByRole("row").first()).toContainText("#101");
 
     // Sections expand by clicking their header (My Reviews groups PRs by the
-    // reviewer's next action). Expanding "Waiting for author" reveals its PR
+    // reviewer's next action). Expanding "Waiting" reveals its PR
     // while the still-collapsed "Rejected" section keeps its PR hidden.
-    await main.getByRole("button", { name: /Waiting for author/ }).click();
+    await main.getByRole("button", { name: /^Waiting/ }).click();
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
 
-    await main.getByRole("button", { name: /Approved by you/ }).click();
+    await main.getByRole("button", { name: /^Approved/ }).click();
     await expect(main.getByText("Dark mode support for settings screen")).toBeVisible();
     await expect(main.getByText("Add OpenTelemetry tracing support")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
-    await main.getByRole("button", { name: /Rejected by you/ }).click();
+    await main.getByRole("button", { name: /^Rejected/ }).click();
 
     // The filter is folded into the Reviews tab strip until opened.
     await main.getByRole("button", { name: "Filter reviews" }).click();
@@ -64,7 +64,7 @@ test.describe("browser preview", () => {
     await expect(reviewGrid.getByText("Add rate limiting middleware to all endpoints")).toHaveCount(0);
 
     await main.getByPlaceholder("Filter by repo, title, author…").fill("");
-    await main.getByLabel("Show Drafts").check();
+    await main.getByLabel("Drafts").check();
     // Draft PRs land in their own collapsed "Drafts" section; expand it to see them.
     await main.getByRole("button", { name: /Drafts/ }).click();
     await expect(main.getByText("Draft", { exact: true })).toBeVisible();
