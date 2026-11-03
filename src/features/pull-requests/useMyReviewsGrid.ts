@@ -34,8 +34,6 @@ import {
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   defaultSortDirection,
   loadMyReviewsGridViewState,
-  reviewSectionOf,
-  sectionPreview,
   reviewTriageKey,
   reviewTriageSnapshot,
   storeMyReviewsGridViewState,
@@ -50,15 +48,14 @@ import {
   PR_GRID_OVERSCAN,
   PR_GRID_REQUIRED_COLUMNS,
   PR_GRID_ROW_HEIGHT,
-  REVIEW_SECTION_LABELS,
-  REVIEW_SECTION_ORDER,
   type FilterableColumn,
   type MyReviewsSelectRequest,
-  type ReviewRow,
+  type ReviewGroupBy,
   type ReviewSection,
   type SortKey,
   type SortState,
 } from './myReviewsTypes';
+import { buildReviewRows, compareReviewGroups, reviewGroupKeyOf } from './myReviewsGrouping';
 import { useMyReviewsSelectionState } from './useMyReviewsSelectionState';
 
 export function useMyReviewsGrid({
@@ -81,6 +78,12 @@ export function useMyReviewsGrid({
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
     initialViewState.collapsedSections,
   );
+  const [groupBy, setGroupBy] = useState<ReviewGroupBy>(initialViewState.groupBy);
+  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
+    initialViewState.collapsedRepos,
+  );
+  const collapsedGroups: ReadonlySet<string> =
+    groupBy === 'repository' ? collapsedRepos : collapsedSections;
   const [showDrafts, setShowDrafts] = useState(initialViewState.showDrafts);
   const [sort, setSort] = useState<SortState>(initialViewState.sort);
   const [columnFilters, setColumnFilters] = useState<
@@ -243,48 +246,20 @@ export function useMyReviewsGrid({
       filtered
         .map((pr, index) => ({ pr, index }))
         .sort((a, b) => {
-          const sectionDelta =
-            REVIEW_SECTION_ORDER.indexOf(reviewSectionOf(a.pr)) -
-            REVIEW_SECTION_ORDER.indexOf(reviewSectionOf(b.pr));
-          if (sectionDelta !== 0) return sectionDelta;
+          const groupDelta = compareReviewGroups(a.pr, b.pr, groupBy);
+          if (groupDelta !== 0) return groupDelta;
           const result = compareReviewPrs(a.pr, b.pr, sort.key);
           const directed = sort.direction === 'asc' ? result : -result;
           return directed || a.index - b.index;
         })
         .map(({ pr }) => pr),
-    [filtered, sort],
+    [filtered, sort, groupBy],
   );
 
-  const { reviewRows, prFlatIndexes } = useMemo(() => {
-    const rows: ReviewRow[] = [];
-    const flatIndexes: number[] = [];
-    const sectionPrs = new Map<ReviewSection, ReviewPullRequestSummary[]>();
-    for (const pr of sortedPrs) {
-      const section = reviewSectionOf(pr);
-      const list = sectionPrs.get(section);
-      if (list) list.push(pr);
-      else sectionPrs.set(section, [pr]);
-    }
-    let currentSection: ReviewSection | null = null;
-    sortedPrs.forEach((pr, prIndex) => {
-      const section = reviewSectionOf(pr);
-      if (section !== currentSection) {
-        currentSection = section;
-        rows.push({
-          kind: 'header',
-          key: section,
-          label: REVIEW_SECTION_LABELS[section],
-          count: sectionPrs.get(section)?.length ?? 0,
-          preview: collapsedSections.has(section) ? sectionPreview(sectionPrs.get(section) ?? []) : '',
-        });
-      }
-      if (!collapsedSections.has(section)) {
-        flatIndexes[prIndex] = rows.length;
-        rows.push({ kind: 'pr', pr, prIndex });
-      }
-    });
-    return { reviewRows: rows, prFlatIndexes: flatIndexes };
-  }, [sortedPrs, collapsedSections]);
+  const { reviewRows, prFlatIndexes } = useMemo(
+    () => buildReviewRows(sortedPrs, groupBy, collapsedGroups),
+    [sortedPrs, groupBy, collapsedGroups],
+  );
 
   // Virtualizer — must come after reviewRows is computed.
   const {
@@ -305,10 +280,10 @@ export function useMyReviewsGrid({
   const visibleSortedIndexes = useMemo(() => {
     const result: number[] = [];
     sortedPrs.forEach((pr, index) => {
-      if (!collapsedSections.has(reviewSectionOf(pr))) result.push(index);
+      if (!collapsedGroups.has(reviewGroupKeyOf(pr, groupBy))) result.push(index);
     });
     return result;
-  }, [sortedPrs, collapsedSections]);
+  }, [sortedPrs, groupBy, collapsedGroups]);
 
   const resultKeysSignature = useMemo(
     () =>
@@ -340,6 +315,7 @@ export function useMyReviewsGrid({
       setShowDone(false);
       setShowSnoozed(false);
       setCollapsedSections(new Set());
+      setCollapsedRepos(new Set());
     },
   });
 
@@ -347,26 +323,30 @@ export function useMyReviewsGrid({
   useEffect(() => {
     storeMyReviewsGridViewState({
       collapsedSections,
+      collapsedRepos,
       columnFilters,
+      groupBy,
       organizationId,
       showDrafts,
       sort,
       visibleColumns,
     });
-  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, visibleColumns]);
+  }, [collapsedSections, collapsedRepos, columnFilters, groupBy, organizationId, showDrafts, sort, visibleColumns]);
 
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  function toggleSection(section: ReviewSection) {
-    setCollapsedSections((prev) => {
+  function toggleSection(key: string) {
+    const toggle = <T extends string>(prev: Set<T>) => {
       const next = new Set(prev);
-      if (next.has(section)) next.delete(section);
-      else next.add(section);
+      if (next.has(key as T)) next.delete(key as T);
+      else next.add(key as T);
       return next;
-    });
+    };
+    if (groupBy === 'repository') setCollapsedRepos(toggle);
+    else setCollapsedSections(toggle);
   }
 
   function voteSelected(vote: -10 | -5 | 0 | 5 | 10, label: string) {
@@ -459,7 +439,8 @@ export function useMyReviewsGrid({
     organizationId,
     textFilter, setTextFilter,
     showDrafts, setShowDrafts,
-    sort, collapsedSections, columnFilters,
+    sort, collapsedGroups, columnFilters,
+    groupBy, setGroupBy,
     openFilterCol, setOpenFilterCol,
     filterAnchorRect, setFilterAnchorRect,
     filterButtonRef, filterInputRef,

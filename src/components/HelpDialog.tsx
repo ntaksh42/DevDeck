@@ -120,6 +120,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Collapse / expand section</span><kbd className={kbd}>Tab to header · Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
+          <div className={row}><span>Group by status / repository</span><kbd className={kbd}>B</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Copy as Grid: selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
           <div className={row}><span>Copy as Link: one link per selected row</span><kbd className={kbd}>Ctrl+Shift+C</kbd></div>

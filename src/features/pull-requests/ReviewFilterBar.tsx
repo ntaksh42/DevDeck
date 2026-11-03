@@ -3,6 +3,7 @@ import { DockFilterBar, type DockFilterChip } from '@/components/DockFilterBar';
 import { ListStateChip } from '@/components/ListStatusBar';
 import { FilterAutocomplete } from '@/components/FilterAutocomplete';
 import { DraftsCheckbox } from './DraftsCheckbox';
+import type { ReviewGroupBy } from './myReviewsTypes';
 
 type ReviewFilterBarProps = {
   textFilter: string;
@@ -12,6 +13,8 @@ type ReviewFilterBarProps = {
   onShowDraftsChange: (checked: boolean) => void;
   /** Drafts in the unfiltered list, shown next to the Show Drafts toggle. */
   draftCount?: number;
+  groupBy: ReviewGroupBy;
+  onGroupByChange: (groupBy: ReviewGroupBy) => void;
   filterSuggestionPool: string[];
   /** Set while the list shows its Done / Snoozed state; the chip returns to the open list. */
   stateView?: { label: string; onClear: () => void };
@@ -29,6 +32,8 @@ export function ReviewFilterBar({
   showDrafts,
   onShowDraftsChange,
   draftCount = 0,
+  groupBy,
+  onGroupByChange,
   filterSuggestionPool,
   stateView,
   open,
@@ -68,6 +73,18 @@ export function ReviewFilterBar({
         draftCount={draftCount}
         title="Show draft pull requests (D)"
       />
+      <label title="Group rows by (B)" className="flex shrink-0 items-center gap-1 pr-1 text-2xs text-muted-foreground">
+        Group
+        <select
+          aria-label="Group reviews by"
+          value={groupBy}
+          onChange={(e) => onGroupByChange(e.target.value as ReviewGroupBy)}
+          className="h-5 rounded border border-input bg-background px-1 text-2xs text-foreground"
+        >
+          <option value="status">Status</option>
+          <option value="repository">Repository</option>
+        </select>
+      </label>
     </div>
   );
 }

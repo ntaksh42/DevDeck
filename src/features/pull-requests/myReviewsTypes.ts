@@ -44,8 +44,11 @@ export const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
   draft: 'Drafts',
 };
 
+/** How My Reviews groups its rows: by my vote status, or by repository. */
+export type ReviewGroupBy = 'status' | 'repository';
+
 export type ReviewRow =
-  | { kind: 'header'; key: ReviewSection; label: string; count: number; preview: string }
+  | { kind: 'header'; key: string; label: string; count: number; preview: string }
   | { kind: 'pr'; pr: ReviewPullRequestSummary; prIndex: number };
 
 // ── Sort ────────────────────────────────────────────────────────────────────
@@ -117,7 +120,10 @@ export function isFilterableColumn(column: SortKey): column is FilterableColumn 
 // ── View state ──────────────────────────────────────────────────────────────
 export type MyReviewsGridViewState = {
   collapsedSections: Set<ReviewSection>;
+  /** Collapsed repository groups (repositoryId) while grouping by repository. */
+  collapsedRepos: Set<string>;
   columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
+  groupBy: ReviewGroupBy;
   organizationId: string;
   showDrafts: boolean;
   sort: SortState;

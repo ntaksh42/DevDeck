@@ -145,6 +145,7 @@ export function MyReviewsGrid({
       g.setShowDrafts((v) => !v);
       return;
     }
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); g.setGroupBy((v) => (v === 'status' ? 'repository' : 'status')); return; }
     if (e.key === '\\') { e.preventDefault(); g.setMaximized((v) => !v); return; }
     if (e.key === 'o' || e.key === 'O') {
       e.preventDefault();
@@ -289,6 +290,8 @@ export function MyReviewsGrid({
                 filterInputRef={g.filterInputRef}
                 showDrafts={g.showDrafts}
                 onShowDraftsChange={(checked) => { g.setShowDrafts(checked); }}
+                groupBy={g.groupBy}
+                onGroupByChange={g.setGroupBy}
                 draftCount={g.allPrs.filter((pr) => pr.isDraft).length}
                 filterSuggestionPool={g.filterSuggestionPool}
                 open={filterBar.open}
@@ -346,7 +349,7 @@ export function MyReviewsGrid({
                     {g.virtualTopPadding > 0 ? <div style={{ height: g.virtualTopPadding }} /> : null}
                     {g.virtualRows.map((row) => {
                       if (row.kind === 'header') {
-                        const collapsed = g.collapsedSections.has(row.key);
+                        const collapsed = g.collapsedGroups.has(row.key);
                         return (
                           <ReviewSectionHeader
                             key={`header:${row.key}`}
