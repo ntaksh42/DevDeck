@@ -1003,6 +1003,7 @@ format!(
 |---|---|
 | フロント/型 | `pnpm tsc --noEmit` |
 | React 単体 | `pnpm test -- --run` |
+| React 単体 + カバレッジ下限 (CI) | `pnpm test:coverage` (下限は `vite.config.ts` の `test.coverage.thresholds`。下回ると失敗) |
 | ブラウザ動線 | `pnpm test:e2e` |
 | Rust サービス/クライアント | `cargo test --workspace` |
 | Rust lint | `cargo clippy --workspace --all-targets -- -D warnings` |

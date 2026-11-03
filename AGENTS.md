@@ -43,6 +43,7 @@ $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 | Tauri desktop dev app | `pnpm tauri dev` |
 | Type-check TypeScript | `pnpm tsc --noEmit` |
 | Run TypeScript tests once | `pnpm test -- --run` |
+| Run TypeScript tests with coverage gate (CI) | `pnpm test:coverage` |
 | Run one TypeScript test file | `pnpm test -- --run src/path/to/file.test.ts` |
 | Run Playwright browser tests | `pnpm test:e2e` |
 | Build browser app | `pnpm build` |
@@ -266,7 +267,8 @@ spec edit.
 Choose checks based on the files touched:
 
 - Frontend/type changes: `pnpm tsc --noEmit`
-- React unit behavior: `pnpm test -- --run`
+- React unit behavior: `pnpm test -- --run` (CI runs `pnpm test:coverage`,
+  which fails if coverage drops below the thresholds in `vite.config.ts`)
 - Browser workflow changes: `pnpm test:e2e`
 - Rust service/client changes: `cargo test --workspace`
 - Rust lint-sensitive changes: `cargo clippy --workspace --all-targets -- -D warnings`

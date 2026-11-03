@@ -61,5 +61,17 @@ export default defineConfig(async () => ({
     testTimeout: 30000,
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["tests/e2e/**", "node_modules/**", "dist/**", "src-tauri/**", ".claude/**", ".worktrees/**"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "json-summary"],
+      // Floors at the current coverage so CI fails when it drops. Raise them
+      // as coverage improves.
+      thresholds: {
+        lines: 70,
+        statements: 68,
+        functions: 68,
+        branches: 62,
+      },
+    },
   },
 }));
