@@ -122,3 +122,14 @@ describe("team mentions and work item replies", () => {
     expect(isThreadItem({ kind: "pr_group_mention" })).toBe(true);
   });
 });
+
+describe("Waiting rows (an overdue reply reminder)", () => {
+  it("are labelled Waiting, count as Priority and keep their PR thread", () => {
+    expect(inboxKindLabel("pr_waiting")).toBe("Waiting");
+    expect(inboxKindLabel("wi_waiting")).toBe("Waiting");
+    expect(matchesInboxPriority(item({ kind: "pr_waiting" }), "priority")).toBe(true);
+    expect(matchesInboxPriority(item({ kind: "wi_waiting" }), "other")).toBe(false);
+    expect(isThreadItem({ kind: "pr_waiting" })).toBe(true);
+    expect(isThreadItem({ kind: "wi_waiting" })).toBe(false);
+  });
+});

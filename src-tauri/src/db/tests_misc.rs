@@ -173,6 +173,7 @@ fn app_settings_can_be_saved_and_cleared() {
             agent_workspace_path: Some("C:/src/workspace".to_string()),
             inbox_insight_enabled: true,
             inbox_insight_model: Some("sonnet".to_string()),
+            inbox_insight_max_per_sync: 99,
             auto_agent_enabled: true,
             auto_agent_pipelines_enabled: true,
             read_only_validation_mode_enabled: true,
@@ -222,6 +223,7 @@ fn app_settings_can_be_saved_and_cleared() {
     assert!(saved.read_only_validation_mode_enabled);
     assert!(saved.inbox_insight_enabled);
     assert_eq!(saved.inbox_insight_model.as_deref(), Some("sonnet"));
+    assert_eq!(saved.inbox_insight_max_per_sync, 10);
     assert!(saved.auto_agent_enabled);
     assert!(saved.auto_agent_pipelines_enabled);
     assert!(saved.desktop_notifications_enabled);

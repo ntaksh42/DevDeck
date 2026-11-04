@@ -14,6 +14,7 @@ mod notifications;
 mod organizations;
 mod pr_comment_seen;
 mod prs;
+mod reply_reminders;
 mod settings;
 mod snooze;
 mod sync_state;
@@ -38,6 +39,8 @@ mod tests_notifications;
 #[cfg(test)]
 mod tests_prs;
 #[cfg(test)]
+mod tests_reply_reminders;
+#[cfg(test)]
 mod tests_work_item_follows;
 #[cfg(test)]
 mod tests_work_items;
@@ -48,6 +51,7 @@ pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;
 pub use prs::*;
+pub use reply_reminders::*;
 pub use settings::*;
 pub use sync_state::*;
 pub use work_item_follows::*;
@@ -55,7 +59,7 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 30;
+pub(crate) const SCHEMA_VERSION: i64 = 31;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

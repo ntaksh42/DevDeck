@@ -7,6 +7,7 @@ import type {
   ListInboxItemsInput,
   ListNotificationsInput,
   SetInboxItemStateInput,
+  SetReplyReminderInput,
   RecordNotificationInput,
   ReplyAgentNoteInput,
   AgentNoteTarget,
@@ -36,9 +37,12 @@ import {
   demoUnreadNotificationsCount,
 } from "@/lib/demo/notifications";
 import {
+  demoClearReplyReminder,
   demoInboxCounts,
   demoListInboxItems,
+  demoListReplyReminders,
   demoSetInboxItemState,
+  demoSetReplyReminder,
 } from "@/lib/demo/actionInbox";
 import {
   demoCreateAgentNote,
@@ -214,6 +218,18 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "generate_action_inbox_insight":
       return null;
+    case "set_reply_reminder": {
+      const input = (args as { input?: SetReplyReminderInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoSetReplyReminder(input);
+    }
+    case "list_reply_reminders":
+      return demoListReplyReminders();
+    case "clear_reply_reminder": {
+      const id = (args as { id?: number } | undefined)?.id;
+      if (id !== undefined) demoClearReplyReminder(id);
+      return null;
+    }
     // ── Agent notes ───────────────────────────────────────────────────────
     case "list_agent_notes": {
       const input = (args as { input?: AgentNoteItem } | undefined)?.input;

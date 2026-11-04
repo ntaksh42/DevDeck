@@ -213,6 +213,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Done / Reopen (then the next row is selected)</span><kbd className={kbd}>E</kbd></div>
           <div className={row}><span>Resolve the thread + Done</span><kbd className={kbd}>Shift+E</kbd></div>
           <div className={row}><span>Snooze / Unsnooze (presets: 1-5 in the menu)</span><kbd className={kbd}>Z</kbd></div>
+          <div className={row}><span>Remind me if no one replies (menu: 1-5 presets, or cancel; it returns as a Waiting row)</span><kbd className={kbd}>W</kbd></div>
           <div className={row}><span>Mark the row / extend the marked range (E and Z then apply to all marked; Esc clears)</span><kbd className={kbd}>X / Shift+↑↓</kbd></div>
           <div className={row}><span>Undo the last Done / Snooze / Reopen (all items of a bulk change)</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Scroll the preview from the list</span><kbd className={kbd}>Space / Shift+Space</kbd></div>

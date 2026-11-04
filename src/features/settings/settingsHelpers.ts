@@ -24,6 +24,7 @@ export function settingsInput(
     agentWorkspacePath: settings?.agentWorkspacePath ?? null,
     inboxInsightEnabled: settings?.inboxInsightEnabled ?? false,
     inboxInsightModel: settings?.inboxInsightModel ?? null,
+    inboxInsightMaxPerSync: settings?.inboxInsightMaxPerSync ?? 3,
     autoAgentEnabled: settings?.autoAgentEnabled ?? false,
     autoAgentPipelinesEnabled: settings?.autoAgentPipelinesEnabled ?? false,
     readOnlyValidationModeEnabled:

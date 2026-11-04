@@ -26,8 +26,6 @@ use crate::db::{
     WI_INSIGHT_KINDS,
 };
 
-/// Items summarized per sync; the rest wait for the next one.
-const ITEMS_PER_RUN: u32 = 3;
 const DEFAULT_MODEL: &str = "sonnet";
 const TIMEOUT: Duration = Duration::from_secs(300);
 /// Longest thread text sent to the model.
@@ -91,7 +89,11 @@ pub(crate) fn start(
     if !settings.inbox_insight_enabled || RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
-    let items = match db.inbox_items_needing_insight(org_id, kinds, ITEMS_PER_RUN) {
+    let items = match db.inbox_items_needing_insight(
+        org_id,
+        kinds,
+        settings.inbox_insight_max_per_sync as u32,
+    ) {
         Ok(items) if !items.is_empty() => items,
         Ok(_) => {
             RUNNING.store(false, Ordering::SeqCst);

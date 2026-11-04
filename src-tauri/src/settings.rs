@@ -13,7 +13,8 @@ use crate::agent_notes::{
 };
 
 use crate::db::{
-    AppDatabase, AppSettings, NotificationRule, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
+    clamp_inbox_insight_max_per_sync, AppDatabase, AppSettings, NotificationRule,
+    DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
     DEFAULT_REVIEW_STALE_THRESHOLD_DAYS, DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
     REVIEW_STALE_THRESHOLD_DAY_OPTIONS, WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
@@ -48,6 +49,8 @@ pub struct UpdateAppSettingsInput {
     pub inbox_insight_enabled: Option<bool>,
     #[serde(default)]
     pub inbox_insight_model: Option<String>,
+    #[serde(default)]
+    pub inbox_insight_max_per_sync: Option<i64>,
     #[serde(default)]
     pub auto_agent_enabled: Option<bool>,
     #[serde(default)]
@@ -243,6 +246,10 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         agent_workspace_path: normalize_path(input.agent_workspace_path),
         inbox_insight_enabled: input.inbox_insight_enabled.unwrap_or(false),
         inbox_insight_model: normalize_path(input.inbox_insight_model),
+        inbox_insight_max_per_sync: input
+            .inbox_insight_max_per_sync
+            .map(clamp_inbox_insight_max_per_sync)
+            .unwrap_or(DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC),
         auto_agent_enabled: input.auto_agent_enabled.unwrap_or(false),
         auto_agent_pipelines_enabled: input.auto_agent_pipelines_enabled.unwrap_or(false),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),

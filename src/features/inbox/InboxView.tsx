@@ -45,6 +45,7 @@ import { useInboxEntries } from "./useInboxEntries";
 import { useInboxListFocus } from "./useInboxListFocus";
 import { useInboxChecked } from "./useInboxChecked";
 import { useInboxStateChanges } from "./useInboxStateChanges";
+import { useInboxReminder } from "./useInboxReminder";
 
 const OVERSCAN = 8;
 /** Comment kinds Claude can write notes for (matches the backend). */
@@ -121,6 +122,7 @@ export function InboxView() {
   }, [entries.length]);
 
   const detail = useInboxDetail(selected);
+  const reminder = useInboxReminder(selected);
   // The Agent panel follows the selected entry's pull request / work item.
   usePublishAgentSubject(selected ? inboxAgentSubject(selected) : null);
   usePublishAgentListScope(inboxAgentList(entries, tab, filterText));
@@ -259,11 +261,23 @@ export function InboxView() {
     changeState(entry, "done");
   }
 
-  function openSnoozeMenu() {
-    if (!selected || tab !== "open") return;
+  /** Where the Z / W menus open: under the selected row (or the list when it is not drawn). */
+  function selectedRowRect(): DOMRect | null {
     const row = rowRefs.current[index];
     const anchor = row?.isConnected ? row : listRef.current;
-    if (anchor) setSnoozeAnchor(anchor.getBoundingClientRect());
+    return anchor ? anchor.getBoundingClientRect() : null;
+  }
+
+  function openSnoozeMenu() {
+    if (!selected || tab !== "open") return;
+    const rect = selectedRowRect();
+    if (rect) setSnoozeAnchor(rect);
+  }
+
+  function openReminderMenu() {
+    if (!selected) return;
+    const rect = selectedRowRect();
+    if (rect) reminder.open(rect);
   }
 
   function openColumnFilter(column: InboxFilterColumn, anchorEl: HTMLButtonElement) {
@@ -291,7 +305,7 @@ export function InboxView() {
   const handleListKeyDown = inboxListKeyHandler({
     selected, entries, index, tab, checked, stateChanges, detail, readOnly,
     filterBar, moveSelectionTo, openInBrowser, openInApp, toggleThreadStatus,
-    changeMarkedOrSelected, setContextExpanded, scrollPreview, openSnoozeMenu,
+    changeMarkedOrSelected, setContextExpanded, scrollPreview, openSnoozeMenu, openReminderMenu,
     canGenerateInsight, generateInsight, applyReplyDraft, activatePanel, previewRef, openLink,
   });
 
@@ -391,6 +405,8 @@ export function InboxView() {
           onOpenInBrowser={() => selected && openInBrowser(selected)}
           onCopyLink={() => selected?.webUrl && void navigator.clipboard?.writeText(selected.webUrl)}
           onAskAgent={() => selected && openAgentPanel(agentRequestOf(selected))}
+          canRemind={!!selected}
+          onRemind={openReminderMenu}
         />
       ),
       content: (
@@ -462,6 +478,22 @@ export function InboxView() {
           onUncheckAll={() => updateColumnFilters((prev) => ({ ...prev, [openFilterCol]: new Set<string>() }))}
           restoreFocusRef={filterButtonRef}
           onClose={closeColumnFilter}
+        />
+      ) : null}
+
+      {reminder.anchor && selected ? (
+        <SnoozeMenu
+          anchorRect={reminder.anchor}
+          title="Remind if no reply by"
+          note="Cleared when someone comments on this conversation (seen at the next sync). Nothing is posted."
+          confirmLabel="Remind at selected time"
+          extraAction={
+            reminder.existing
+              ? { label: "Cancel the reminder", onSelect: () => reminder.cancel(reminder.existing!) }
+              : undefined
+          }
+          onSnooze={(dueAt) => reminder.set(selected, dueAt)}
+          onClose={reminder.close}
         />
       ) : null}
 

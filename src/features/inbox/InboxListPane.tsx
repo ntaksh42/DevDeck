@@ -8,6 +8,7 @@ import type { InboxFilterColumn } from "./inboxColumnFilters";
 import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
+import { useInboxScanLimit } from "./useInboxScanLimit";
 import type { InboxEntry, InboxPriority, InboxTab } from "./inboxPresentation";
 import type { InboxUndo } from "./useInboxStateChanges";
 
@@ -73,6 +74,7 @@ export function InboxListPane({
   undo: InboxUndo | null;
   onUndo: () => void;
 }) {
+  const scanLimit = useInboxScanLimit();
   const selected = entries[selectedIndex];
   const virtualRows = entries.slice(virtual.firstRow, virtual.lastRow);
 
@@ -147,7 +149,15 @@ export function InboxListPane({
       )}
 
       <ListStatusBar
-        summary={[itemCount(entries.length), checkedIds.size > 0 && `${checkedIds.size} marked (Esc clears)`]}
+        summary={[
+          itemCount(entries.length),
+          checkedIds.size > 0 && `${checkedIds.size} marked (Esc clears)`,
+          scanLimit && (
+            <span key="scan" title={scanLimit} className="text-amber-600 dark:text-amber-400">
+              Scan limited — some comments may be missing
+            </span>
+          ),
+        ]}
         done={{ count: tabCounts.done, active: tab === "done", onToggle: () => onTabChange(tab === "done" ? "open" : "done") }}
         snoozed={{
           count: tabCounts.snoozed,

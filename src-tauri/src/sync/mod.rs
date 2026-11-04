@@ -10,6 +10,7 @@ mod inbox;
 mod merge_readiness;
 mod notifications;
 mod org;
+mod reply_reminders;
 mod runner;
 mod wi_candidates;
 mod wi_mentions;

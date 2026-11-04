@@ -31,6 +31,7 @@ function nonDefaultSettings(): AppSettings {
     agentWorkspacePath: "C:/src/workspace",
     inboxInsightEnabled: true,
     inboxInsightModel: "opus",
+    inboxInsightMaxPerSync: 3,
     autoAgentEnabled: true,
     autoAgentPipelinesEnabled: true,
     readOnlyValidationModeEnabled: true,

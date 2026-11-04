@@ -2,7 +2,9 @@ import type {
   InboxCounts,
   InboxItem,
   ListInboxItemsInput,
+  ReplyReminder,
   SetInboxItemStateInput,
+  SetReplyReminderInput,
 } from "@/lib/azdoCommands";
 
 import { applyInboxScenario } from "@/lib/azdoDemoHarness";
@@ -210,7 +212,43 @@ export function demoSetInboxItemState(input: SetInboxItemStateInput): number {
   return changed;
 }
 
+let reminders: ReplyReminder[] = [];
+let nextReminderId = 1;
+
+export function demoSetReplyReminder(input: SetReplyReminderInput): ReplyReminder {
+  if (Date.parse(input.dueAt) <= Date.now()) throw new Error("dueAt must be in the future");
+  const same = (r: ReplyReminder) =>
+    r.organizationId === input.organizationId &&
+    r.kind === input.kind &&
+    r.repositoryId === input.repositoryId &&
+    r.subjectId === input.subjectId &&
+    r.threadId === input.threadId;
+  const existing = reminders.find(same);
+  const reminder: ReplyReminder = {
+    id: existing?.id ?? nextReminderId++,
+    organizationId: input.organizationId,
+    kind: input.kind,
+    subjectId: input.subjectId,
+    repositoryId: input.repositoryId,
+    threadId: input.threadId,
+    dueAt: input.dueAt,
+    createdAt: new Date().toISOString(),
+  };
+  reminders = [...reminders.filter((r) => !same(r)), reminder];
+  return reminder;
+}
+
+export function demoListReplyReminders(): ReplyReminder[] {
+  return reminders;
+}
+
+export function demoClearReplyReminder(id: number): void {
+  reminders = reminders.filter((r) => r.id !== id);
+}
+
 /** Test helper: restores the seed data. */
 export function resetDemoInbox(): void {
   items = null;
+  reminders = [];
+  nextReminderId = 1;
 }

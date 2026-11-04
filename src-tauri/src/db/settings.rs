@@ -70,6 +70,8 @@ pub struct AppSettings {
     pub inbox_insight_enabled: bool,
     /// Model for those summaries; unset means `sonnet`.
     pub inbox_insight_model: Option<String>,
+    /// How many new Inbox items one sync writes notes for (1..=10).
+    pub inbox_insight_max_per_sync: i64,
     /// After each sync, starts the agent (Agent notes `investigate`) on pull
     /// requests newly awaiting my review and work items newly assigned to me,
     /// up to three per organization and sync. Off by default.
@@ -108,6 +110,7 @@ pub struct AppSettings {
     pub experimental_auto_update_check: bool,
 }
 
+pub const DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC: i64 = 3;
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
 pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
@@ -132,6 +135,7 @@ impl Default for AppSettings {
             agent_workspace_path: None,
             inbox_insight_enabled: false,
             inbox_insight_model: None,
+            inbox_insight_max_per_sync: DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC,
             auto_agent_enabled: false,
             auto_agent_pipelines_enabled: false,
             read_only_validation_mode_enabled: false,
@@ -198,6 +202,10 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         agent_auto_post_enabled: get_bool_setting(conn, "agent_auto_post_enabled", false)?,
         inbox_insight_enabled: get_bool_setting(conn, "inbox_insight_enabled", false)?,
         inbox_insight_model: get_setting(conn, "inbox_insight_model")?,
+        inbox_insight_max_per_sync: get_setting(conn, "inbox_insight_max_per_sync")?
+            .and_then(|raw| raw.trim().parse::<i64>().ok())
+            .map(clamp_inbox_insight_max_per_sync)
+            .unwrap_or(DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC),
         auto_agent_enabled: get_bool_setting(conn, "auto_agent_enabled", false)?,
         auto_agent_pipelines_enabled: get_bool_setting(
             conn,
@@ -261,6 +269,10 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
             false,
         )?,
     })
+}
+
+pub fn clamp_inbox_insight_max_per_sync(value: i64) -> i64 {
+    value.clamp(1, 10)
 }
 
 fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
@@ -339,6 +351,11 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         conn,
         "inbox_insight_enabled",
         settings.inbox_insight_enabled,
+    )?;
+    set_setting(
+        conn,
+        "inbox_insight_max_per_sync",
+        Some(&clamp_inbox_insight_max_per_sync(settings.inbox_insight_max_per_sync).to_string()),
     )?;
     set_bool_setting(conn, "auto_agent_enabled", settings.auto_agent_enabled)?;
     set_bool_setting(

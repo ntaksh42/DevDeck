@@ -4,7 +4,16 @@ import { invokeCommand } from "./runtime";
 // Kinds the backend raises today. The wire schema stays `z.string()` so a kind
 // from a newer backend does not fail validation; `inboxKindLabel` falls back to
 // the raw value.
-export const INBOX_KINDS = ["pr_mention", "pr_group_mention", "pr_reply", "wi_mention", "wi_reply"] as const;
+export const INBOX_KINDS = [
+  "pr_mention",
+  "pr_group_mention",
+  "pr_reply",
+  "wi_mention",
+  "wi_reply",
+  // A "remind me if no one replies" deadline that passed without a reply.
+  "pr_waiting",
+  "wi_waiting",
+] as const;
 export type InboxKind = (typeof INBOX_KINDS)[number];
 
 export type InboxListState = "open" | "snoozed" | "done";
@@ -103,4 +112,51 @@ export async function generateActionInboxInsight(id: number): Promise<void> {
 export async function setActionInboxItemState(input: SetInboxItemStateInput): Promise<number> {
   const result = await invokeCommand("set_action_inbox_item_state", { input });
   return z.number().parse(result);
+}
+
+const replyReminderSchema = z.object({
+  id: z.number(),
+  organizationId: z.string(),
+  /** `pr` (a thread) or `wi`. */
+  kind: z.string(),
+  subjectId: z.number(),
+  repositoryId: z.string(),
+  threadId: z.number(),
+  dueAt: z.string(),
+  createdAt: z.string(),
+});
+
+export type ReplyReminder = z.infer<typeof replyReminderSchema>;
+
+export type SetReplyReminderInput = {
+  organizationId: string;
+  kind: "pr" | "wi";
+  subjectId: number;
+  projectId: string;
+  projectName: string;
+  /** Empty for a work item. */
+  repositoryId: string;
+  repositoryName: string;
+  /** 0 for a work item. */
+  threadId: number;
+  title: string;
+  webUrl: string | null;
+  /** RFC 3339 deadline in the future. */
+  dueAt: string;
+};
+
+/** "Remind me if no one replies": local only, nothing is posted to Azure DevOps. */
+export async function setReplyReminder(input: SetReplyReminderInput): Promise<ReplyReminder> {
+  const result = await invokeCommand("set_reply_reminder", { input });
+  return replyReminderSchema.parse(result);
+}
+
+/** Reminders still waiting for a reply. */
+export async function listReplyReminders(): Promise<ReplyReminder[]> {
+  const result = await invokeCommand("list_reply_reminders");
+  return z.array(replyReminderSchema).parse(result);
+}
+
+export async function clearReplyReminder(id: number): Promise<void> {
+  await invokeCommand("clear_reply_reminder", { id });
 }

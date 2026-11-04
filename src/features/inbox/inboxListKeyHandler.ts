@@ -9,7 +9,7 @@ import type { useInboxDetail } from "./useInboxDetail";
 export function inboxListKeyHandler({
   selected, entries, index, tab, checked, stateChanges, detail, readOnly,
   filterBar, moveSelectionTo, openInBrowser, openInApp, toggleThreadStatus,
-  changeMarkedOrSelected, setContextExpanded, scrollPreview, openSnoozeMenu,
+  changeMarkedOrSelected, setContextExpanded, scrollPreview, openSnoozeMenu, openReminderMenu,
   canGenerateInsight, generateInsight, applyReplyDraft, activatePanel, previewRef, openLink,
 }: {
   selected: InboxEntry | null;
@@ -29,6 +29,7 @@ export function inboxListKeyHandler({
   setContextExpanded: (update: (value: boolean) => boolean) => void;
   scrollPreview: (direction: 1 | -1) => void;
   openSnoozeMenu: () => void;
+  openReminderMenu: () => void;
   canGenerateInsight: (entry: InboxEntry | null) => entry is InboxEntry;
   generateInsight: (entry: InboxEntry) => void;
   applyReplyDraft: (text: string) => void;
@@ -141,6 +142,9 @@ export function inboxListKeyHandler({
       event.preventDefault();
       if (tab === "snoozed") changeMarkedOrSelected(selected, "open");
       else openSnoozeMenu();
+    } else if (lower === "w") {
+      event.preventDefault();
+      openReminderMenu();
     } else if (lower === "i") {
       if (canGenerateInsight(selected)) {
         event.preventDefault();

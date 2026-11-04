@@ -148,6 +148,7 @@ async fn sync_org_prs(
     super::inbox::record_inbox_health(db, org, "inbox_prs", scan_warning.as_deref());
     let state_update = super::inbox::retire_condition_items(db, org);
     let closed_update = crate::prs::finish_inbox_items_of_closed_prs(db, org);
+    super::reply_reminders::reconcile(db, handle, org);
     if inbox_update.changed() || state_update.changed() || closed_update.changed() {
         if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
             tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
@@ -275,6 +276,7 @@ async fn sync_org_work_items(
             super::inbox::record_inbox_health(db, org, "inbox_wi", scan_warning.as_deref());
             let closed_update =
                 super::wi_mentions::finish_closed_work_item_mentions(db, client, org, budget).await;
+            super::reply_reminders::reconcile(db, handle, org);
             if inbox_update.changed() || closed_update.changed() {
                 if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
                     tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");

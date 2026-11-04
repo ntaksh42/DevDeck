@@ -42,6 +42,7 @@ export function AgentCommandSettings() {
   const [autoPost, setAutoPost] = useState(false);
   const [insightEnabled, setInsightEnabled] = useState(false);
   const [insightModel, setInsightModel] = useState("");
+  const [insightMax, setInsightMax] = useState(3);
   const [autoAgent, setAutoAgent] = useState(false);
   const [autoPipelines, setAutoPipelines] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
@@ -69,7 +70,12 @@ export function AgentCommandSettings() {
   useEffect(() => {
     setInsightEnabled(settingsQuery.data?.inboxInsightEnabled ?? false);
     setInsightModel(settingsQuery.data?.inboxInsightModel ?? "");
-  }, [settingsQuery.data?.inboxInsightEnabled, settingsQuery.data?.inboxInsightModel]);
+    setInsightMax(settingsQuery.data?.inboxInsightMaxPerSync ?? 3);
+  }, [
+    settingsQuery.data?.inboxInsightEnabled,
+    settingsQuery.data?.inboxInsightModel,
+    settingsQuery.data?.inboxInsightMaxPerSync,
+  ]);
   useEffect(() => {
     setAutoAgent(settingsQuery.data?.autoAgentEnabled ?? false);
   }, [settingsQuery.data?.autoAgentEnabled]);
@@ -102,6 +108,7 @@ export function AgentCommandSettings() {
         agentWorkspacePath: workspace,
         inboxInsightEnabled: insightEnabled,
         inboxInsightModel: insightModel,
+        inboxInsightMaxPerSync: insightMax,
         autoAgentEnabled: autoAgent,
         autoAgentPipelinesEnabled: autoPipelines,
         ...models,
@@ -235,8 +242,19 @@ export function AgentCommandSettings() {
               className={`${INPUT_CLASS} w-60`}
             />
           </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Notes per sync</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={insightMax}
+              onChange={(event) => setInsightMax(Number(event.target.value) || 3)}
+              className={`${INPUT_CLASS} w-24`}
+            />
+          </label>
           <span className="text-xs text-muted-foreground">
-            After each sync, <code>claude -p</code> reads up to 3 new mentions / replies and writes
+            After each sync, <code>claude -p</code> reads up to {insightMax} new mentions / replies and writes
             notes at the top of the Inbox preview: a verdict (reply / fix first / no action) with
             its reason, the evidence, and a reply draft (Shift+R puts it in the reply box). With a
             clone of the PR's repository in the workspace folder, it checks the code read-only and

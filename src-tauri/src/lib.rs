@@ -284,7 +284,10 @@ pub fn run() {
             commands::action_inbox::list_action_inbox_items,
             commands::action_inbox::get_action_inbox_counts,
             commands::action_inbox::set_action_inbox_item_state,
-            commands::action_inbox::generate_action_inbox_insight
+            commands::action_inbox::generate_action_inbox_insight,
+            commands::action_inbox::set_reply_reminder,
+            commands::action_inbox::list_reply_reminders,
+            commands::action_inbox::clear_reply_reminder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

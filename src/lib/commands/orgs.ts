@@ -53,6 +53,7 @@ export const appSettingsSchema = z.object({
   agentWorkspacePath: z.string().nullable().default(null),
   inboxInsightEnabled: z.boolean().default(false),
   inboxInsightModel: z.string().nullable().default(null),
+  inboxInsightMaxPerSync: z.number().int().default(3),
   autoAgentEnabled: z.boolean().default(false),
   autoAgentPipelinesEnabled: z.boolean().default(false),
   readOnlyValidationModeEnabled: z.boolean().default(false),
@@ -215,6 +216,7 @@ export type UpdateAppSettingsInput = {
   agentWorkspacePath?: string | null;
   inboxInsightEnabled?: boolean;
   inboxInsightModel?: string | null;
+  inboxInsightMaxPerSync?: number;
   readOnlyValidationModeEnabled?: boolean;
   desktopNotificationsEnabled?: boolean;
   notificationContentPreviewEnabled?: boolean;

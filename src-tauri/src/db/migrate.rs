@@ -705,5 +705,9 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if current < 30 {
         super::inbox_threads::migrate_v30(conn)?;
     }
+    if current < 31 {
+        // Inbox: "remind me if no one replies".
+        super::reply_reminders::migrate_v31(conn)?;
+    }
     Ok(())
 }

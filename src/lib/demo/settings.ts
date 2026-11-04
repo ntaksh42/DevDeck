@@ -77,6 +77,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   agentWorkspacePath: null,
   inboxInsightEnabled: false,
   inboxInsightModel: null,
+  inboxInsightMaxPerSync: 3,
   autoAgentEnabled: false,
   autoAgentPipelinesEnabled: false,
   readOnlyValidationModeEnabled: false,
@@ -182,6 +183,10 @@ export function applyDemoSettingsUpdate(
       input && "inboxInsightModel" in input
         ? input.inboxInsightModel?.trim() || null
         : current.inboxInsightModel,
+    inboxInsightMaxPerSync:
+      input?.inboxInsightMaxPerSync !== undefined
+        ? Math.min(10, Math.max(1, Math.round(input.inboxInsightMaxPerSync)))
+        : current.inboxInsightMaxPerSync,
     autoAgentEnabled:
       input && "autoAgentEnabled" in input
         ? input.autoAgentEnabled === true

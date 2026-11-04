@@ -12,20 +12,24 @@ export function InboxPreviewToolbar({
   canOpenInBrowser,
   canCopyLink,
   canAskAgent,
+  canRemind,
   onOpenInApp,
   onOpenInBrowser,
   onCopyLink,
   onAskAgent,
+  onRemind,
 }: {
   zoom: PreviewToolbarZoom;
   canOpenInApp: boolean;
   canOpenInBrowser: boolean;
   canCopyLink: boolean;
   canAskAgent: boolean;
+  canRemind: boolean;
   onOpenInApp: () => void;
   onOpenInBrowser: () => void;
   onCopyLink: () => void;
   onAskAgent: () => void;
+  onRemind: () => void;
 }) {
   return (
     <PreviewToolbar
@@ -57,6 +61,7 @@ export function InboxPreviewToolbar({
       items={[
         { label: "Copy URL", hint: "C", onSelect: onCopyLink, disabled: !canCopyLink },
         { label: "Ask the agent", hint: "Q", onSelect: onAskAgent, disabled: !canAskAgent },
+        { label: "Remind if no reply…", hint: "W", onSelect: onRemind, disabled: !canRemind },
       ]}
     />
   );
