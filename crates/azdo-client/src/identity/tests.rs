@@ -353,3 +353,38 @@ fn identity_search_rank_prefers_exact_and_prefix_matches() {
 
     assert!(identity_search_rank(&exact, "Alice") < identity_search_rank(&loose, "Alice"));
 }
+
+#[tokio::test]
+async fn get_identities_by_ids_joins_ids_and_returns_identities() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/testorg/_apis/identities"))
+        .and(query_param("api-version", "7.1"))
+        .and(query_param("identityIds", "id-1,id-2"))
+        .and(query_param("queryMembership", "None"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{ "id": "id-1", "providerDisplayName": "Alice" }]
+        })))
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server).await;
+    let identities = client
+        .get_identities_by_ids(&["id-1".to_string(), "id-2".to_string()])
+        .await
+        .unwrap();
+
+    assert_eq!(identities.len(), 1);
+    assert_eq!(
+        identities[0].provider_display_name.as_deref(),
+        Some("Alice")
+    );
+}
+
+#[tokio::test]
+async fn get_identities_by_ids_skips_request_for_empty_ids() {
+    let server = MockServer::start().await;
+    let client = test_client(&server).await;
+    assert!(client.get_identities_by_ids(&[]).await.unwrap().is_empty());
+}
