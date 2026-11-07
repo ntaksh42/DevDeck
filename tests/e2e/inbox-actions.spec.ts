@@ -9,7 +9,7 @@ test("replies and resolves PR threads in Inbox using the keyboard", async ({ pag
   const reply = page.getByPlaceholder("Reply…", { exact: true });
   await expect(reply).toBeVisible();
   await list.focus();
-  await page.keyboard.press("r");
+  await page.keyboard.press("m");
   await expect(reply).toBeFocused();
   await reply.fill("Confirmed the null handling in Inbox.");
   await page.keyboard.press("Control+Enter");
