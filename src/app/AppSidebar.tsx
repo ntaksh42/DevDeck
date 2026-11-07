@@ -21,6 +21,7 @@ import {
   Settings,
 } from "lucide-react";
 import type { ProviderCapabilities } from "@/lib/azdoCommands";
+import { toggleAgentPanel } from "@/components/agent/agentSubject";
 import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/navOrder";
 import { isEditableTarget } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
@@ -49,6 +50,7 @@ export interface AppSidebarProps {
   myWorkItemsBadge: number | null;
   notificationsBadge: number | null;
   inboxBadge: number | null;
+  agentBadge: number | null;
   crossOrgSummaryEnabled: boolean;
   onNavigate: (view: View) => void;
   onOpenHelp: () => void;
@@ -70,6 +72,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
     myWorkItemsBadge,
     notificationsBadge,
     inboxBadge,
+    agentBadge,
     crossOrgSummaryEnabled,
     onNavigate,
     onOpenHelp,
@@ -456,6 +459,14 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             label="Notifications"
             badge={notificationsBadge}
             onClick={() => onNavigate("notifications")}
+          />
+          <NavButton
+            active={false}
+            icon={<Bot className="h-4 w-4" aria-hidden="true" />}
+            label="Agent"
+            shortcut="Control+J"
+            badge={agentBadge}
+            onClick={() => toggleAgentPanel()}
           />
           <NavButton
             active={false}
