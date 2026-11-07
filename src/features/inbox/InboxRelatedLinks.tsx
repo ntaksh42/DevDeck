@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { InboxLink } from "./inboxPresentation";
 import { INBOX_LINK_ORIGINS } from "./inboxLinks";
 import { Kbd } from "./InboxPreviewPanels";
@@ -30,17 +31,42 @@ function LinkChip({ link, number, onOpen }: { link: InboxLink; number: number; o
 }
 
 /**
- * Every link around the item in one place, above the conversation, so an
- * answer needs no scrolling past the thread (and the pinned reply box) to find
- * the work item, PR or page the comment is about. `links` is already ordered by
+ * Every link around the item in one place, folded to a line of counts under the
+ * conversation so the comment comes first. `links` is already ordered by
  * origin; the first nine are opened with `1`-`9` from the list, all of them
- * with Tab and Enter.
+ * with Tab and Enter once the section is open.
  */
-export function InboxRelatedLinks({ links, onOpen }: { links: InboxLink[]; onOpen: (link: InboxLink) => void }) {
+export function InboxRelatedLinks({
+  itemId,
+  links,
+  onOpen,
+}: {
+  /** Folding is per item: a different item starts folded again. */
+  itemId: number;
+  links: InboxLink[];
+  onOpen: (link: InboxLink) => void;
+}) {
+  // One line of counts until opened; `1`-`9` from the list works either way.
+  const [expandedFor, setExpandedFor] = useState<number | null>(null);
+  const expanded = expandedFor === itemId;
   if (links.length === 0) return null;
+  const summary = INBOX_LINK_ORIGINS.map(({ origin, label }) => {
+    const count = links.filter((link) => link.origin === origin).length;
+    return count > 0 ? `${label} ${count}` : null;
+  })
+    .filter(Boolean)
+    .join(" · ");
   return (
     <section aria-label="Related links" data-inbox-links="true" className="mt-1.5 space-y-0.5 text-xs">
-      {INBOX_LINK_ORIGINS.map(({ origin, label }) => {
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpandedFor(expanded ? null : itemId)}
+        className="rounded px-1 text-2xs text-primary hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        {expanded ? "▾" : "▸"} {summary}
+      </button>
+      {expanded ? INBOX_LINK_ORIGINS.map(({ origin, label }) => {
         const group = links.map((link, index) => ({ link, number: index + 1 })).filter(({ link }) => link.origin === origin);
         if (group.length === 0) return null;
         return (
@@ -58,7 +84,7 @@ export function InboxRelatedLinks({ links, onOpen }: { links: InboxLink[]; onOpe
             ))}
           </div>
         );
-      })}
+      }) : null}
     </section>
   );
 }

@@ -4,7 +4,7 @@ import {
   extractInboxLinks,
   inboxKindLabel,
   inboxLocationLabel,
-  inboxRowTitle,
+  inboxRowSubject,
   isThreadItem,
   matchesInboxFilter,
   matchesInboxPriority,
@@ -65,17 +65,16 @@ describe("extractInboxLinks", () => {
   });
 });
 
-describe("inboxRowTitle", () => {
-  it("returns the title for comment rows so the row says what it is about", () => {
-    expect(inboxRowTitle(item())).toBe("Fix null handling");
-    expect(inboxRowTitle(item({ kind: "wi_mention", title: "Login is slow" }))).toBe(
-      "Login is slow",
+describe("inboxRowSubject", () => {
+  it("names the PR or work item by id and title so the row says what it is about", () => {
+    expect(inboxRowSubject(item())).toBe("!42 Fix null handling");
+    expect(inboxRowSubject(item({ kind: "wi_mention", subjectId: 7, title: "Login is slow" }))).toBe(
+      "#7 Login is slow",
     );
   });
 
-  it("has none when the row already shows the title", () => {
-    expect(inboxRowTitle(item({ kind: "pr_review_request", snippet: null }))).toBeNull();
-    expect(inboxRowTitle(item({ snippet: "Fix null handling" }))).toBeNull();
+  it("falls back to the repository or project when there is no title", () => {
+    expect(inboxRowSubject(item({ title: "" }))).toBe("!42 api-gateway");
   });
 });
 

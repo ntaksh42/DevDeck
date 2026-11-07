@@ -67,6 +67,10 @@ describe("InboxView context", () => {
     fireEvent.click(rowFor(list, "!42"));
     const notes = await screen.findByRole("region", { name: "Notes by Claude" });
     expect(within(notes).getByText("Fix first")).toBeTruthy();
+    // Evidence and the draft's text are folded; the reply button is not.
+    expect(within(notes).queryByText("unverified")).toBeNull();
+    expect(within(notes).getByRole("button", { name: /Use as reply/ })).toBeTruthy();
+    fireEvent.click(within(notes).getByRole("button", { name: /Evidence/ }));
     expect(within(notes).getAllByText("src/app/dashboard.ts:7").length).toBeGreaterThan(0);
     expect(within(notes).getByText("unverified")).toBeTruthy();
     const thread = await screen.findByText("Could you add a test for the empty case?");

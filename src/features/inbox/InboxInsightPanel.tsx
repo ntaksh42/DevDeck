@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { InboxInsight } from "@/lib/azdoCommands";
 import { Kbd } from "./InboxPreviewPanels";
 
@@ -15,15 +16,21 @@ export const VERDICTS: Record<string, { label: string; className: string; rowCla
  * written or when it failed, so it is found in the same place on every item.
  */
 export function InboxInsightPanel({
+  itemId,
   insight,
   onUseDraft,
   onGenerate,
 }: {
+  /** Folding is per item: a different item starts folded again. */
+  itemId: number;
   insight: InboxInsight | null;
   onUseDraft: (text: string) => void;
   /** Set when notes can be written on request (summaries on, open comment item). */
   onGenerate?: () => void;
 }) {
+  // Folded by default: the verdict, its reason and the reply button are enough to decide; evidence and the draft's text open on demand.
+  const [expandedFor, setExpandedFor] = useState<number | null>(null);
+  const expanded = expandedFor === itemId;
   const generateButton = onGenerate ? (
     <button
       type="button"
@@ -46,6 +53,8 @@ export function InboxInsightPanel({
     ) : null;
   }
   const verdict = insight.verdict ? VERDICTS[insight.verdict] : undefined;
+  const hasDetails = insight.status === "ready" && (insight.evidence.length > 0 || !!insight.replyDraft);
+  const detailsLabel = insight.evidence.length > 0 ? `Evidence (${insight.evidence.length})` : "Suggested reply";
   return (
     <section
       aria-label="Notes by Claude"
@@ -72,7 +81,29 @@ export function InboxInsightPanel({
         {insight.status === "pending" ? null : generateButton}
       </div>
 
-      {insight.evidence.length > 0 ? (
+      {hasDetails ? (
+        <div className="mt-1 flex items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpandedFor(expanded ? null : itemId)}
+            className="rounded px-1 text-2xs text-primary hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {expanded ? "▾" : "▸"} {detailsLabel}
+          </button>
+          {insight.replyDraft ? (
+            <button
+              type="button"
+              onClick={() => onUseDraft(insight.replyDraft ?? "")}
+              className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              Use as reply <Kbd>Shift+R</Kbd>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {expanded && insight.evidence.length > 0 ? (
         <ul className="mt-1 space-y-1">
           {insight.evidence.map((evidence, index) => (
             <li key={index} className="min-w-0">
@@ -97,17 +128,10 @@ export function InboxInsightPanel({
         </ul>
       ) : null}
 
-      {insight.replyDraft ? (
+      {expanded && insight.replyDraft ? (
         <div className="mt-1.5 rounded border-l-2 border-l-info bg-background px-2 py-1">
           <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">Suggested reply</p>
           <p className="mt-0.5 whitespace-pre-line break-words">{insight.replyDraft}</p>
-          <button
-            type="button"
-            onClick={() => onUseDraft(insight.replyDraft ?? "")}
-            className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            Use as reply <Kbd>Shift+R</Kbd>
-          </button>
         </div>
       ) : null}
     </section>

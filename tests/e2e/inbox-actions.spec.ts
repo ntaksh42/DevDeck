@@ -4,7 +4,7 @@ test("replies and resolves PR threads in Inbox using the keyboard", async ({ pag
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
   const list = page.getByRole("listbox", { name: "Inbox items" });
-  const row = list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
+  const row = list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
   await row.click();
   const reply = page.getByPlaceholder("Reply…", { exact: true });
   await expect(reply).toBeVisible();
@@ -16,7 +16,7 @@ test("replies and resolves PR threads in Inbox using the keyboard", async ({ pag
   await expect(row).toHaveCount(0);
   await expect(list.getByRole("option", { selected: true })).toBeFocused();
 
-  const next = list.getByRole("option").filter({ hasText: "!189 android-app" });
+  const next = list.getByRole("option").filter({ hasText: "!189 " });
   await next.click();
   const resolve = page.getByRole("button", { name: /^Resolve \+ Done/ });
   await resolve.focus();
@@ -37,7 +37,7 @@ test("Ctrl+Enter opens the browser from Inbox preview but submits in the reply e
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
   const list = page.getByRole("listbox", { name: "Inbox items" });
-  await list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" }).click();
+  await list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" }).click();
   const preview = page.locator('[data-primary-preview="true"]').filter({ has: page.getByRole("heading", { name: /!42/ }) });
   await preview.focus();
   await page.keyboard.press("Control+Enter");
@@ -46,7 +46,7 @@ test("Ctrl+Enter opens the browser from Inbox preview but submits in the reply e
   const reply = page.getByPlaceholder("Reply…", { exact: true });
   await reply.fill("Reply instead of opening a browser.");
   await page.keyboard.press("Control+Enter");
-  await expect(list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" })).toHaveCount(0);
+  await expect(list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" })).toHaveCount(0);
   expect(await urls()).toHaveLength(1);
 });
 
@@ -54,7 +54,7 @@ test("finishes, undoes and snoozes Inbox items with the keyboard alone", async (
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
   const list = page.getByRole("listbox", { name: "Inbox items" });
-  const first = list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
+  const first = list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
   await first.click();
   const selected = list.getByRole("option", { selected: true });
 
@@ -66,7 +66,7 @@ test("finishes, undoes and snoozes Inbox items with the keyboard alone", async (
 
   // U puts it back and selects it again.
   await page.keyboard.press("u");
-  await expect(selected).toContainText("!42 azdo-dashboard");
+  await expect(selected).toContainText("!42 Add pull request search dashboard");
   await expect(selected).toBeFocused();
 
   // Z opens the snooze menu; a number picks a preset and focus returns to the list.
@@ -83,7 +83,7 @@ test("shows the commented code and the PR summary without leaving Inbox", async 
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
   const list = page.getByRole("listbox", { name: "Inbox items" });
-  const row = list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
+  const row = list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
   await expect(row).toContainText("dashboard.ts:7");
   await row.click();
   const context = page.getByRole("region", { name: "Context" });

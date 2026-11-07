@@ -34,13 +34,14 @@ describe("InboxView", () => {
     const list = await openList();
     const rows = storedRows(list);
     expect(rows[0].textContent).toContain("Mention");
-    expect(rows[0].textContent).toContain("!42 azdo-dashboard");
-    expect(rows[0].textContent).toContain("Add pull request search dashboard");
+    expect(rows[0].textContent).toContain("!42 Add pull request search dashboard");
+    // The repository is not in the row text; it moved to the subject's tooltip.
+    expect(rows[0].querySelector('[title^="azdo-dashboard"]')).toBeTruthy();
     expect(rows[1].textContent).toContain("WI mention");
-    expect(rows[1].textContent).toContain("#123 Platform");
+    expect(rows[1].textContent).toContain("#123 ");
     expect(rows[2].textContent).toContain("Reply");
-    expect(rows[2].textContent).toContain("!103 api-gateway");
-    expect(rows[3].textContent).toContain("!189 android-app");
+    expect(rows[2].textContent).toContain("!103 ");
+    expect(rows[3].textContent).toContain("!189 ");
   });
 
   it("shows how many comments wait in a conversation when there are several", async () => {
@@ -126,7 +127,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(within(done).getAllByRole("option")).toHaveLength(1);
     });
-    expect(within(done).getByRole("option").textContent).toContain("!42 azdo-dashboard");
+    expect(within(done).getByRole("option").textContent).toContain("!42 Add pull request search dashboard");
 
     // e on a Done item reopens it.
     fireEvent.keyDown(done, { key: "e" });
@@ -331,7 +332,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(within(list).getAllByRole("option")).toHaveLength(1);
     });
-    expect(within(list).getByRole("option").textContent).toContain("!189 android-app");
+    expect(within(list).getByRole("option").textContent).toContain("!189 ");
   });
 });
 

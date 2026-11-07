@@ -17,7 +17,7 @@ export function InboxPriorityFilter({ value, counts, onChange, onFocusList }: {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   return (
-    <div role="radiogroup" aria-label="Inbox priority" className="flex shrink-0 items-center gap-0.5">
+    <div role="radiogroup" aria-label="Inbox priority" className="flex shrink-0 items-center overflow-hidden rounded border border-border">
       {OPTIONS.map((option, index) => (
         <button
           key={option.value}
@@ -46,7 +46,7 @@ export function InboxPriorityFilter({ value, counts, onChange, onFocusList }: {
             onChange(OPTIONS[next].value);
             buttons.current[next]?.focus();
           }}
-          className={`rounded px-1.5 text-2xs leading-4 focus:outline-none focus:ring-1 focus:ring-ring ${value === option.value ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+          className={`border-l border-border px-2 text-2xs leading-4 first:border-l-0 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring ${value === option.value ? "bg-primary font-semibold text-primary-foreground" : "bg-card text-muted-foreground hover:bg-secondary"}`}
         >
           {option.label} <span className="tabular-nums">{counts[option.value]}</span>
         </button>
