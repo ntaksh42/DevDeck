@@ -28,7 +28,7 @@ function ageLabel(createdDate: string | null): string {
   return days <= 0 ? "today" : `${days}d`;
 }
 
-export function AutoQueueView() {
+export function AutoQueueView({ onDecided }: { onDecided?: () => void } = {}) {
   const queryClient = useQueryClient();
   const [skipped, setSkipped] = useState(loadSkipped);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -75,6 +75,7 @@ export function AutoQueueView() {
     onSuccess: (count, targets) => {
       pushToast(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
+      onDecided?.();
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
     },
@@ -96,7 +97,8 @@ export function AutoQueueView() {
     if (targets.length === 0) return;
     setSkipped((current) => addSkipped(current, targets));
     setChecked(new Set());
-  }, [selected, focused]);
+    onDecided?.();
+  }, [selected, focused, onDecided]);
 
   const toggle = useCallback((item: AutoQueueItem) => {
     setChecked((current) => {
@@ -167,7 +169,7 @@ export function AutoQueueView() {
         </span>
         {!approval && (
           <span className="text-xs text-amber-700 dark:text-amber-400">
-            Settings → Agent command: turn on “Choose what to run in Auto queue first” to hold back the automatic run.
+            Items found at app start wait here for a pick; later ones run automatically. Turn on “Choose what to run in Auto queue first” (Settings → Agent command) to pick every time.
           </span>
         )}
         <span className="flex-1" />

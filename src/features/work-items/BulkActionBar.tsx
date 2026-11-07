@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ChevronDown, Loader2, X } from 'lucide-react';
 import type { BulkWorkItemResult, WorkItemAssigneeCandidate } from '@/lib/azdoCommands';
 import { isImeComposing } from "@/lib/utils";
@@ -118,6 +118,7 @@ export function BulkActionBar({
   onTagsApply,
   snoozePending,
   onSnoozeOpen,
+  extraActions,
 }: {
   count: number;
   typeBreakdown: { label: string; count: number }[];
@@ -145,12 +146,35 @@ export function BulkActionBar({
   onTagsApply: (tag: string, mode: "add" | "remove") => void;
   snoozePending: boolean;
   onSnoozeOpen: (anchorRect: DOMRect) => void;
+  extraActions?: ReactNode;
 }) {
   const stateListRef = useRef<HTMLDivElement>(null);
   const priorityListRef = useRef<HTMLDivElement>(null);
   const assignInputRef = useRef<HTMLInputElement>(null);
   const assignListRef = useRef<HTMLDivElement>(null);
   const [tagDraft, setTagDraft] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const editRef = useRef<HTMLDivElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+
+  // The Edit panel opens on its first control and closes on an outside click.
+  useEffect(() => {
+    if (!editOpen) return;
+    editRef.current?.querySelector<HTMLElement>("[data-edit-panel] button")?.focus();
+    const onDown = (event: MouseEvent) => {
+      if (!editRef.current?.contains(event.target as Node)) setEditOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [editOpen]);
+
+  function onEditKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // A picker inside handles its own Escape first; the panel closes on the next one.
+    if (event.key !== "Escape" || stateOpen || assignOpen || priorityOpen) return;
+    event.stopPropagation();
+    setEditOpen(false);
+    editButtonRef.current?.focus();
+  }
 
   function applyTag(mode: "add" | "remove") {
     const tag = tagDraft.trim();
@@ -160,7 +184,7 @@ export function BulkActionBar({
   }
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
+    <div className="relative z-40 mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
       <span className="text-xs font-medium text-foreground">
         {count} item{count === 1 ? "" : "s"} selected
       </span>
@@ -175,6 +199,7 @@ export function BulkActionBar({
           <BulkBreakdown entries={stateBreakdown} />
         </span>
       ) : null}
+      <span className="h-5 w-px bg-border" aria-hidden="true" />
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -185,6 +210,26 @@ export function BulkActionBar({
           {snoozePending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
           Snooze
         </button>
+        <span className="h-5 w-px bg-border" aria-hidden="true" />
+        {extraActions}
+        <span className="h-5 w-px bg-border" aria-hidden="true" />
+        <div ref={editRef} className="relative" onKeyDown={onEditKeyDown}>
+          <button
+            ref={editButtonRef}
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={editOpen}
+            aria-label="Edit selection"
+            onClick={() => setEditOpen((open) => !open)}
+            title="Change state, assignee, priority or tags of the selection"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary"
+          >
+            Edit
+            <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+          </button>
+          {editOpen ? (
+            <div data-edit-panel className="absolute left-0 top-full z-30 mt-1 flex w-max flex-col gap-2 rounded-md border border-border bg-popover p-2 shadow-lg">
+              <div className="flex items-center gap-1.5">
         {/* State picker */}
         <div className="relative">
           <button
@@ -338,6 +383,7 @@ export function BulkActionBar({
             </div>
           ) : null}
         </div>
+              </div>
         {/* Tags add/remove across the selection */}
         <div className="flex items-center gap-1">
           <input
@@ -373,6 +419,9 @@ export function BulkActionBar({
           >
             Remove
           </button>
+        </div>
+            </div>
+          ) : null}
         </div>
       </div>
       <button

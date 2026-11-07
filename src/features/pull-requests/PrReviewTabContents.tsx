@@ -14,6 +14,7 @@ import { focusPrimaryPreview } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
@@ -83,6 +84,9 @@ export function ReviewTab({
   } = usePrReviewActions(pr);
 
   const mentionSearch = usePrMentionSearch(pr.organizationId);
+  const descriptionMentionNames = useMentionIdentityNames(pr.organizationId, [
+    review?.description,
+  ]);
   const resolvePreviewImage = useCallback(
     (url: string) => fetchWorkItemImageCached({ organizationId: pr.organizationId, url }),
     [pr.organizationId],
@@ -317,6 +321,7 @@ export function ReviewTab({
                   className="text-xs text-foreground"
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
+                  mentionDisplayNames={descriptionMentionNames}
                 />
               ) : (
                 <p className="text-xs italic text-muted-foreground">No description.</p>
@@ -368,6 +373,7 @@ export function ReviewTab({
                   mentionSearch={mentionSearch}
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
+                  organizationId={pr.organizationId}
                   onReply={(content) =>
                     commentMutation.mutateAsync({
                       ...prLocator(pr),

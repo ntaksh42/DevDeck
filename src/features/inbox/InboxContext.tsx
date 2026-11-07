@@ -2,6 +2,7 @@ import type { PrThread, PullRequestReview, WorkItemPreview } from "@/lib/azdoCom
 import { navigateToWorkItem } from "@/lib/crossLinks";
 import { formatRelativeDate } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
 import { richFieldHtml } from "@/features/work-items/workItemHtml";
 import { InboxCodeSnippet } from "./InboxCodeSnippet";
@@ -124,6 +125,7 @@ export function InboxContextDescription({
   resolveImageSource: (url: string) => Promise<string | null>;
 }) {
   const markdown = review ? review.description : null;
+  const mentionDisplayNames = useMentionIdentityNames(item.organizationId, [markdown]);
   const html = !review && workItem ? richFieldHtml(workItem.descriptionHtml) : null;
   if (!markdown && !html) return null;
   return (
@@ -135,6 +137,7 @@ export function InboxContextDescription({
           className="mt-1 break-words"
           baseUrl={item.webUrl}
           resolveImageSource={resolveImageSource}
+          mentionDisplayNames={mentionDisplayNames}
         />
       ) : null}
       {expanded && html && workItem ? (

@@ -8,15 +8,16 @@ use crate::error::Result;
 
 use super::super::{
     MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
-    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, WorkItemAssigneeCandidate,
-    WorkItemService, UPDATE_CANDIDATES_CACHE_CAP, UPDATE_CANDIDATES_TTL,
+    ResolveMentionIdentitiesInput, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
+    WorkItemAssigneeCandidate, WorkItemService, UPDATE_CANDIDATES_CACHE_CAP, UPDATE_CANDIDATES_TTL,
 };
 use super::{
     assignee_candidate_from_history, assignee_candidate_from_identity_picker,
     assignee_candidate_from_mention, assignee_candidate_matches_query,
-    assignee_candidates_from_updates, is_authenticated_user, mention_candidate_from_assignee,
-    mention_candidate_from_history, mention_candidate_from_identity_picker,
-    mention_candidate_matches_query, push_unique_assignee_candidate, push_unique_mention_candidate,
+    assignee_candidates_from_updates, is_authenticated_user, is_mention_resolvable_id,
+    mention_candidate_from_assignee, mention_candidate_from_history,
+    mention_candidate_from_identity_picker, mention_candidate_matches_query,
+    push_unique_assignee_candidate, push_unique_mention_candidate,
     search_identity_picker_with_fallback, summarize_mention_candidate,
 };
 
@@ -49,6 +50,27 @@ impl WorkItemService {
         }
         cache.insert(key, (Instant::now(), candidates.clone()));
         Ok(candidates)
+    }
+
+    /// Resolves `@<guid>` mention ids to display names. Ids that cannot be
+    /// resolved (deleted users, groups) are left out of the result.
+    pub async fn resolve_mention_identities(
+        &self,
+        input: ResolveMentionIdentitiesInput,
+    ) -> Result<Vec<MentionCandidate>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let ids: Vec<String> = input
+            .ids
+            .into_iter()
+            .filter(|id| is_mention_resolvable_id(id))
+            .take(50)
+            .collect();
+        let identities = client.get_identities_by_ids(&ids).await?;
+        Ok(identities
+            .into_iter()
+            .filter_map(summarize_mention_candidate)
+            .collect())
     }
 
     pub fn record_mention_interaction(&self, input: RecordMentionInteractionInput) -> Result<()> {

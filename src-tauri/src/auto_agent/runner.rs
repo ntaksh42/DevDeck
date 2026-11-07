@@ -7,6 +7,7 @@ use chrono::Utc;
 
 use super::state::{History, Status, TIMEOUT_SECS};
 use super::{context, diffs, AutoItem};
+use crate::agent_notes::launch::AgentKind;
 use crate::agent_notes::{
     automation, AgentNoteService, CreateAgentNoteInput, ListAgentNotesInput, NoteTarget,
     RunAgentInput,
@@ -27,6 +28,8 @@ struct Material {
     head: Option<String>,
     complete: bool,
     has_content: bool,
+    /// Agent picked for a manual run; unset, the one chosen in Settings.
+    agent: Option<AgentKind>,
 }
 
 pub(super) async fn process_item(
@@ -34,6 +37,7 @@ pub(super) async fn process_item(
     settings: &AppSettings,
     org: &Organization,
     item: &AutoItem,
+    agent: Option<AgentKind>,
 ) -> Result<bool> {
     let path = item.history_path(db, org);
     if super::state::has_number_collision(db, &path)? {
@@ -82,7 +86,10 @@ pub(super) async fn process_item(
     }
     let mut observed_range = (None, None);
     let material = match prepare(db, settings, org, item, &history, &mut observed_range).await {
-        Ok(Some(material)) => material,
+        Ok(Some(mut material)) => {
+            material.agent = agent;
+            material
+        }
         Ok(None) => return Ok(false),
         Err(error) => {
             history.begin(
@@ -176,6 +183,7 @@ async fn prepare(
                 head: changes.target_commit_id,
                 complete: diff.complete,
                 has_content: diff.has_content || changes.files.is_empty(),
+                agent: None,
             }))
         }
         AutoItem::WorkItem(wi) => {
@@ -208,6 +216,7 @@ async fn prepare(
                 head: None,
                 complete: true,
                 has_content: true,
+                agent: None,
             }))
         }
     }
@@ -322,7 +331,7 @@ async fn execute_attempt(
         target: item.target(),
         item_id: item.id(),
         repository_name: material.repository,
-        agent: None,
+        agent: material.agent,
         model: None,
     };
     let outcome = match service.run_agent_tracked(input, &log_path) {
