@@ -23,7 +23,9 @@ pub(super) fn note_body(target: NoteTarget, result_folder: &str) -> String {
          - 結果 HTML は skill `devdeck-result-html` の書式に従う。\n\
          - 読み取り専用: コードやブランチは変更しない。\n\
          - PR / WI へのコメントの提案 (`post`) は書かない。\n\
-         - 資料は `context_file` と手元のクローンから得る。"
+         - 資料は `context_file` と手元のクローンから得る。\n\
+         - 資料が足りずに結果 HTML を作れないときは、質問を返さない。理由を 1 行で返信し、\
+         front-matter に `resolved: 資料不足` を追記して Note を `_done/` へ移す。"
     )
 }
 
@@ -60,6 +62,7 @@ pub(super) fn pull_request(
     pr: &CachedReviewPr,
     review: &PullRequestReview,
     changes: Option<&PullRequestChanges>,
+    diffs: &str,
 ) -> String {
     let threads = review
         .threads
@@ -133,6 +136,7 @@ pub(super) fn pull_request(
         or_none(review.description.clone().unwrap_or_default()),
         "## Changed files".to_string(),
         files,
+        diffs.to_string(),
         "## Comment threads".to_string(),
         or_none(threads),
     ])

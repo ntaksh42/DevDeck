@@ -8,9 +8,13 @@
 //! not to change code or propose comments.
 
 mod context;
+mod diffs;
 
+use chrono::{DateTime, Duration, Utc};
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex};
 
 use crate::agent_notes::{self, AgentNoteService, CreateAgentNoteInput, NoteTarget, RunAgentInput};
 use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, Organization};
@@ -20,11 +24,19 @@ use crate::secrets::SecretStore;
 use crate::settings::result_files;
 use crate::work_items::{GetWorkItemPreviewInput, WorkItemService};
 
-/// Items started per organization and sync; the rest wait for later syncs.
-const ITEMS_PER_SYNC: usize = 3;
+/// Pull requests created longer ago than this are left to a manual request.
+const MAX_PR_AGE_DAYS: i64 = 30;
 /// Set while a batch is gathering material, so an overlapping sync does not
 /// pick the same items before their notes exist.
 static RUNNING: AtomicBool = AtomicBool::new(false);
+/// Pull requests whose changes could not be fetched in this session. They are
+/// left alone instead of asking the agent to review code it cannot see, and so
+/// that they do not take a slot of every following sync.
+static NO_CHANGES: LazyLock<Mutex<HashSet<i64>>> = LazyLock::new(Mutex::default);
+
+fn has_no_changes(id: i64) -> bool {
+    NO_CHANGES.lock().is_ok_and(|set| set.contains(&id))
+}
 
 /// One item to hand to the agent.
 #[derive(Debug)]
@@ -49,23 +61,35 @@ impl AutoItem {
     }
 }
 
-/// The next items of the queue, pull requests first, up to the per-sync
-/// limit. Drafts are left out (not ready for review), and so is anything
+/// Whether the pull request still waits for my review: not a draft, no vote of
+/// mine yet, and created within [`MAX_PR_AGE_DAYS`]. An unreadable creation
+/// date does not exclude it.
+fn awaits_review(pr: &CachedReviewPr, now: DateTime<Utc>) -> bool {
+    let recent = DateTime::parse_from_rfc3339(&pr.creation_date)
+        .map(|created| now - created.with_timezone(&Utc) <= Duration::days(MAX_PR_AGE_DAYS))
+        .unwrap_or(true);
+    !pr.is_draft && pr.my_vote == 0 && recent
+}
+
+/// The next items of the queue, pull requests first, up to `limit`. Pull
+/// requests I voted on, drafts and old ones are left out, and so is anything
 /// already handled: it has a notes folder (the user or an earlier run asked)
 /// or a result HTML.
 pub(crate) fn pick(
     prs: Vec<CachedReviewPr>,
     work_items: Vec<CachedWorkItem>,
+    limit: usize,
+    now: DateTime<Utc>,
     is_handled: impl Fn(NoteTarget, i64) -> bool,
 ) -> Vec<AutoItem> {
     let prs = prs
         .into_iter()
-        .filter(|pr| !pr.is_draft)
+        .filter(|pr| awaits_review(pr, now))
         .map(AutoItem::PullRequest);
     let work_items = work_items.into_iter().map(AutoItem::WorkItem);
     prs.chain(work_items)
         .filter(|item| !is_handled(item.target(), item.id()))
-        .take(ITEMS_PER_SYNC)
+        .take(limit)
         .collect()
 }
 
@@ -90,7 +114,11 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
         None => Vec::new(),
     };
     let root = agent_notes::notes_root(db);
-    let items = pick(prs, work_items, |target, id| {
+    let limit = settings.auto_agent_max_per_sync.max(1) as usize;
+    let items = pick(prs, work_items, limit, Utc::now(), |target, id| {
+        if target == NoteTarget::PullRequest && has_no_changes(id) {
+            return true;
+        }
         if agent_notes::notes_dir(&root, target, id).exists() {
             return true;
         }
@@ -139,8 +167,21 @@ async fn start_item(
             let service = PrReviewService::new(db.clone(), SecretStore);
             let review = service.get_review(locator()).await?;
             let changes = service.list_changes(locator()).await.ok();
+            let diffs = match &changes {
+                Some(changes) => diffs::section(&service, locator, changes).await,
+                None => String::new(),
+            };
+            if diffs.is_empty() {
+                // Nothing to review: no note is created, so the agent is not
+                // asked and the result folder is not left with a failed run.
+                tracing::warn!(id = pr.pull_request_id, "auto agent: no changes to review");
+                if let Ok(mut set) = NO_CHANGES.lock() {
+                    set.insert(pr.pull_request_id);
+                }
+                return Ok(());
+            }
             (
-                context::pull_request(pr, &review, changes.as_ref()),
+                context::pull_request(pr, &review, changes.as_ref(), &diffs),
                 format!(
                     "!{} {} {}",
                     pr.pull_request_id,

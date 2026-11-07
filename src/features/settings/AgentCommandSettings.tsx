@@ -44,6 +44,7 @@ export function AgentCommandSettings() {
   const [insightModel, setInsightModel] = useState("");
   const [insightMax, setInsightMax] = useState(3);
   const [autoAgent, setAutoAgent] = useState(false);
+  const [autoAgentMax, setAutoAgentMax] = useState(3);
   const [autoPipelines, setAutoPipelines] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
@@ -78,7 +79,8 @@ export function AgentCommandSettings() {
   ]);
   useEffect(() => {
     setAutoAgent(settingsQuery.data?.autoAgentEnabled ?? false);
-  }, [settingsQuery.data?.autoAgentEnabled]);
+    setAutoAgentMax(settingsQuery.data?.autoAgentMaxPerSync ?? 3);
+  }, [settingsQuery.data?.autoAgentEnabled, settingsQuery.data?.autoAgentMaxPerSync]);
   useEffect(() => {
     setAutoPipelines(settingsQuery.data?.autoAgentPipelinesEnabled ?? false);
   }, [settingsQuery.data?.autoAgentPipelinesEnabled]);
@@ -110,6 +112,7 @@ export function AgentCommandSettings() {
         inboxInsightModel: insightModel,
         inboxInsightMaxPerSync: insightMax,
         autoAgentEnabled: autoAgent,
+        autoAgentMaxPerSync: autoAgentMax,
         autoAgentPipelinesEnabled: autoPipelines,
         ...models,
       }),
@@ -273,10 +276,22 @@ export function AgentCommandSettings() {
             />
             Review pull requests and investigate work items automatically
           </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Items per sync</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={autoAgentMax}
+              onChange={(event) => setAutoAgentMax(Number(event.target.value) || 3)}
+              className={`${INPUT_CLASS} w-24`}
+            />
+          </label>
           <span className="text-xs text-muted-foreground">
             After each sync, the default agent works through pull requests awaiting your review
-            (drafts skipped) and work items assigned to you that have neither agent notes nor a
-            result HTML yet, 3 per sync, including those already waiting when the app starts.
+            (drafts, ones you already voted on, and ones created over 30 days ago are skipped) and
+            work items assigned to you that have neither agent notes nor a result HTML yet,
+            {autoAgentMax} per sync, including those already waiting when the app starts.
             Each becomes an Investigate request in the Agent panel; the agent writes the result
             HTML into the result folder and is told not to change code or propose comments. A
             type without a result folder is skipped. The item's fields, description and comments

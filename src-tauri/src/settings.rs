@@ -13,10 +13,11 @@ use crate::agent_notes::{
 };
 
 use crate::db::{
-    clamp_inbox_insight_max_per_sync, AppDatabase, AppSettings, NotificationRule,
-    DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
-    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS, DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
-    REVIEW_STALE_THRESHOLD_DAY_OPTIONS, WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
+    clamp_auto_agent_max_per_sync, clamp_inbox_insight_max_per_sync, AppDatabase, AppSettings,
+    NotificationRule, DEFAULT_AUTO_AGENT_MAX_PER_SYNC, DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC,
+    DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+    WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
 use crate::diagnostics::{build_report, report_to_json, ConnectionFacts, DiagnosticsInput};
 use crate::error::{AppError, Result};
@@ -53,6 +54,8 @@ pub struct UpdateAppSettingsInput {
     pub inbox_insight_max_per_sync: Option<i64>,
     #[serde(default)]
     pub auto_agent_enabled: Option<bool>,
+    #[serde(default)]
+    pub auto_agent_max_per_sync: Option<i64>,
     #[serde(default)]
     pub auto_agent_pipelines_enabled: Option<bool>,
     pub read_only_validation_mode_enabled: Option<bool>,
@@ -251,6 +254,10 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .map(clamp_inbox_insight_max_per_sync)
             .unwrap_or(DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC),
         auto_agent_enabled: input.auto_agent_enabled.unwrap_or(false),
+        auto_agent_max_per_sync: input
+            .auto_agent_max_per_sync
+            .map(clamp_auto_agent_max_per_sync)
+            .unwrap_or(DEFAULT_AUTO_AGENT_MAX_PER_SYNC),
         auto_agent_pipelines_enabled: input.auto_agent_pipelines_enabled.unwrap_or(false),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),

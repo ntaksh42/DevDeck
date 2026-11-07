@@ -74,8 +74,10 @@ pub struct AppSettings {
     pub inbox_insight_max_per_sync: i64,
     /// After each sync, starts the agent (Agent notes `investigate`) on pull
     /// requests newly awaiting my review and work items newly assigned to me,
-    /// up to three per organization and sync. Off by default.
+    /// up to `auto_agent_max_per_sync` per organization and sync. Off by default.
     pub auto_agent_enabled: bool,
+    /// How many items that automatic run starts per organization and sync (1..=10).
+    pub auto_agent_max_per_sync: i64,
     /// When a watched pipeline's latest run fails, starts the agent on an
     /// `investigate` request about it (the frontend watches pipelines and
     /// starts it). Off by default.
@@ -111,6 +113,7 @@ pub struct AppSettings {
 }
 
 pub const DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC: i64 = 3;
+pub const DEFAULT_AUTO_AGENT_MAX_PER_SYNC: i64 = 3;
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
 pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
@@ -137,6 +140,7 @@ impl Default for AppSettings {
             inbox_insight_model: None,
             inbox_insight_max_per_sync: DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC,
             auto_agent_enabled: false,
+            auto_agent_max_per_sync: DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
             auto_agent_pipelines_enabled: false,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
@@ -207,6 +211,10 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
             .map(clamp_inbox_insight_max_per_sync)
             .unwrap_or(DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC),
         auto_agent_enabled: get_bool_setting(conn, "auto_agent_enabled", false)?,
+        auto_agent_max_per_sync: get_setting(conn, "auto_agent_max_per_sync")?
+            .and_then(|raw| raw.trim().parse::<i64>().ok())
+            .map(clamp_auto_agent_max_per_sync)
+            .unwrap_or(DEFAULT_AUTO_AGENT_MAX_PER_SYNC),
         auto_agent_pipelines_enabled: get_bool_setting(
             conn,
             "auto_agent_pipelines_enabled",
@@ -272,6 +280,10 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
 }
 
 pub fn clamp_inbox_insight_max_per_sync(value: i64) -> i64 {
+    value.clamp(1, 10)
+}
+
+pub fn clamp_auto_agent_max_per_sync(value: i64) -> i64 {
     value.clamp(1, 10)
 }
 
@@ -358,6 +370,11 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         Some(&clamp_inbox_insight_max_per_sync(settings.inbox_insight_max_per_sync).to_string()),
     )?;
     set_bool_setting(conn, "auto_agent_enabled", settings.auto_agent_enabled)?;
+    set_setting(
+        conn,
+        "auto_agent_max_per_sync",
+        Some(&clamp_auto_agent_max_per_sync(settings.auto_agent_max_per_sync).to_string()),
+    )?;
     set_bool_setting(
         conn,
         "auto_agent_pipelines_enabled",

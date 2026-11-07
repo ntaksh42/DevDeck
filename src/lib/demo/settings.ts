@@ -79,6 +79,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   inboxInsightModel: null,
   inboxInsightMaxPerSync: 3,
   autoAgentEnabled: false,
+  autoAgentMaxPerSync: 3,
   autoAgentPipelinesEnabled: false,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
@@ -191,6 +192,10 @@ export function applyDemoSettingsUpdate(
       input && "autoAgentEnabled" in input
         ? input.autoAgentEnabled === true
         : current.autoAgentEnabled,
+    autoAgentMaxPerSync:
+      input?.autoAgentMaxPerSync !== undefined
+        ? Math.min(10, Math.max(1, Math.round(input.autoAgentMaxPerSync)))
+        : current.autoAgentMaxPerSync,
     autoAgentPipelinesEnabled:
       input && "autoAgentPipelinesEnabled" in input
         ? input.autoAgentPipelinesEnabled === true

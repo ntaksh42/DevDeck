@@ -33,6 +33,7 @@ function nonDefaultSettings(): AppSettings {
     inboxInsightModel: "opus",
     inboxInsightMaxPerSync: 3,
     autoAgentEnabled: true,
+    autoAgentMaxPerSync: 3,
     autoAgentPipelinesEnabled: true,
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,

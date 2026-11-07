@@ -1,7 +1,15 @@
 use super::context::html_to_text;
+use super::diffs::changed_region;
 use super::{pick, AutoItem};
 use crate::agent_notes::NoteTarget;
 use crate::db::{CachedReviewPr, CachedWorkItem};
+use chrono::{DateTime, Utc};
+
+fn now() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-11-07T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc)
+}
 
 fn pr(id: i64, is_draft: bool) -> CachedReviewPr {
     CachedReviewPr {
@@ -56,6 +64,8 @@ fn picks_unhandled_non_draft_items_pull_requests_first() {
     let picked = pick(
         vec![pr(1, false), pr(2, false), pr(3, true)],
         vec![wi(10), wi(11)],
+        3,
+        now(),
         |target, id| target == NoteTarget::PullRequest && id == 1,
     );
     assert_eq!(
@@ -73,6 +83,8 @@ fn caps_items_per_sync_leaving_the_rest_queued() {
     let picked = pick(
         vec![pr(1, false), pr(2, false)],
         vec![wi(10), wi(11)],
+        3,
+        now(),
         |_, _| false,
     );
     assert_eq!(
@@ -87,9 +99,35 @@ fn caps_items_per_sync_leaving_the_rest_queued() {
     let next = pick(
         vec![pr(1, false), pr(2, false)],
         vec![wi(10), wi(11)],
+        3,
+        now(),
         |target, id| target == NoteTarget::PullRequest || id == 10,
     );
     assert_eq!(ids(&next), vec![(NoteTarget::WorkItem, 11)]);
+}
+
+#[test]
+fn the_limit_comes_from_the_caller() {
+    let picked = pick(
+        vec![pr(1, false), pr(2, false)],
+        vec![],
+        1,
+        now(),
+        |_, _| false,
+    );
+    assert_eq!(ids(&picked), vec![(NoteTarget::PullRequest, 1)]);
+}
+
+#[test]
+fn leaves_out_pull_requests_i_voted_on_and_old_ones() {
+    let mut voted = pr(1, false);
+    voted.my_vote = 10;
+    let mut old = pr(2, false);
+    old.creation_date = "2026-09-01T00:00:00Z".into();
+    let mut recent = pr(3, false);
+    recent.creation_date = "2026-10-20T00:00:00Z".into();
+    let picked = pick(vec![voted, old, recent], vec![], 3, now(), |_, _| false);
+    assert_eq!(ids(&picked), vec![(NoteTarget::PullRequest, 3)]);
 }
 
 #[test]
@@ -98,4 +136,18 @@ fn html_to_text_keeps_line_breaks_and_decodes_entities() {
         html_to_text("<div>a &amp; b</div><p>c<br/>d</p>\n\n\n<span>&lt;e&gt;</span>"),
         "a & b\nc\nd\n\n<e>"
     );
+}
+
+#[test]
+fn changed_region_keeps_the_differing_lines_with_context() {
+    let (before, after) = changed_region("a\nb\nc\nd\ne\nf\ng\nh\ni", "a\nb\nc\nd\nE\nf\ng\nh\ni");
+    assert_eq!(before, "b\nc\nd\ne\nf\ng\nh");
+    assert_eq!(after, "b\nc\nd\nE\nf\ng\nh");
+}
+
+#[test]
+fn changed_region_of_an_added_file_is_the_whole_file() {
+    let (before, after) = changed_region("", "x\ny");
+    assert_eq!(before, "");
+    assert_eq!(after, "x\ny");
 }
