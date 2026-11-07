@@ -23,6 +23,7 @@ use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 
 mod asks;
+pub(crate) mod automation;
 mod create;
 mod format;
 mod guide;
@@ -265,6 +266,31 @@ impl AgentNoteService {
 
     /// Starts the agent command from Settings for one item's notes.
     pub fn run_agent(&self, input: RunAgentInput) -> Result<()> {
+        self.with_launch(input, launch::run_agent)
+    }
+
+    pub(crate) fn run_agent_tracked(
+        &self,
+        input: RunAgentInput,
+        log_path: &Path,
+    ) -> Result<launch::TrackedChild> {
+        self.with_launch(input, |context, agent, command, target, item_id| {
+            launch::spawn_agent(context, agent, command, target, item_id, Some(log_path))
+                .and_then(launch::TrackedChild::new)
+        })
+    }
+
+    fn with_launch<T>(
+        &self,
+        input: RunAgentInput,
+        start: impl FnOnce(
+            &launch::AgentLaunch<'_>,
+            launch::AgentKind,
+            Option<&str>,
+            NoteTarget,
+            i64,
+        ) -> Result<T>,
+    ) -> Result<T> {
         validate_id(input.item_id)?;
         let folder = self.require_folder(input.target)?;
         let settings = self.db.get_app_settings()?;
@@ -300,7 +326,7 @@ impl AgentNoteService {
             repository: input.repository_name.as_deref(),
             model: model.filter(|m| !m.is_empty()),
         };
-        launch::run_agent(
+        start(
             &context,
             agent,
             command.as_deref(),

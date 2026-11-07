@@ -11,7 +11,7 @@ use crate::db::CachedReviewPr;
 use crate::pr_review::{PullRequestChanges, PullRequestReview};
 use crate::work_items::WorkItemPreview;
 
-const MAX_CHARS: usize = 400_000;
+const MAX_BYTES: usize = 480_000;
 
 pub(super) fn note_body(target: NoteTarget, result_folder: &str) -> String {
     let (what, folder) = match target {
@@ -55,7 +55,17 @@ fn finish(sections: Vec<String>) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("\n\n");
-    text.chars().take(MAX_CHARS).collect()
+    if text.len() <= MAX_BYTES {
+        return text;
+    }
+    let mut end = MAX_BYTES - 100;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!(
+        "{}\n\n[Context truncated: remaining metadata was omitted.]",
+        &text[..end]
+    )
 }
 
 pub(super) fn pull_request(
@@ -123,6 +133,8 @@ pub(super) fn pull_request(
             "# Pull request !{}: {}",
             review.pull_request_id, review.title
         ),
+        // Code takes priority over potentially unbounded descriptions/threads.
+        diffs.to_string(),
         fields(&[
             ("Repository", Some(pr.repository_name.clone())),
             ("Source", Some(review.source_ref_name.clone())),
@@ -136,7 +148,6 @@ pub(super) fn pull_request(
         or_none(review.description.clone().unwrap_or_default()),
         "## Changed files".to_string(),
         files,
-        diffs.to_string(),
         "## Comment threads".to_string(),
         or_none(threads),
     ])

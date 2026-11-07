@@ -10,38 +10,27 @@
 
 mod context;
 mod diffs;
+mod runner;
+mod state;
 
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration as StdDuration, Instant};
 
-use crate::agent_notes::{self, AgentNoteService, CreateAgentNoteInput, NoteTarget, RunAgentInput};
+use crate::agent_notes::NoteTarget;
 use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, Organization};
 use crate::error::Result;
-use crate::pr_review::{PrLocator, PrReviewService};
-use crate::secrets::SecretStore;
-use crate::settings::result_files;
-use crate::work_items::{GetWorkItemPreviewInput, WorkItemService};
 
 /// Pull requests created longer ago than this are left to a manual request.
 const MAX_PR_AGE_DAYS: i64 = 30;
-/// Set while a batch is gathering material, so an overlapping sync does not
-/// pick the same items before their notes exist.
-static RUNNING: AtomicBool = AtomicBool::new(false);
-/// Pull requests whose changes could not be fetched in this session. They are
-/// left alone instead of asking the agent to review code it cannot see, and so
-/// that they do not take a slot of every following sync.
-static NO_CHANGES: LazyLock<Mutex<HashSet<i64>>> = LazyLock::new(Mutex::default);
-/// When each organization's queue was last checked, so checks happen every
-/// `auto_agent_interval_minutes` instead of after every sync.
+/// Organization batches wait their turn instead of being dropped while a
+/// different organization's agent is still running.
+static BATCH_SLOT: LazyLock<tokio::sync::Semaphore> =
+    LazyLock::new(|| tokio::sync::Semaphore::new(1));
+static QUEUED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
 static LAST_CHECK: LazyLock<Mutex<HashMap<String, Instant>>> = LazyLock::new(Mutex::default);
-
-fn has_no_changes(id: i64) -> bool {
-    NO_CHANGES.lock().is_ok_and(|set| set.contains(&id))
-}
 
 /// Whether the interval since `last` has elapsed (never checked counts as due).
 fn is_due(last: Option<Instant>, now: Instant, interval_minutes: i64) -> bool {
@@ -70,6 +59,14 @@ pub(crate) enum AutoItem {
 }
 
 impl AutoItem {
+    fn history_path(&self, db: &AppDatabase, org: &Organization) -> PathBuf {
+        let repo = match self {
+            Self::PullRequest(pr) => pr.repository_id.as_str(),
+            Self::WorkItem(wi) => wi.project_id.as_str(),
+        };
+        state::history_path(db, &org.id, repo, self.target(), self.id())
+    }
+
     fn target(&self) -> NoteTarget {
         match self {
             Self::PullRequest(_) => NoteTarget::PullRequest,
@@ -97,8 +94,8 @@ fn awaits_review(pr: &CachedReviewPr, now: DateTime<Utc>) -> bool {
 
 /// The next items of the queue, pull requests first, up to `limit`. Pull
 /// requests I voted on, drafts and old ones are left out, and so is anything
-/// already handled: it has a notes folder (the user or an earlier run asked)
-/// or a result HTML.
+/// already handled according to the caller's predicate. Initial selection
+/// remains separate from the durable revision checks for tracked PRs.
 pub(crate) fn pick(
     prs: Vec<CachedReviewPr>,
     work_items: Vec<CachedWorkItem>,
@@ -117,158 +114,116 @@ pub(crate) fn pick(
         .collect()
 }
 
-/// Starts the agent on the next unhandled items in the background. Gathering
-/// the material calls the REST API, so it does not hold up the sync. A target
-/// without a result folder is skipped (there is nowhere to write the result).
-pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
-    if !settings.auto_agent_enabled || RUNNING.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    if !claim_check(
-        &org.id,
-        settings.auto_agent_interval_minutes,
-        Instant::now(),
-    ) {
-        RUNNING.store(false, Ordering::SeqCst);
-        return;
-    }
-    let review_folder = settings.review_result_folder_path.as_deref().map(Path::new);
-    let work_item_folder = settings
-        .work_item_result_folder_path
-        .as_deref()
-        .map(Path::new);
-    let prs = match review_folder {
-        Some(_) => db.list_review_pull_requests(&org.id).unwrap_or_default(),
-        None => Vec::new(),
-    };
-    let work_items = match work_item_folder {
-        Some(_) => db.list_my_work_items(&org.id).unwrap_or_default(),
-        None => Vec::new(),
-    };
-    let root = agent_notes::notes_root(db);
-    let limit = settings.auto_agent_max_per_sync.max(1) as usize;
-    let items = pick(prs, work_items, limit, Utc::now(), |target, id| {
-        if target == NoteTarget::PullRequest && has_no_changes(id) {
-            return true;
-        }
-        if agent_notes::notes_dir(&root, target, id).exists() {
-            return true;
-        }
-        let found = match target {
-            NoteTarget::PullRequest => {
-                review_folder.map(|folder| result_files::find_review_result_file(folder, id))
-            }
-            _ => {
-                work_item_folder.map(|folder| result_files::find_work_item_result_file(folder, id))
-            }
+struct BatchGuard(String);
+impl BatchGuard {
+    fn reserve(key: String) -> Option<Self> {
+        let inserted = {
+            let mut queued = QUEUED.lock().ok()?;
+            queued.insert(key.clone())
         };
-        // An unreadable folder counts as handled, so nothing is started blind.
-        found.is_none_or(|found| !matches!(found, Ok(None)))
-    });
-    if items.is_empty() {
-        RUNNING.store(false, Ordering::SeqCst);
+        if inserted {
+            Some(Self(key))
+        } else {
+            None
+        }
+    }
+}
+impl Drop for BatchGuard {
+    fn drop(&mut self) {
+        if let Ok(mut queued) = QUEUED.lock() {
+            queued.remove(&self.0);
+        }
+    }
+}
+
+pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
+    if !settings.auto_agent_enabled {
         return;
     }
+    let key = format!("{}|{}", db.cache_key(), org.id);
+    let Some(guard) = BatchGuard::reserve(key.clone()) else {
+        return;
+    };
     let db = db.clone();
     let org = org.clone();
-    let settings = settings.clone();
     tauri::async_runtime::spawn(async move {
-        for item in items {
-            if let Err(e) = start_item(&db, &settings, &org, &item).await {
-                tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto agent: failed to start");
+        let _guard = guard;
+        let Ok(_slot) = BATCH_SLOT.acquire().await else {
+            return;
+        };
+        // Queued organizations use the current settings when their turn comes.
+        let outcome = match db.get_app_settings() {
+            Ok(settings)
+                if settings.auto_agent_enabled
+                    && claim_check(&key, settings.auto_agent_interval_minutes, Instant::now()) =>
+            {
+                run_batch(&db, &settings, &org).await
             }
+            Ok(_) => Ok(()),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = outcome {
+            tracing::warn!(org = %org.name, ?error, "auto agent: batch failed");
         }
-        RUNNING.store(false, Ordering::SeqCst);
     });
 }
 
-async fn start_item(
-    db: &AppDatabase,
-    settings: &AppSettings,
-    org: &Organization,
-    item: &AutoItem,
-) -> Result<()> {
-    let (document, line, repository, folder) = match item {
-        AutoItem::PullRequest(pr) => {
-            let locator = || PrLocator {
-                organization_id: Some(org.id.clone()),
-                project_id: pr.project_id.clone(),
-                repository_id: pr.repository_id.clone(),
-                pull_request_id: pr.pull_request_id,
-            };
-            let service = PrReviewService::new(db.clone(), SecretStore);
-            let review = service.get_review(locator()).await?;
-            let changes = service.list_changes(locator()).await.ok();
-            let diffs = match &changes {
-                Some(changes) => diffs::section(&service, locator, changes).await,
-                None => String::new(),
-            };
-            if diffs.is_empty() {
-                // Nothing to review: no note is created, so the agent is not
-                // asked and the result folder is not left with a failed run.
-                tracing::warn!(id = pr.pull_request_id, "auto agent: no changes to review");
-                if let Ok(mut set) = NO_CHANGES.lock() {
-                    set.insert(pr.pull_request_id);
-                }
-                return Ok(());
-            }
-            (
-                context::pull_request(pr, &review, changes.as_ref(), &diffs),
-                format!(
-                    "!{} {} {}",
-                    pr.pull_request_id,
-                    pr.title,
-                    pr.web_url.as_deref().unwrap_or_default()
-                ),
-                Some(pr.repository_name.clone()),
-                settings.review_result_folder_path.as_deref(),
-            )
-        }
-        AutoItem::WorkItem(wi) => {
-            let preview = WorkItemService::new(db.clone(), SecretStore)
-                .preview(GetWorkItemPreviewInput {
-                    organization_id: Some(org.id.clone()),
-                    project_id: wi.project_id.clone(),
-                    work_item_id: wi.id,
-                    custom_fields: None,
-                })
-                .await?;
-            (
-                context::work_item(&preview),
-                format!(
-                    "#{} {} {}",
-                    wi.id,
-                    wi.title,
-                    wi.web_url.as_deref().unwrap_or_default()
-                ),
-                None,
-                settings.work_item_result_folder_path.as_deref(),
-            )
-        }
+async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization) -> Result<()> {
+    let prs = if settings.review_result_folder_path.is_some() {
+        db.list_review_pull_requests(&org.id)?
+    } else {
+        Vec::new()
     };
-    let service = AgentNoteService::new(db.clone());
-    service.create(CreateAgentNoteInput {
-        target: item.target(),
-        item_id: item.id(),
-        body: context::note_body(item.target(), folder.unwrap_or_default()),
-        quote: None,
-        quote_prefix: None,
-        quote_suffix: None,
-        quote_offset: None,
-        result_file: None,
-        result_hash: None,
-        kind: Some("investigate".to_string()),
-        context: Some(line.trim().to_string()),
-        context_document: Some(document),
-        draft: false,
-    })?;
-    service.run_agent(RunAgentInput {
-        target: item.target(),
-        item_id: item.id(),
-        repository_name: repository,
-        agent: None,
-        model: None,
-    })
+    let work_items = if settings.work_item_result_folder_path.is_some() {
+        db.list_my_work_items(&org.id)?
+    } else {
+        Vec::new()
+    };
+    // Previously tracked PRs keep following pushes even after a vote or the
+    // initial 30-day window. Drafts still pause automatic review.
+    let (tracked, initial): (Vec<_>, Vec<_>) =
+        prs.into_iter().filter(|pr| !pr.is_draft).partition(|pr| {
+            state::history_path(
+                db,
+                &org.id,
+                &pr.repository_id,
+                NoteTarget::PullRequest,
+                pr.pull_request_id,
+            )
+            .exists()
+        });
+    let mut items: Vec<_> = tracked
+        .into_iter()
+        .map(AutoItem::PullRequest)
+        .chain(pick(initial, work_items, usize::MAX, Utc::now(), |_, _| {
+            false
+        }))
+        .collect();
+    // Never-attempted and least-recently-attempted items get their turn before
+    // repeatedly failing entries can consume the same first slots forever.
+    items.sort_by_key(|item| {
+        state::History::read(&item.history_path(db, org))
+            .ok()
+            .and_then(|h| h.runs.last().map(|r| r.started_at))
+    });
+    let mut attempted = 0;
+    for item in items {
+        if attempted >= settings.auto_agent_max_per_sync.clamp(1, 10) as usize {
+            break;
+        }
+        if !db.get_app_settings()?.auto_agent_enabled {
+            break;
+        }
+        match runner::process_item(db, settings, org, &item).await {
+            Ok(true) => attempted += 1,
+            Ok(false) => (),
+            Err(error) => {
+                attempted += 1;
+                tracing::warn!(org = %org.name, id = item.id(), ?error, "auto agent: attempt failed");
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

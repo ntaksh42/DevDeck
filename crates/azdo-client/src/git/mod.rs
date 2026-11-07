@@ -1,4 +1,5 @@
 mod branch_stats;
+mod commit_comparison;
 mod palette;
 mod ref_updates;
 mod requests;

@@ -264,13 +264,17 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     `pull-request` は `agent-notes/pr-{id}/` を使う (前提は `review_result_folder_path` の設定)。`ask` は結果フォルダ不要で、
     ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
     `investigate` / `summarize`。
-  - **自動レビュー / 自動調査** (`auto_agent/`、設定 `auto_agent_enabled`、既定オフ): 組織の同期が終わったとき、前回の確認から `auto_agent_interval_minutes` 分 (既定 15) 以上たっていれば (起動後の最初の同期は必ず確認する。組織ごとに計時)、My Reviews と My Work Items のキャッシュから未処理の項目を順に (PR が先、1 回の同期・1 組織あたり `auto_agent_max_per_sync` 件、既定 3) 取り出して処理するキュー。未処理とは、ドラフトでなく、自分が投票していない (`my_vote` が 0)、作成から 30 日以内で、notes フォルダ (`pr-{id}` / `wi-{id}`) も結果フォルダの結果 HTML も無いこと。起動時やオンにした時点で溜まっていた分も、後の同期で順に処理される。結果フォルダが未設定の種類は対象外。前のバッチが資料を集めている間は次を始めない (全組織で 1 バッチずつ)。項目ごとに REST で PR のレビュー情報と変更ファイル / WI のプレビューを取得して `_context/` の資料にする。PR の資料には、クローンが無くても読めるよう、変更ファイルごとの変更箇所 (前後の内容のうち差のある行とその前後 3 行、1 側 12,000 文字・40 ファイルまで) を含める。変更ファイルが取れない、または全ファイルの内容取得に失敗した PR は、Note を作らずアプリを終了するまで対象から外す (確実に失敗する依頼で外部モデルを呼ばないため。警告ログのみ)。その後、`kind: investigate` の Note (本文: 結果 HTML を結果フォルダに作る・コードを変更しない・コメントの提案を書かない・資料が足りず作れないときは質問を返さず、理由を 1 行で返信して `resolved: 資料不足` を追記し `_done/` へ移す。失敗の返答が Needs you に残らない) を作って `run_agent` と同じ方法 (既定のエージェントとモデル、ウィンドウなし) で起動する。Note を作った時点で処理済みになる。取得に失敗した項目は処理済みにならず、次の同期でやり直す。失敗は警告ログのみ。
+  - **自動レビュー / 自動調査** (`auto_agent/`、設定 `auto_agent_enabled`、既定オフ): 組織の同期後、確認間隔 `auto_agent_interval_minutes` (既定 15 分) が過ぎていれば、My Reviews と My Work Items のキャッシュから対象を選び、既定のエージェント・モデルで `investigate` Note を実行する。1 回の確認・1 組織あたりの試行上限は `auto_agent_max_per_sync` (1〜10、既定 3)。全組織を通じて、自動実行は完了まで 1 プロセスずつ。他組織のバッチは待機し、同じ組織の重複待機は作らない。未試行・試行の古い項目を先に扱う。結果フォルダが未設定の種類は対象外。人の未対応 Note やユーザーの返信がある項目は自動実行を止め、人の依頼を優先する。過去の自動失敗 Note は、新しい資料による自動依頼に置き換える。
+    - **PR の対象と範囲**: 初回は非ドラフト・未投票 (`my_vote` が 0)・作成から 30 日以内の PR を対象とする。管理開始後は投票済み・30 日超でも追加 push を追い、ドラフト中は止める。初回は PR 全体をレビューする。既存の HTML や Note だけではレビュー済み commit を確定しない。次回からは、最後に全範囲のレビューを成功した source commit と最新 source commit の内容を直接比較する。force push も同じ 2 commit 間の差分を対象とする。追加差分で直った指摘は解消済みにし、無関係な以前の指摘は再確認済みとせず残して、結果 HTML を更新する。
+    - **資料と網羅性**: REST で PR の説明・コメント・変更内容、WI のプレビューを集めて `_context/` に保存する。PR は離れた変更箇所を分け、行番号と前後 3 行を付ける。差分は最大 40 ファイル・350,000 UTF-8 bytes、資料全体は 480,000 bytes まで。差分を先に収め、上限・binary・取得不能による未確認箇所を明記する。部分レビューではレビュー済み commit を進めず、同じ head を自動で繰り返さない。追加 push があれば最後の完全成功 commit から比較する。コード変更・コメント提案はさせない。
+    - **成功判定と再試行**: 終了コード 0、Note の `_done/` への移動、結果 HTML の新規作成または更新、差分資料に省略がないことがそろったときだけ成功とする。資料取得・起動・実行の失敗は記録し、5 分、10 分、20 分、40 分、以後最大 1 時間の待機後、次の確認時に再試行する。1 試行は 30 分でタイムアウトする。Windows の追跡プロセスは Job Object に所属させ、アプリ終了時も終了させる。再起動まで除外するリストは使わない。
+    - **記録と表示**: 実行範囲の commit、成否、Note、終了コード、試行ごとの stdout/stderr ログをアプリデータ内の `auto-agent/{hex組織ID}/{hexリポジトリID}/pr-{id}.json` と隣接ログに記録する。WI はリポジトリ ID の代わりにプロジェクト ID を使う。失敗・部分レビューは管理側の返信として Agent パネルに出す。Note の新規作成・変更・完了を検知すると、該当 PR/WI の結果 HTML を再取得する。Note と結果 HTML の名前は従来の番号形式のため、他組織・リポジトリの同番号と衝突すると自動実行を止め、警告ログに残す。
   - **失敗したパイプラインの自動調査** (設定 `auto_agent_pipelines_enabled`、既定オフ。Read-only 検証モードでは起動しない): アプリ全体で Watch 中のパイプラインを監視するフック (`usePipelineWatchNotifications`。デスクトップ通知とこの設定のどちらかがオンの間だけポーリングする) が、最新実行の終了を検知し、結果が `failed` (canceled / partiallySucceeded は対象外) なら依頼を作る。資料は Agent パネルと同じパイプライン実行の資料 (タイムラインと失敗ステップのログ末尾) に、失敗テストと直近の実行との比較 (`list_flaky_tests` のバッジと説明、エラーの 1 行目) を足したもの。依頼文はエージェントに先頭行 `Verdict: flaky | code | infra | unknown` で結論を出させ、ログやテストのエラーを根拠に挙げさせる (コード変更・再実行・コメント提案はさせない)。`kind: investigate` の `ask` として作り、`run_agent` で既定のエージェントとモデルで起動する。同じ実行は 1 回だけ、全体で 1 時間 5 件まで (localStorage `azdodeck:pipelines:autoInvestigated` に実行ごとの記録を 14 日・最大 200 件保持)。依頼 ID が秒単位の作成時刻なので、複数の失敗は 1 秒以上空けて順番に起動する。起動すると通知履歴に `pipelineInvestigationStarted` (表示は「Agent investigating」、Enter で Pipelines へ) を記録し、エージェントの返信は既存の「Agent replied on your request」通知で知らせる。会話は Agent パネルでその実行を対象にすると表示される (実行の URL で照合)。
   - **旧保存先からの移行**: 以前は結果フォルダ配下の `.to-agent-msg/{wi|pr}-{id}/` に保存していた。起動時と設定保存時に、
     両結果フォルダの `.to-agent-msg` から各項目フォルダをファイル単位で `agent-notes/` へ移す (移動先に同名ファイルがあれば
     上書きせず旧側に残す。空になったフォルダは削除)。何度実行しても同じ結果になる。失敗は警告ログのみ。
   - **エージェントの権限**: メモはエージェントが起動するフォルダ (ワークスペース / 結果フォルダ) の外にあるため、
-    作業フォルダ外を制限するエージェントでは `agent_command` で許可を与える (Claude Code なら `--add-dir {notes}`。既定コマンドは付与済み)。
+    作業フォルダ外を制限するエージェントでは `agent_command` で許可を与える (Claude Code なら `--add-dir {notes} --add-dir {results}`。既定コマンドは付与済み)。
     許可が無いとメモを読めない・`_done/` へ移せないが、DevDeck 側にはエラーとして現れず未対応のまま残る。
   - **一覧と入力 (Agent パネルに統合)**: Result パネル横のメモ一覧と入力欄は廃止し、メモは Agent パネルに
     会話として並ぶ (状態点・本文は `#123` / `!45` をアプリ内リンクにする Markdown・返信)。下書き (以前の版で
@@ -312,8 +316,6 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     並びは結論 → ポイントの図 → 本文 → 根拠 → 未確認 → (PR のみ) 畳んだ指摘の下書き、見出しの番号は対象 PR / Work Item への
     リンク、図はインライン SVG (プレビューは JavaScript・外部ファイル不可)。
     ガイドと自動実行の Note は、結果 HTML をこの書式で書くよう指示する。
-    同じ番号の結果ファイルが既にあれば、先に読んで事実・根拠・判定を引き継ぎ、この書式に組み直して保存する
-    (標準名なら上書き、標準名でなければ新しい標準名で保存し古いほうは残す)。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・
@@ -556,12 +558,12 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 | `inbox_insight_enabled` | 同期の後、新しい Inbox のコメント項目について Claude Code (`claude -p`) に判定・理由・根拠 (クローンがあれば読み取り専用でコードを確認)・返信案を書かせ、プレビュー先頭に出す。コメント本文がモデルに送られるため既定はオフ。Settings → Agent command のチェックボックス。 |
 | `inbox_insight_max_per_sync` | 1 回の同期で判断メモを書く新しい Inbox 項目の上限 (1〜10、既定 3、範囲外は丸める)。Settings → Agent command の「Notes per sync」。 |
 | `inbox_insight_model` | その判断メモに使うモデル。未設定なら `sonnet`。英数字と `._:/[]-` 以外を含む名前は無視して `sonnet` を使う。 |
-| `auto_agent_enabled` | 同期の後 (`auto_agent_interval_minutes` ごと)、自分がレビュアーの PR (ドラフトを除く) と自分にアサインされた WI のうち未処理のものを、既定のエージェントに Agent notes の `investigate` として順に依頼し、結果 HTML を作らせる。起動時に溜まっていた分も対象。既定オフ。項目のフィールド・説明・コメントがエージェントに渡る。 |
+| `auto_agent_enabled` | 同期後、対象 PR のレビューと自分にアサインされた WI の調査を既定エージェントへ依頼する。既定オフ。PR は初回に全体、その後は最後に完全成功した commit から追加 push 分をレビューする。失敗は間隔を空けて再試行する。人の未対応依頼があれば止める。フィールド・説明・コメント・差分がエージェントに渡る。 |
 | `auto_agent_max_per_sync` | 自動レビュー / 自動調査が 1 回の確認・1 組織あたりに起動する項目の上限 (1〜10、既定 3、範囲外は丸める)。Settings → Agent command の「Items per check」。 |
 | `auto_agent_interval_minutes` | 自動レビュー / 自動調査が新しい項目を確認する間隔 (分、1〜1440、既定 15、範囲外は丸める)。同期のたびではなく、この間隔が過ぎたあとの最初の同期で確認する (確認は同期後のキャッシュを読むだけで、同期間隔より短くはならない)。Settings → Agent command の「Check every (minutes)」。 |
 | `auto_agent_pipelines_enabled` | Watch 中のパイプラインの最新実行が failed で終わったとき、その実行についての `investigate` 依頼 (Agent パネルの依頼、`ask`) を作って既定のエージェントを起動する。Watch の監視はフロントエンドで行うため、起動もフロントエンドから (`pipelineAutoInvestigate.ts`)。既定オフ。 |
-| `codex_command` | Codex で起動するときのシェルコマンド。プレースホルダは `agent_command` と同じ。未設定なら既定コマンド `codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" "Read {guide} and handle the open notes in {notes}"` (Codex を非対話で、書き込みを作業フォルダとメモフォルダに限るサンドボックスで実行。Azure CLI 未ログイン・git push 不可は Claude Code と同じ) を使う (`agent_notes/launch.rs` の `DEFAULT_CODEX_COMMAND`)。 |
-| `agent_command` | Claude Code で Agent パネルからの依頼・返信・Run now (`Shift+Enter`) を起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_CLAUDE_COMMAND`)。 |
+| `codex_command` | Codex で起動するときのシェルコマンド。プレースホルダは `agent_command` と同じ。未設定なら既定コマンド `codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" --add-dir "{results}" "Read {guide} and handle the open notes in {notes}"` (Codex を非対話で、書き込みを作業・メモ・結果フォルダに限るサンドボックスで実行。Azure CLI 未ログイン・git push 不可は Claude Code と同じ) を使う (`agent_notes/launch.rs` の `DEFAULT_CODEX_COMMAND`)。 |
+| `agent_command` | Claude Code で Agent パネルからの依頼・返信・Run now (`Shift+Enter`) を起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{results}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" "{results}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_CLAUDE_COMMAND`)。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |
 | `desktop_notifications_enabled` | デスクトップ通知の総合トグル。既定 false。 |
 | `notification_content_preview_enabled` | 通知に本文プレビューを含めるか。既定 true。 |

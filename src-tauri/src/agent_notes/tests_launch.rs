@@ -43,6 +43,7 @@ fn expands_placeholders_and_falls_back_to_the_default_command() {
     let default = expand(AgentKind::Claude, None, &ctx, NoteTarget::WorkItem, 1).unwrap();
     assert!(default.starts_with("claude -p \"Read C:/r"));
     assert!(default.contains("--add-dir \"C:/data/agent-notes"));
+    assert!(default.contains("\"C:/r\""));
     assert!(!default.contains('{'));
     assert_eq!(
         expand(AgentKind::Claude, Some("  "), &ctx, NoteTarget::WorkItem, 1).unwrap(),
@@ -51,6 +52,7 @@ fn expands_placeholders_and_falls_back_to_the_default_command() {
     let codex = expand(AgentKind::Codex, None, &ctx, NoteTarget::WorkItem, 1).unwrap();
     assert!(codex.starts_with("codex exec "));
     assert!(codex.contains("--add-dir \"C:/data/agent-notes"));
+    assert!(codex.contains("--add-dir \"C:/r\""));
     assert!(!codex.contains('{'));
 }
 
@@ -91,7 +93,7 @@ fn expands_workspace_repo_and_guide() {
     let ctx = launch(result, Some(workspace), Some("api-gateway"));
     let cmd = expand(
         AgentKind::Claude,
-        Some("agent --cwd {workspace} --repo {repo} --guide {guide}"),
+        Some("agent --cwd {workspace} --repo {repo} --results {results} --guide {guide}"),
         &ctx,
         NoteTarget::PullRequest,
         7,
@@ -99,6 +101,7 @@ fn expands_workspace_repo_and_guide() {
     .unwrap();
     assert!(cmd.contains("--cwd C:/ws"));
     assert!(cmd.contains("--repo api-gateway"));
+    assert!(cmd.contains("--results C:/r"));
     assert!(cmd.contains("--guide C:/r"));
     assert!(cmd.ends_with("AGENTS.md"));
 
@@ -258,4 +261,31 @@ fn agents_can_run_in_the_same_folder_at_once() {
 
     run_agent(&ctx, AgentKind::Claude, Some(slow), NoteTarget::WorkItem, 1).unwrap();
     run_agent(&ctx, AgentKind::Claude, Some(slow), NoteTarget::WorkItem, 2).unwrap();
+}
+
+#[test]
+fn tracked_launch_retains_exit_status_and_both_output_streams() {
+    let root = tempfile::tempdir().unwrap();
+    let log = root.path().join("agent.log");
+    std::fs::write(&log, "old output").unwrap();
+    let mut ctx = launch(root.path(), None, None);
+    ctx.notes_root = root.path();
+    #[cfg(windows)]
+    let command = "echo standard output & echo standard error 1>&2 & exit /b 7";
+    #[cfg(not(windows))]
+    let command = "echo 'standard output'; echo 'standard error' >&2; exit 7";
+    let mut child = spawn_agent(
+        &ctx,
+        AgentKind::Claude,
+        Some(command),
+        NoteTarget::PullRequest,
+        1,
+        Some(&log),
+    )
+    .unwrap();
+    assert_eq!(child.wait().unwrap().code(), Some(7));
+    let output = std::fs::read_to_string(log).unwrap();
+    assert!(output.contains("standard output"));
+    assert!(output.contains("standard error"));
+    assert!(!output.contains("old output"));
 }
