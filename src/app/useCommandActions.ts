@@ -114,14 +114,6 @@ export function useCommandActions({
       run: () => setView("pipelines"),
     },
     {
-      disabled: organizationsLength === 0,
-      group: "Navigation",
-      id: "nav.analyze",
-      keywords: ["trend", "chart", "query"],
-      label: "Go to Analyze",
-      run: () => setView("analyze"),
-    },
-    {
       group: "Navigation",
       id: "nav.notifications",
       keywords: ["history", "unread"],

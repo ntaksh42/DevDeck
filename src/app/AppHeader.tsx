@@ -16,13 +16,12 @@ const VIEW_TITLES: Record<View, string> = {
   inbox: "Inbox",
   autoQueue: "Agent Auto Queue",
   crossOrgSummary: "Cross-organization summary",
-  analyze: "Analyze",
   settings: "Settings",
 };
 
 // Breadcrumb path for views nested under a nav section, so the header names
 // both the section and the active screen (e.g. "Work Items › Search") instead
-// of just one or the other. Top-level views (Pipelines, Analyze, Notifications,
+// of just one or the other. Top-level views (Pipelines, Notifications,
 // Settings, ...) are left out and keep a single-segment title.
 const VIEW_BREADCRUMBS: Partial<Record<View, readonly [string, string]>> = {
   pullRequestSearch: ["Pull Requests", "Search"],
@@ -45,7 +44,6 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   inbox: "Mentions and replies that need your response",
   autoQueue: "Choose which reviews and investigations the agent runs",
   crossOrgSummary: "Reviews and work items totalled across every connection",
-  analyze: "Query count trends for a group, by day or week",
   settings: "Local Azure DevOps organization setup",
 };
 

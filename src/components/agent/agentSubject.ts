@@ -43,14 +43,6 @@ export type AgentSubject =
       wikiName: string;
       pagePath: string;
       webUrl: string | null;
-    }
-  | {
-      kind: "analyze-group";
-      /** The Analyze group's id; the numbers shown come from `analyzeGroupContext`. */
-      id: string;
-      title: string;
-      organizationId?: string;
-      webUrl: null;
     };
 
 let current: AgentSubject | null = null;
@@ -113,8 +105,6 @@ export function subjectLabel(subject: AgentSubject): string {
       return `Run ${subject.title}`;
     case "wiki-page":
       return `Wiki ${subject.pagePath}`;
-    case "analyze-group":
-      return subject.title;
   }
 }
 
@@ -126,7 +116,6 @@ export function contextLine(subject: AgentSubject | null, list?: { label: string
         "work-item": "Work item",
         "pipeline-run": "Pipeline run",
         "wiki-page": "Wiki page",
-        "analyze-group": "Analyze group",
       }[subject.kind]
     : null;
   return [

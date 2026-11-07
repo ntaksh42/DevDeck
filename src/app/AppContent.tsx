@@ -15,7 +15,6 @@ import {
   SetupPanel,
   PullRequestSearch,
   MyPullRequestsGrid,
-  AnalyzeView,
   CrossOrgSummaryView,
   NotificationsView,
   InboxView,
@@ -116,8 +115,6 @@ export function AppContent({
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (
           <CrossOrgSummaryView onOpenView={onOpenView} />
-        ) : activeView === "analyze" ? (
-          <AnalyzeView />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

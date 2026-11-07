@@ -18,7 +18,6 @@ const ALLOWED_PREFIXES = [
   "azdodeck:workItems:fieldPresets",
   "azdodeck:workItems:previewCustomFields",
   "azdodeck:wiPreview:",
-  "azdodeck:analyze:groups",
   "azdodeck:quickPipelines",
   "azdodeck:pipelineSubscriptions",
   "azdodeck:theme",
