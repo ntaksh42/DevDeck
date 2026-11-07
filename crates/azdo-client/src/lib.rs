@@ -42,8 +42,7 @@ pub use project_info::{
 };
 pub use wiki::{WikiPage, WikiSearchRequest, WikiSearchResponse, WikiSearchResult};
 pub use work_items::{
-    has_asof_clause, with_asof, ClassificationNode, ClassificationNodeAttributes,
-    CommentIdentityRef, CommentReaction, QueryHierarchyItem, WorkItem, WorkItemComment,
-    WorkItemFieldDefinition, WorkItemLink, WorkItemReference, WorkItemRelation,
-    WorkItemRelationAttributes, WorkItemUpdate,
+    ClassificationNode, ClassificationNodeAttributes, CommentIdentityRef, CommentReaction,
+    QueryHierarchyItem, WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink,
+    WorkItemReference, WorkItemRelation, WorkItemRelationAttributes, WorkItemUpdate,
 };

@@ -9,7 +9,6 @@ import {
 } from "@/lib/azdoCommands";
 import type { AgentListScope } from "./agentListScope";
 import type { AgentSubject } from "./agentSubject";
-import { getAnalyzeGroupContext } from "./analyzeGroupContext";
 
 // The agent runs without Azure DevOps access, so DevDeck gathers what it may
 // need about the subject and hands it over as one Markdown document saved
@@ -166,33 +165,6 @@ async function wikiPage(subject: Extract<AgentSubject, { kind: "wiki-page" }>): 
   return [`# Wiki page ${page.pagePath}`, `- URL: ${page.webUrl}`, page.content].join("\n\n");
 }
 
-function analyzeGroup(subject: Extract<AgentSubject, { kind: "analyze-group" }>): string {
-  const context = getAnalyzeGroupContext(subject.id);
-  if (!context) return `# Analyze group: ${subject.title}\n\n(no data loaded)`;
-  const unit = context.granularity === "day" ? "days" : "weeks";
-  const queries = context.queries.map((query) => {
-    const rows = context.periods.map((period, index) => `| ${period} | ${query.values[index] ?? "—"} |`);
-    return [
-      `### ${query.name}`,
-      "```wiql\n" + query.wiql + "\n```",
-      query.error
-        ? `(could not load: ${query.error})`
-        : ["| Period | Count |", "| --- | ---: |", ...rows].join("\n"),
-    ].join("\n\n");
-  });
-  return [
-    `# Analyze group: ${subject.title}`,
-    fields([
-      ["Granularity", context.granularity],
-      ["Range", `last ${context.rangeCount} ${unit}`],
-      ["Queries", String(context.queries.length)],
-    ]),
-    "Counts are the number of work items each query matched at the end of the period (WIQL ASOF).",
-    "## Queries",
-    queries.join("\n\n") || "(none)",
-  ].join("\n\n");
-}
-
 /**
  * Markdown describing the subject and, when attached, the view's list, for the
  * agent. Failures are written into the document instead of blocking the request.
@@ -214,9 +186,6 @@ export async function buildContextDocument(subject: AgentSubject | null, list?: 
         break;
       case "wiki-page":
         text = await wikiPage(subject);
-        break;
-      case "analyze-group":
-        text = analyzeGroup(subject);
         break;
     }
   } catch (error) {

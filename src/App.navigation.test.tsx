@@ -86,8 +86,8 @@ describe("App — Navigation", () => {
     fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
     expect(await main.findByRole("heading", { name: "Work Items Search" })).toBeTruthy();
 
-    fireEvent.click(nav.getByRole("button", { name: "Analyze" }));
-    expect(await main.findByRole("heading", { name: "Analyze" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Agent Auto Queue" }));
+    expect(await main.findByRole("heading", { name: "Agent Auto Queue" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
@@ -170,10 +170,10 @@ describe("App — Navigation", () => {
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
-    fireEvent.click(nav.getByRole("button", { name: "Analyze" }));
-    expect(await main.findByRole("heading", { name: "Analyze" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Agent Auto Queue" }));
+    expect(await main.findByRole("heading", { name: "Agent Auto Queue" })).toBeTruthy();
 
-    // Back: Analyze -> Work Item Views -> My Reviews.
+    // Back: Agent Auto Queue -> Work Item Views -> My Reviews.
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
@@ -226,7 +226,7 @@ describe("App — Navigation", () => {
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "a" });
-    expect(await main.findByRole("heading", { name: "Analyze" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Agent Auto Queue" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "r" });
@@ -300,7 +300,6 @@ describe("App — Navigation", () => {
       "pullRequests",
       "workItems",
       "pipelines",
-      "analyze",
     ]);
 
     // Alt+ArrowUp on Pipelines swaps it above Work Items.
@@ -309,7 +308,7 @@ describe("App — Navigation", () => {
       altKey: true,
     });
 
-    const expected = ["pullRequests", "pipelines", "workItems", "analyze"];
+    const expected = ["pullRequests", "pipelines", "workItems"];
     await waitFor(() => expect(order()).toEqual(expected));
     expect(
       JSON.parse(window.localStorage.getItem("azdodeck:layout:navOrder") ?? "null"),
@@ -319,7 +318,7 @@ describe("App — Navigation", () => {
   it("restores a saved nav order from localStorage", async () => {
     window.localStorage.setItem(
       "azdodeck:layout:navOrder",
-      JSON.stringify(["pipelines", "workItems", "pullRequests"]),
+      JSON.stringify(["pipelines", "analyze", "workItems", "pullRequests"]),
     );
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
@@ -345,8 +344,7 @@ describe("App — Navigation", () => {
       Array.from(nav.querySelectorAll("[data-nav-entry]")).map((el) =>
         el.getAttribute("data-nav-entry"),
       ),
-      // "analyze" is absent from the stored order (saved before it existed) and
-      // is appended rather than discarding the rest.
-    ).toEqual(["pipelines", "workItems", "pullRequests", "analyze"]);
+      // Retired entries are dropped without disturbing the remaining order.
+    ).toEqual(["pipelines", "workItems", "pullRequests"]);
   });
 });

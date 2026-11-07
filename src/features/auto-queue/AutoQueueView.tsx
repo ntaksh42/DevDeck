@@ -200,6 +200,7 @@ export function AutoQueueView() {
       <div className="grid min-h-0 flex-1 grid-cols-2">
         <div
           ref={listRef}
+          data-primary-grid="true"
           role="listbox"
           aria-label="Auto queue candidates"
           aria-multiselectable="true"

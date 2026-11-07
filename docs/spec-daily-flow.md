@@ -79,7 +79,7 @@ My Pull Requests (`MyCreatedPullRequestSummary`):
 - エクスポート: ローカル設定を 1 つの JSON ファイルにする。
   - 対象: **許可リスト**の接頭辞に一致する localStorage キーのみ (`src/lib/settingsTransfer.ts`):
     レイアウト、ビュー、キー割り当て、行の色ルール、保存済み Work Item View / テンプレート / フィールドプリセット、
-    Analyze グループ、Quick Pipelines、パイプライン購読、テーマ、UI スケール。
+    Quick Pipelines、パイプライン購読、テーマ、UI スケール。
   - **除外**: 許可リストに無いキー全般 (最終閲覧、返却追跡、最近開いた項目、検索履歴など個人の行動履歴)。
     加えて、許可リストに一致しても `pat|token|secret|password|credential|azure-cli` を含むキーは拒否する (二重防御)。
 - インポート: JSON を検証 (`app: "devdeck"`、`version: 1`、値は文字列のみ、許可リストのキーのみ。

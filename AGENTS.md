@@ -11,7 +11,7 @@ Rust services and the Azure DevOps REST API.
 Key areas:
 
 - `src/` contains the React app. Feature areas live under `src/features/`
-  (`pull-requests`, `work-items`, `pipelines`, `analyze`, `settings`),
+  (`pull-requests`, `work-items`, `pipelines`, `auto-queue`, `settings`),
   shared UI under `src/components/`, and cross-cutting helpers under `src/lib/`.
 - `src/lib/azdoCommands.ts` is the frontend boundary for all backend commands.
   It validates command results with Zod and provides browser-only demo data
