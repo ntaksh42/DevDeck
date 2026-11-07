@@ -1,7 +1,6 @@
-//! DevDeck's Claude Code / Codex skills, placed in the user's skill folders so
-//! an agent started anywhere knows them: `devdeck-notes` (how to read and
-//! answer notes; the same text as the `AGENTS.md` guide) and
-//! `devdeck-result-html` (how to lay out investigation / review result HTML).
+//! DevDeck's Claude Code / Codex skill, placed in the user's skill folders so
+//! an agent started anywhere knows it: `devdeck-notes` (how to read and answer
+//! notes; the same text as the `AGENTS.md` guide).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,12 +15,8 @@ name: devdeck-notes
 description: \"DevDeck の Agent notes (人が DevDeck から残した依頼メモ) を読み、対応して返信する手順。agent-notes フォルダの wi- / pr- / ask- 配下の .md を処理するとき、DevDeck の Note や Agent パネルからの依頼に答えるときに使う。\"
 ---
 ";
-const RESULT_SKILL_NAME: &str = "devdeck-result-html";
-const RESULT_FRONT_MATTER: &str = "---
-name: devdeck-result-html
-description: \"DevDeck の Work Item 調査結果 / Pull Request レビュー結果の HTML (PR{番号}.html / WIT{番号}.html) を書く・作り直すときの書式。結論・図 (インライン SVG)・指摘や対応案の表の並べ方と、DevDeck のプレビューの制約 (JavaScript 不可・外部ファイル不可) を定める。\"
----
-";
+/// A skill DevDeck used to place for the result HTML layout; see [`remove_retired_skill`].
+const RETIRED_RESULT_SKILL_NAME: &str = "devdeck-result-html";
 /// Marks a skill file DevDeck wrote; one without it is the user's and is left alone.
 const MANAGED: &str =
     "<!-- devdeck:managed (DevDeck が起動時に上書きします。編集しないでください) -->";
@@ -59,18 +54,32 @@ fn skill_dirs() -> Vec<PathBuf> {
 }
 
 pub(crate) fn ensure_skill(skills_dir: &Path, notes_root: &Path) -> Result<()> {
+    remove_retired_skill(skills_dir)?;
     write_skill(
         skills_dir,
         SKILL_NAME,
         FRONT_MATTER,
         &render_common(notes_root),
-    )?;
-    write_skill(
-        skills_dir,
-        RESULT_SKILL_NAME,
-        RESULT_FRONT_MATTER,
-        include_str!("result_format.md"),
     )
+}
+
+/// The result HTML layout now lives only in the result folders' `AGENTS.md`,
+/// so the skill DevDeck once placed for it is removed (a user-written one, with
+/// no managed mark, stays).
+fn remove_retired_skill(skills_dir: &Path) -> Result<()> {
+    let dir = skills_dir.join(RETIRED_RESULT_SKILL_NAME);
+    let path = dir.join(SKILL_FILE);
+    match fs::read_to_string(&path) {
+        Ok(current) if current.contains(MANAGED) => {
+            fs::remove_file(&path)?;
+            // Only an empty folder goes; anything else the user put there stays.
+            let _ = fs::remove_dir(&dir);
+            Ok(())
+        }
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 fn write_skill(skills_dir: &Path, name: &str, front_matter: &str, body: &str) -> Result<()> {

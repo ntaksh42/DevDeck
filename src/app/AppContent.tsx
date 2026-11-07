@@ -19,6 +19,7 @@ import {
   CrossOrgSummaryView,
   NotificationsView,
   InboxView,
+  AutoQueueView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
 
@@ -109,6 +110,8 @@ export function AppContent({
           <PipelinesView />
         ) : activeView === "inbox" ? (
           <InboxView />
+        ) : activeView === "autoQueue" ? (
+          <AutoQueueView />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (

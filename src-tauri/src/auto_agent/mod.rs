@@ -6,10 +6,13 @@
 //! Result panel. The items form a queue worked off a few per check, so what was waiting when
 //! the app started (or when the setting was turned on) is handled too. The
 //! agent writes the result HTML; it gets no Azure DevOps access and is told
-//! not to change code or propose comments.
+//! not to change code or propose comments. With `auto_agent_approval_enabled`
+//! nothing starts by itself: [`queue`] lists the candidates and starts only the
+//! ones picked in Auto queue.
 
 mod context;
 mod diffs;
+pub(crate) mod queue;
 
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, HashSet};
@@ -28,6 +31,8 @@ use crate::work_items::{GetWorkItemPreviewInput, WorkItemService};
 
 /// Pull requests created longer ago than this are left to a manual request.
 const MAX_PR_AGE_DAYS: i64 = 30;
+/// Work items not changed for longer than this are left to a manual request.
+const MAX_WI_AGE_DAYS: i64 = 30;
 /// Set while a batch is gathering material, so an overlapping sync does not
 /// pick the same items before their notes exist.
 static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -70,14 +75,14 @@ pub(crate) enum AutoItem {
 }
 
 impl AutoItem {
-    fn target(&self) -> NoteTarget {
+    pub(crate) fn target(&self) -> NoteTarget {
         match self {
             Self::PullRequest(_) => NoteTarget::PullRequest,
             Self::WorkItem(_) => NoteTarget::WorkItem,
         }
     }
 
-    fn id(&self) -> i64 {
+    pub(crate) fn id(&self) -> i64 {
         match self {
             Self::PullRequest(pr) => pr.pull_request_id,
             Self::WorkItem(wi) => wi.id,
@@ -95,8 +100,26 @@ fn awaits_review(pr: &CachedReviewPr, now: DateTime<Utc>) -> bool {
     !pr.is_draft && pr.my_vote == 0 && recent
 }
 
+/// Whether the work item still needs an investigation: its state is `New` or
+/// `Active`, and it changed within [`MAX_WI_AGE_DAYS`]. An unreadable change
+/// date does not exclude it.
+fn awaits_investigation(wi: &CachedWorkItem, now: DateTime<Utc>) -> bool {
+    let open = wi
+        .state
+        .as_deref()
+        .is_some_and(|state| ["new", "active"].contains(&state.trim().to_lowercase().as_str()));
+    let recent = wi
+        .changed_date
+        .as_deref()
+        .and_then(|date| DateTime::parse_from_rfc3339(date).ok())
+        .map(|changed| now - changed.with_timezone(&Utc) <= Duration::days(MAX_WI_AGE_DAYS))
+        .unwrap_or(true);
+    open && recent
+}
+
 /// The next items of the queue, pull requests first, up to `limit`. Pull
-/// requests I voted on, drafts and old ones are left out, and so is anything
+/// requests I voted on, drafts and old ones, and work items that are not new
+/// or active or have not changed lately, are left out, and so is anything
 /// already handled: it has a notes folder (the user or an earlier run asked)
 /// or a result HTML.
 pub(crate) fn pick(
@@ -110,7 +133,10 @@ pub(crate) fn pick(
         .into_iter()
         .filter(|pr| awaits_review(pr, now))
         .map(AutoItem::PullRequest);
-    let work_items = work_items.into_iter().map(AutoItem::WorkItem);
+    let work_items = work_items
+        .into_iter()
+        .filter(|wi| awaits_investigation(wi, now))
+        .map(AutoItem::WorkItem);
     prs.chain(work_items)
         .filter(|item| !is_handled(item.target(), item.id()))
         .take(limit)
@@ -121,7 +147,10 @@ pub(crate) fn pick(
 /// the material calls the REST API, so it does not hold up the sync. A target
 /// without a result folder is skipped (there is nowhere to write the result).
 pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
-    if !settings.auto_agent_enabled || RUNNING.swap(true, Ordering::SeqCst) {
+    if !settings.auto_agent_enabled
+        || settings.auto_agent_approval_enabled
+        || RUNNING.swap(true, Ordering::SeqCst)
+    {
         return;
     }
     if !claim_check(
@@ -147,24 +176,13 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
     };
     let root = agent_notes::notes_root(db);
     let limit = settings.auto_agent_max_per_sync.max(1) as usize;
-    let items = pick(prs, work_items, limit, Utc::now(), |target, id| {
-        if target == NoteTarget::PullRequest && has_no_changes(id) {
-            return true;
-        }
-        if agent_notes::notes_dir(&root, target, id).exists() {
-            return true;
-        }
-        let found = match target {
-            NoteTarget::PullRequest => {
-                review_folder.map(|folder| result_files::find_review_result_file(folder, id))
-            }
-            _ => {
-                work_item_folder.map(|folder| result_files::find_work_item_result_file(folder, id))
-            }
-        };
-        // An unreadable folder counts as handled, so nothing is started blind.
-        found.is_none_or(|found| !matches!(found, Ok(None)))
-    });
+    let items = pick(
+        prs,
+        work_items,
+        limit,
+        Utc::now(),
+        handled_check(&root, review_folder, work_item_folder),
+    );
     if items.is_empty() {
         RUNNING.store(false, Ordering::SeqCst);
         return;
@@ -182,13 +200,52 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
     });
 }
 
-async fn start_item(
+/// Whether an item is already handled: the changes of a pull request could not
+/// be fetched, it has a notes folder (the user or an earlier run asked), or a
+/// result HTML exists. An unreadable result folder counts as handled, so
+/// nothing is started blind.
+pub(crate) fn handled_check<'a>(
+    root: &'a Path,
+    review_folder: Option<&'a Path>,
+    work_item_folder: Option<&'a Path>,
+) -> impl Fn(NoteTarget, i64) -> bool + 'a {
+    move |target, id| {
+        if target == NoteTarget::PullRequest && has_no_changes(id) {
+            return true;
+        }
+        if agent_notes::notes_dir(root, target, id).exists() {
+            return true;
+        }
+        let found = match target {
+            NoteTarget::PullRequest => {
+                review_folder.map(|folder| result_files::find_review_result_file(folder, id))
+            }
+            _ => {
+                work_item_folder.map(|folder| result_files::find_work_item_result_file(folder, id))
+            }
+        };
+        found.is_none_or(|found| !matches!(found, Ok(None)))
+    }
+}
+
+/// What the agent is given for one item.
+pub(crate) struct Material {
+    pub(crate) document: String,
+    line: String,
+    repository: Option<String>,
+    folder: Option<String>,
+}
+
+/// Gathers the material for one item. `None` when a pull request has no
+/// readable changes: nothing to review, so no note is created and the agent is
+/// not asked.
+pub(crate) async fn gather(
     db: &AppDatabase,
     settings: &AppSettings,
     org: &Organization,
     item: &AutoItem,
-) -> Result<()> {
-    let (document, line, repository, folder) = match item {
+) -> Result<Option<Material>> {
+    Ok(Some(match item {
         AutoItem::PullRequest(pr) => {
             let locator = || PrLocator {
                 organization_id: Some(org.id.clone()),
@@ -204,25 +261,23 @@ async fn start_item(
                 None => String::new(),
             };
             if diffs.is_empty() {
-                // Nothing to review: no note is created, so the agent is not
-                // asked and the result folder is not left with a failed run.
                 tracing::warn!(id = pr.pull_request_id, "auto agent: no changes to review");
                 if let Ok(mut set) = NO_CHANGES.lock() {
                     set.insert(pr.pull_request_id);
                 }
-                return Ok(());
+                return Ok(None);
             }
-            (
-                context::pull_request(pr, &review, changes.as_ref(), &diffs),
-                format!(
+            Material {
+                document: context::pull_request(pr, &review, changes.as_ref(), &diffs),
+                line: format!(
                     "!{} {} {}",
                     pr.pull_request_id,
                     pr.title,
                     pr.web_url.as_deref().unwrap_or_default()
                 ),
-                Some(pr.repository_name.clone()),
-                settings.review_result_folder_path.as_deref(),
-            )
+                repository: Some(pr.repository_name.clone()),
+                folder: settings.review_result_folder_path.clone(),
+            }
         }
         AutoItem::WorkItem(wi) => {
             let preview = WorkItemService::new(db.clone(), SecretStore)
@@ -233,24 +288,43 @@ async fn start_item(
                     custom_fields: None,
                 })
                 .await?;
-            (
-                context::work_item(&preview),
-                format!(
+            Material {
+                document: context::work_item(&preview),
+                line: format!(
                     "#{} {} {}",
                     wi.id,
                     wi.title,
                     wi.web_url.as_deref().unwrap_or_default()
                 ),
-                None,
-                settings.work_item_result_folder_path.as_deref(),
-            )
+                repository: None,
+                folder: settings.work_item_result_folder_path.clone(),
+            }
         }
-    };
+    }))
+}
+
+async fn start_item(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    org: &Organization,
+    item: &AutoItem,
+) -> Result<()> {
+    match gather(db, settings, org, item).await? {
+        Some(material) => launch(db, item, material),
+        None => Ok(()),
+    }
+}
+
+/// Leaves the `investigate` note for the item and starts the default agent on it.
+pub(crate) fn launch(db: &AppDatabase, item: &AutoItem, material: Material) -> Result<()> {
     let service = AgentNoteService::new(db.clone());
     service.create(CreateAgentNoteInput {
         target: item.target(),
         item_id: item.id(),
-        body: context::note_body(item.target(), folder.unwrap_or_default()),
+        body: context::note_body(
+            item.target(),
+            material.folder.as_deref().unwrap_or_default(),
+        ),
         quote: None,
         quote_prefix: None,
         quote_suffix: None,
@@ -258,14 +332,14 @@ async fn start_item(
         result_file: None,
         result_hash: None,
         kind: Some("investigate".to_string()),
-        context: Some(line.trim().to_string()),
-        context_document: Some(document),
+        context: Some(material.line.trim().to_string()),
+        context_document: Some(material.document),
         draft: false,
     })?;
     service.run_agent(RunAgentInput {
         target: item.target(),
         item_id: item.id(),
-        repository_name: repository,
+        repository_name: material.repository,
         agent: None,
         model: None,
     })

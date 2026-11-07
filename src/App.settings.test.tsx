@@ -118,6 +118,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -172,6 +173,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
         });
       }
       if (command === "update_app_settings") {
@@ -222,6 +224,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -276,6 +279,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -324,6 +328,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: true,
           notificationContentPreviewEnabled: false,
@@ -378,6 +383,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -425,6 +431,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           readOnlyValidationModeEnabled: true,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -479,6 +486,7 @@ describe("App — Settings", () => {
           autoAgentMaxPerSync: 3,
           autoAgentIntervalMinutes: 15,
           autoAgentPipelinesEnabled: false,
+          autoAgentApprovalEnabled: false,
           ...settings,
         });
       }

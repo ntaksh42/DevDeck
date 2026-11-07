@@ -47,6 +47,7 @@ export function AgentCommandSettings() {
   const [autoAgentMax, setAutoAgentMax] = useState(3);
   const [autoAgentInterval, setAutoAgentInterval] = useState(15);
   const [autoPipelines, setAutoPipelines] = useState(false);
+  const [autoApproval, setAutoApproval] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
     claudeModelChoices: "",
@@ -91,6 +92,9 @@ export function AgentCommandSettings() {
     setAutoPipelines(settingsQuery.data?.autoAgentPipelinesEnabled ?? false);
   }, [settingsQuery.data?.autoAgentPipelinesEnabled]);
   useEffect(() => {
+    setAutoApproval(settingsQuery.data?.autoAgentApprovalEnabled ?? false);
+  }, [settingsQuery.data?.autoAgentApprovalEnabled]);
+  useEffect(() => {
     const data = settingsQuery.data;
     setModels({
       claudeModel: data?.claudeModel ?? "",
@@ -121,6 +125,7 @@ export function AgentCommandSettings() {
         autoAgentMaxPerSync: autoAgentMax,
         autoAgentIntervalMinutes: autoAgentInterval,
         autoAgentPipelinesEnabled: autoPipelines,
+        autoAgentApprovalEnabled: autoApproval,
         ...models,
       }),
     );
@@ -308,12 +313,25 @@ export function AgentCommandSettings() {
           <span className="text-xs text-muted-foreground">
             Every {autoAgentInterval} minutes (on the first sync after that), the default agent works through pull requests awaiting your review
             (drafts, ones you already voted on, and ones created over 30 days ago are skipped) and
-            work items assigned to you that have neither agent notes nor a result HTML yet,
+            work items assigned to you (New or Active, changed within 30 days) that have neither agent notes nor a result HTML yet,
             {autoAgentMax} per check, including those already waiting when the app starts.
             Each becomes an Investigate request in the Agent panel; the agent writes the result
             HTML into the result folder and is told not to change code or propose comments. A
             type without a result folder is skipped. The item's fields, description and comments
             are sent to the agent.
+          </span>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoApproval}
+              onChange={(event) => setAutoApproval(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Choose what to run in Auto queue first
+          </label>
+          <span className="text-xs text-muted-foreground">
+            Nothing starts by itself: the candidates are listed in Auto queue with the material the
+            agent would get and its size, and only the ones you pick are handed to the agent.
           </span>
         </div>
 

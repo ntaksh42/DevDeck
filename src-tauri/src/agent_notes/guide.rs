@@ -56,8 +56,15 @@ fn render(target: NoteTarget, notes_root: &Path) -> String {
         NoteTarget::PullRequest => "Pull Request のレビュー",
         NoteTarget::Ask => "対象に紐づかない依頼",
     };
+    // The agent is told to read this file first, so the result HTML layout
+    // lives here too instead of depending on the agent picking up a skill. A
+    // free-standing request has no result HTML.
+    let result_format = match target {
+        NoteTarget::Ask => String::new(),
+        _ => format!("\n{}", include_str!("result_format.md")),
+    };
     format!(
-        "このフォルダの Note ({kind}): `{}\\{}-{{番号}}\\*.md`\n\n{}",
+        "このフォルダの Note ({kind}): `{}\\{}-{{番号}}\\*.md`\n\n{}{result_format}",
         notes_root.display(),
         target.dir_prefix(),
         render_common(notes_root)
