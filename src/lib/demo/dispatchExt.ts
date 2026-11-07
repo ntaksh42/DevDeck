@@ -3,6 +3,7 @@
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
   AgentNoteItem,
+  AutoQueueTarget,
   CreateAgentNoteInput,
   ListInboxItemsInput,
   ListNotificationsInput,
@@ -44,6 +45,7 @@ import {
   demoSetInboxItemState,
   demoSetReplyReminder,
 } from "@/lib/demo/actionInbox";
+import { demoAutoQueuePreview, demoListAutoQueue, demoRunAutoQueue } from "@/lib/demo/autoQueue";
 import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
@@ -281,6 +283,12 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "list_agent_asks":
       return demoListAgentAsks();
+    case "list_auto_queue":
+      return demoListAutoQueue();
+    case "get_auto_queue_preview":
+      return demoAutoQueuePreview((args as { input: AutoQueueTarget }).input);
+    case "run_auto_queue":
+      return demoRunAutoQueue((args as { input: AutoQueueTarget[] }).input);
     case "run_agent":
       throw new Error("Running an agent is only available in the desktop app");
     default:

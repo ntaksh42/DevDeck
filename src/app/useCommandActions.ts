@@ -52,6 +52,14 @@ export function useCommandActions({
     {
       disabled: organizationsLength === 0,
       group: "Navigation",
+      id: "nav.autoQueue",
+      keywords: ["agent", "auto", "review", "investigate", "approve"],
+      label: "Go to Agent Auto Queue",
+      run: () => setView("autoQueue"),
+    },
+    {
+      disabled: organizationsLength === 0,
+      group: "Navigation",
       id: "nav.myReviews",
       keywords: ["pull request", "review"],
       label: "Go to My Reviews",

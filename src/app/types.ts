@@ -11,6 +11,7 @@ export type View =
   | "pipelines"
   | "notifications"
   | "inbox"
+  | "autoQueue"
   | "crossOrgSummary"
   | "analyze"
   | "settings";

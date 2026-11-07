@@ -36,6 +36,7 @@ function nonDefaultSettings(): AppSettings {
     autoAgentMaxPerSync: 3,
     autoAgentIntervalMinutes: 15,
     autoAgentPipelinesEnabled: true,
+    autoAgentApprovalEnabled: false,
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
     notificationContentPreviewEnabled: false,

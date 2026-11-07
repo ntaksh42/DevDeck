@@ -58,6 +58,7 @@ export const appSettingsSchema = z.object({
   autoAgentMaxPerSync: z.number().int().default(3),
   autoAgentIntervalMinutes: z.number().int().default(15),
   autoAgentPipelinesEnabled: z.boolean().default(false),
+  autoAgentApprovalEnabled: z.boolean().default(false),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
   notificationContentPreviewEnabled: z.boolean().default(true),
@@ -207,6 +208,7 @@ export type UpdateAppSettingsInput = {
   autoAgentMaxPerSync?: number;
   autoAgentIntervalMinutes?: number;
   autoAgentPipelinesEnabled?: boolean;
+  autoAgentApprovalEnabled?: boolean;
   workItemResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
   agentCommand?: string | null;

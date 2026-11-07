@@ -1,0 +1,187 @@
+//! Auto queue (setting `auto_agent_approval_enabled`): the candidates of the
+//! automatic run are listed instead of started, with the material the agent
+//! would get, and only the ones picked are handed to the agent.
+
+use std::path::Path;
+
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+
+use super::{gather, handled_check, launch, pick, AutoItem};
+use crate::agent_notes::{self, NoteTarget};
+use crate::db::{AppDatabase, Organization};
+use crate::error::{AppError, Result};
+
+/// Characters of the material sent to the screen; the agent gets all of it.
+const PREVIEW_CHARS: usize = 30_000;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoQueueItem {
+    pub organization_id: String,
+    pub organization_name: String,
+    pub target: &'static str,
+    pub id: i64,
+    pub title: String,
+    /// Repository of a pull request, project of a work item.
+    pub scope: String,
+    pub web_url: Option<String>,
+    pub created_date: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoQueuePreview {
+    /// The start of the material; empty when there is nothing to hand over.
+    pub document: String,
+    pub chars: usize,
+    pub estimated_tokens: usize,
+    /// Why nothing can be started (a pull request without readable changes).
+    pub unavailable: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoQueueTarget {
+    pub organization_id: String,
+    pub target: NoteTarget,
+    pub id: i64,
+}
+
+fn folder(path: &Option<String>) -> Option<&Path> {
+    path.as_deref().map(Path::new)
+}
+
+/// Every unhandled candidate of every organization, pull requests first.
+pub fn list(db: &AppDatabase) -> Result<Vec<AutoQueueItem>> {
+    let settings = db.get_app_settings()?;
+    let root = agent_notes::notes_root(db);
+    let (review_folder, work_item_folder) = (
+        folder(&settings.review_result_folder_path),
+        folder(&settings.work_item_result_folder_path),
+    );
+    let mut queue = Vec::new();
+    for org in db.list_organizations()? {
+        let prs = match review_folder {
+            Some(_) => db.list_review_pull_requests(&org.id)?,
+            None => Vec::new(),
+        };
+        let work_items = match work_item_folder {
+            Some(_) => db.list_my_work_items(&org.id)?,
+            None => Vec::new(),
+        };
+        let items = pick(
+            prs,
+            work_items,
+            usize::MAX,
+            Utc::now(),
+            handled_check(&root, review_folder, work_item_folder),
+        );
+        queue.extend(items.into_iter().map(|item| to_queue_item(&org, item)));
+    }
+    Ok(queue)
+}
+
+fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
+    let (target, id, title, scope, web_url, created_date) = match item {
+        AutoItem::PullRequest(pr) => (
+            "pull-request",
+            pr.pull_request_id,
+            pr.title,
+            pr.repository_name,
+            pr.web_url,
+            Some(pr.creation_date),
+        ),
+        AutoItem::WorkItem(wi) => (
+            "work-item",
+            wi.id,
+            wi.title,
+            wi.project_name,
+            wi.web_url,
+            wi.changed_date,
+        ),
+    };
+    AutoQueueItem {
+        organization_id: org.id.clone(),
+        organization_name: org.display_name.clone().unwrap_or_else(|| org.name.clone()),
+        target,
+        id,
+        title,
+        scope,
+        web_url,
+        created_date,
+    }
+}
+
+/// Finds the cached item behind a target; it may be gone since the list was drawn.
+fn find(db: &AppDatabase, target: &AutoQueueTarget) -> Result<(Organization, AutoItem)> {
+    let org = db
+        .get_organization(&target.organization_id)?
+        .ok_or_else(|| AppError::InvalidInput("organization not found".to_string()))?;
+    let item = match target.target {
+        NoteTarget::PullRequest => db
+            .list_review_pull_requests(&org.id)?
+            .into_iter()
+            .find(|pr| pr.pull_request_id == target.id)
+            .map(AutoItem::PullRequest),
+        NoteTarget::WorkItem => db
+            .list_my_work_items(&org.id)?
+            .into_iter()
+            .find(|wi| wi.id == target.id)
+            .map(AutoItem::WorkItem),
+        NoteTarget::Ask => None,
+    };
+    let item = item.ok_or_else(|| {
+        AppError::InvalidInput("the item is no longer in the synced data".to_string())
+    })?;
+    Ok((org, item))
+}
+
+/// The material the agent would get for one candidate. It calls the REST API
+/// (the diffs of a pull request), so it is fetched only for the item on screen.
+pub async fn preview(db: &AppDatabase, target: AutoQueueTarget) -> Result<AutoQueuePreview> {
+    let (org, item) = find(db, &target)?;
+    let settings = db.get_app_settings()?;
+    let Some(material) = gather(db, &settings, &org, &item).await? else {
+        return Ok(AutoQueuePreview {
+            document: String::new(),
+            chars: 0,
+            estimated_tokens: 0,
+            unavailable: Some(
+                "No readable changes: the agent would have nothing to review.".into(),
+            ),
+        });
+    };
+    let chars = material.document.chars().count();
+    Ok(AutoQueuePreview {
+        document: material.document.chars().take(PREVIEW_CHARS).collect(),
+        chars,
+        estimated_tokens: chars / 3,
+        unavailable: None,
+    })
+}
+
+/// Hands the picked candidates to the agent in the background, one after the
+/// other. Returns how many were queued.
+pub fn run(db: &AppDatabase, targets: Vec<AutoQueueTarget>) -> Result<usize> {
+    let settings = db.get_app_settings()?;
+    let mut picked = Vec::new();
+    for target in &targets {
+        picked.push(find(db, target)?);
+    }
+    let count = picked.len();
+    let db = db.clone();
+    tauri::async_runtime::spawn(async move {
+        for (org, item) in picked {
+            let started = match gather(&db, &settings, &org, &item).await {
+                Ok(Some(material)) => launch(&db, &item, material),
+                Ok(None) => Ok(()),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = started {
+                tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto queue: failed to start");
+            }
+        }
+    });
+    Ok(count)
+}
