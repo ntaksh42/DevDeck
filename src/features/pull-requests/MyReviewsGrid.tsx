@@ -308,7 +308,7 @@ export function MyReviewsGrid({
               onUnsnoozed={() => g.queryClient.invalidateQueries({ queryKey: ['myReviews'] })}
             />
           ) : (
-            <div ref={g.scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            <div ref={g.scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto [overflow-anchor:none]">
               <div ref={g.gridRef} style={{ minWidth: g.gridMinWidth }}>
                 <div
                   role="row"

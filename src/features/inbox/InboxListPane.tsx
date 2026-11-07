@@ -122,7 +122,7 @@ export function InboxListPane({
               {filterText.trim() || priority !== "all" || activeColumnFilterCount(columnFilters) > 0 ? "No items match the filter." : EMPTY_MESSAGE[tab]}
             </div>
           ) : (
-            <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
               {virtual.topPadding > 0 ? <div style={{ height: virtual.topPadding }} /> : null}
               {virtualRows.map((entry, offset) => {
                 const rowIndex = virtual.firstRow + offset;

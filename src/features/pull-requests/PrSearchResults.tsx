@@ -350,7 +350,7 @@ export function PullRequestResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto [overflow-anchor:none]">
           <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
           <PrSearchGridHeader columns={shownColumns} template={columnTemplate} filters={columnFilters} resizeProps={columnResizeProps} onFilter={openFilter} />
           {loading && results.length === 0 ? (

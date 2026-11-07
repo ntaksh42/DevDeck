@@ -403,7 +403,7 @@ export function NotificationsView({
             className="flex min-h-0 flex-1 flex-col outline-none"
             onKeyDown={handleKeyDown}
           >
-            <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
               {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
               {virtualEntries.map((entry) => {
                 if (entry.type === "header") {
