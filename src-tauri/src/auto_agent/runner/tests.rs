@@ -52,6 +52,7 @@ fn material(folder: &Path, base: Option<&str>, head: &str, complete: bool) -> Ma
         head: Some(head.into()),
         complete,
         has_content: true,
+        agent: None,
     }
 }
 
@@ -246,7 +247,9 @@ async fn human_reply_on_automatic_note_pauses_automation_without_archiving() {
         updated_at: String::new(),
         provider_kind: "azdo".into(),
     };
-    assert!(!process_item(&db, &settings, &org, &item).await.unwrap());
+    assert!(!process_item(&db, &settings, &org, &item, None)
+        .await
+        .unwrap());
     let notes = service
         .list(ListAgentNotesInput {
             target: item.target(),

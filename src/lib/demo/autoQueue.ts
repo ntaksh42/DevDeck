@@ -20,6 +20,7 @@ function item(
     scope,
     webUrl: null,
     createdDate,
+    held: false,
   };
 }
 
@@ -63,6 +64,12 @@ export function demoAutoQueuePreview(target: AutoQueueTarget): AutoQueuePreview 
         );
   const chars = document.length * (entry.target === "pull-request" ? 40 : 6);
   return { document, chars, estimatedTokens: Math.round(chars / 3), unavailable: null };
+}
+
+export function demoRunAssignedWorkItems(): number {
+  const before = queue.length;
+  queue = queue.filter((entry) => entry.target !== "work-item");
+  return before - queue.length;
 }
 
 export function demoRunAutoQueue(targets: AutoQueueTarget[]): number {

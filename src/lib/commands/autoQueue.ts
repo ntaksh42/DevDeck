@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeCommand } from "./runtime";
+import type { AgentKind } from "./agentNotes";
 
 // Auto queue: the pull requests awaiting my review and the work items assigned
 // to me that the automatic run would hand to the agent, listed so that only
@@ -16,6 +17,8 @@ const autoQueueItemSchema = z.object({
   scope: z.string(),
   webUrl: z.string().nullable().default(null),
   createdDate: z.string().nullable().default(null),
+  /** Held back from the automatic run until I pick (first scan after startup). */
+  held: z.boolean().default(false),
 });
 
 export type AutoQueueItem = z.infer<typeof autoQueueItemSchema>;
@@ -49,5 +52,25 @@ export async function getAutoQueuePreview(input: AutoQueueTarget): Promise<AutoQ
 /** Hands the picked items to the agent; resolves with how many were queued. */
 export async function runAutoQueue(input: AutoQueueTarget[]): Promise<number> {
   const result = await invokeCommand("run_auto_queue", { input });
+  return z.number().int().parse(result);
+}
+
+/** Investigates every unhandled work item assigned to me, three at a time; resolves with how many were queued. */
+export async function runAssignedWorkItemInvestigations(agent?: AgentKind): Promise<number> {
+  const result = await invokeCommand("run_assigned_work_item_investigations", { agent });
+  return z.number().int().parse(result);
+}
+
+export type WorkItemInvestigationTarget = {
+  organizationId: string;
+  projectId: string;
+  projectName: string;
+  id: number;
+  title: string;
+};
+
+/** Investigates the work items picked in a view, three at a time; resolves with how many were queued. */
+export async function runWorkItemInvestigations(input: WorkItemInvestigationTarget[], agent?: AgentKind): Promise<number> {
+  const result = await invokeCommand("run_work_item_investigations", { input, agent });
   return z.number().int().parse(result);
 }

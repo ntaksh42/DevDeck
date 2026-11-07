@@ -186,6 +186,8 @@ pub fn run() {
             commands::auto_queue::list_auto_queue,
             commands::auto_queue::get_auto_queue_preview,
             commands::auto_queue::run_auto_queue,
+            commands::auto_queue::run_assigned_work_item_investigations,
+            commands::auto_queue::run_work_item_investigations,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,
             commands::snooze::snooze_item,

@@ -3,13 +3,16 @@
 //! would get, and only the ones picked are handed to the agent.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 
 use super::{handled_check, pick, runner, AutoItem, BATCH_SLOT};
+use crate::agent_notes::launch::AgentKind;
 use crate::agent_notes::{self, NoteTarget};
-use crate::db::{AppDatabase, Organization};
+use crate::db::{AppDatabase, AppSettings, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 
 /// Characters of the material sent to the screen; the agent gets all of it.
@@ -27,6 +30,8 @@ pub struct AutoQueueItem {
     pub scope: String,
     pub web_url: Option<String>,
     pub created_date: Option<String>,
+    /// Held back from the automatic run, so it waits for a pick.
+    pub held: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,36 +60,47 @@ fn folder(path: &Option<String>) -> Option<&Path> {
 /// Every unhandled candidate of every organization, pull requests first.
 pub fn list(db: &AppDatabase) -> Result<Vec<AutoQueueItem>> {
     let settings = db.get_app_settings()?;
+    let mut queue = Vec::new();
+    for org in db.list_organizations()? {
+        let items = candidates(db, &settings, &org)?;
+        queue.extend(items.into_iter().map(|item| {
+            let held = settings.auto_agent_approval_enabled || super::is_held(db, &org, &item);
+            to_queue_item(&org, item, held)
+        }));
+    }
+    Ok(queue)
+}
+
+/// The unhandled candidates of one organization. The first automatic batch
+/// after startup holds these back so they wait for a pick in Auto queue.
+pub(super) fn candidates(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    org: &Organization,
+) -> Result<Vec<AutoItem>> {
     let root = agent_notes::notes_root(db);
     let (review_folder, work_item_folder) = (
         folder(&settings.review_result_folder_path),
         folder(&settings.work_item_result_folder_path),
     );
-    let mut queue = Vec::new();
-    for org in db.list_organizations()? {
-        let prs = match review_folder {
-            Some(_) => db.list_review_pull_requests(&org.id)?,
-            None => Vec::new(),
-        };
-        let work_items = match work_item_folder {
-            Some(_) => db.list_my_work_items(&org.id)?,
-            None => Vec::new(),
-        };
-        // Items an automatic attempt already tracks follow their own retry
-        // schedule instead of waiting for approval again.
-        let handled = handled_check(&root, review_folder, work_item_folder);
-        let items = pick(prs, work_items, usize::MAX, Utc::now(), |target, id| {
-            handled(target, id)
-        })
+    let prs = match review_folder {
+        Some(_) => db.list_review_pull_requests(&org.id)?,
+        None => Vec::new(),
+    };
+    let work_items = match work_item_folder {
+        Some(_) => db.list_my_work_items(&org.id)?,
+        None => Vec::new(),
+    };
+    // Items an automatic attempt already tracks follow their own retry
+    // schedule instead of waiting for approval again.
+    let handled = handled_check(&root, review_folder, work_item_folder);
+    Ok(pick(prs, work_items, usize::MAX, Utc::now(), handled)
         .into_iter()
-        .filter(|item| !item.history_path(db, &org).exists())
-        .collect::<Vec<_>>();
-        queue.extend(items.into_iter().map(|item| to_queue_item(&org, item)));
-    }
-    Ok(queue)
+        .filter(|item| !item.history_path(db, org).exists())
+        .collect())
 }
 
-fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
+fn to_queue_item(org: &Organization, item: AutoItem, held: bool) -> AutoQueueItem {
     let (target, id, title, scope, web_url, created_date) = match item {
         AutoItem::PullRequest(pr) => (
             "pull-request",
@@ -112,6 +128,7 @@ fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
         scope,
         web_url,
         created_date,
+        held,
     }
 }
 
@@ -163,6 +180,9 @@ pub async fn preview(db: &AppDatabase, target: AutoQueueTarget) -> Result<AutoQu
     })
 }
 
+/// Work items investigated at the same time by [`run_assigned_work_items`].
+const WORK_ITEM_PARALLEL: usize = 3;
+
 /// Hands the picked candidates to the automatic runner in the background, one
 /// after the other and never alongside an automatic batch. Returns how many
 /// were queued.
@@ -173,16 +193,107 @@ pub fn run(db: &AppDatabase, targets: Vec<AutoQueueTarget>) -> Result<usize> {
         picked.push(find(db, target)?);
     }
     let count = picked.len();
+    spawn_runs(db, settings, picked, 1, None);
+    Ok(count)
+}
+
+/// Investigates every unhandled work item assigned to me, [`WORK_ITEM_PARALLEL`]
+/// at a time and never alongside an automatic batch. Returns how many were queued.
+pub fn run_assigned_work_items(db: &AppDatabase, agent: Option<AgentKind>) -> Result<usize> {
+    let settings = db.get_app_settings()?;
+    let mut picked = Vec::new();
+    for org in db.list_organizations()? {
+        for item in candidates(db, &settings, &org)? {
+            if item.target() == NoteTarget::WorkItem {
+                picked.push((org.clone(), item));
+            }
+        }
+    }
+    let count = picked.len();
+    if count > 0 {
+        spawn_runs(db, settings, picked, WORK_ITEM_PARALLEL, agent);
+    }
+    Ok(count)
+}
+
+/// A work item picked in a Work Items view. The view may show items that are
+/// not in the assigned-to-me cache, so the screen sends what the runner needs.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemTarget {
+    pub organization_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub id: i64,
+    pub title: String,
+}
+
+/// Investigates the work items picked in a view, [`WORK_ITEM_PARALLEL`] at a
+/// time and never alongside an automatic batch. Returns how many were queued.
+/// Items that already succeeded or have a result are skipped by the runner.
+pub fn run_work_items(
+    db: &AppDatabase,
+    targets: Vec<WorkItemTarget>,
+    agent: Option<AgentKind>,
+) -> Result<usize> {
+    let settings = db.get_app_settings()?;
+    let mut picked = Vec::new();
+    for target in targets {
+        let org = db
+            .get_organization(&target.organization_id)?
+            .ok_or_else(|| AppError::InvalidInput("organization not found".to_string()))?;
+        let item = CachedWorkItem {
+            org_id: org.id.clone(),
+            project_id: target.project_id,
+            project_name: target.project_name,
+            id: target.id,
+            title: target.title,
+            work_item_type: None,
+            state: None,
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: None,
+            web_url: None,
+            tags: None,
+        };
+        picked.push((org, AutoItem::WorkItem(item)));
+    }
+    let count = picked.len();
+    if count > 0 {
+        spawn_runs(db, settings, picked, WORK_ITEM_PARALLEL, agent);
+    }
+    Ok(count)
+}
+
+fn spawn_runs(
+    db: &AppDatabase,
+    settings: AppSettings,
+    picked: Vec<(Organization, AutoItem)>,
+    parallel: usize,
+    agent: Option<AgentKind>,
+) {
     let db = db.clone();
     tauri::async_runtime::spawn(async move {
         let Ok(_slot) = BATCH_SLOT.acquire().await else {
             return;
         };
+        let permits = Arc::new(Semaphore::new(parallel));
+        let settings = Arc::new(settings);
+        let mut handles = Vec::new();
         for (org, item) in picked {
-            if let Err(e) = runner::process_item(&db, &settings, &org, &item).await {
-                tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto queue: failed to start");
-            }
+            let Ok(permit) = permits.clone().acquire_owned().await else {
+                break;
+            };
+            let (db, settings) = (db.clone(), settings.clone());
+            handles.push(tauri::async_runtime::spawn(async move {
+                let _permit = permit;
+                if let Err(e) = runner::process_item(&db, &settings, &org, &item, agent).await {
+                    tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto queue: failed to start");
+                }
+            }));
+        }
+        for handle in handles {
+            let _ = handle.await;
         }
     });
-    Ok(count)
 }
