@@ -7,7 +7,7 @@ use std::path::Path;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use super::{gather, handled_check, launch, pick, AutoItem};
+use super::{handled_check, pick, runner, AutoItem, BATCH_SLOT};
 use crate::agent_notes::{self, NoteTarget};
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
@@ -70,13 +70,15 @@ pub fn list(db: &AppDatabase) -> Result<Vec<AutoQueueItem>> {
             Some(_) => db.list_my_work_items(&org.id)?,
             None => Vec::new(),
         };
-        let items = pick(
-            prs,
-            work_items,
-            usize::MAX,
-            Utc::now(),
-            handled_check(&root, review_folder, work_item_folder),
-        );
+        // Items an automatic attempt already tracks follow their own retry
+        // schedule instead of waiting for approval again.
+        let handled = handled_check(&root, review_folder, work_item_folder);
+        let items = pick(prs, work_items, usize::MAX, Utc::now(), |target, id| {
+            handled(target, id)
+        })
+        .into_iter()
+        .filter(|item| !item.history_path(db, &org).exists())
+        .collect::<Vec<_>>();
         queue.extend(items.into_iter().map(|item| to_queue_item(&org, item)));
     }
     Ok(queue)
@@ -142,7 +144,7 @@ fn find(db: &AppDatabase, target: &AutoQueueTarget) -> Result<(Organization, Aut
 pub async fn preview(db: &AppDatabase, target: AutoQueueTarget) -> Result<AutoQueuePreview> {
     let (org, item) = find(db, &target)?;
     let settings = db.get_app_settings()?;
-    let Some(material) = gather(db, &settings, &org, &item).await? else {
+    let Some(document) = runner::preview(db, &settings, &org, &item).await? else {
         return Ok(AutoQueuePreview {
             document: String::new(),
             chars: 0,
@@ -152,17 +154,18 @@ pub async fn preview(db: &AppDatabase, target: AutoQueueTarget) -> Result<AutoQu
             ),
         });
     };
-    let chars = material.document.chars().count();
+    let chars = document.chars().count();
     Ok(AutoQueuePreview {
-        document: material.document.chars().take(PREVIEW_CHARS).collect(),
+        document: document.chars().take(PREVIEW_CHARS).collect(),
         chars,
         estimated_tokens: chars / 3,
         unavailable: None,
     })
 }
 
-/// Hands the picked candidates to the agent in the background, one after the
-/// other. Returns how many were queued.
+/// Hands the picked candidates to the automatic runner in the background, one
+/// after the other and never alongside an automatic batch. Returns how many
+/// were queued.
 pub fn run(db: &AppDatabase, targets: Vec<AutoQueueTarget>) -> Result<usize> {
     let settings = db.get_app_settings()?;
     let mut picked = Vec::new();
@@ -172,13 +175,11 @@ pub fn run(db: &AppDatabase, targets: Vec<AutoQueueTarget>) -> Result<usize> {
     let count = picked.len();
     let db = db.clone();
     tauri::async_runtime::spawn(async move {
+        let Ok(_slot) = BATCH_SLOT.acquire().await else {
+            return;
+        };
         for (org, item) in picked {
-            let started = match gather(&db, &settings, &org, &item).await {
-                Ok(Some(material)) => launch(&db, &item, material),
-                Ok(None) => Ok(()),
-                Err(e) => Err(e),
-            };
-            if let Err(e) = started {
+            if let Err(e) = runner::process_item(&db, &settings, &org, &item).await {
                 tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto queue: failed to start");
             }
         }

@@ -238,3 +238,13 @@ fn changed_region_of_an_added_file_is_the_whole_file() {
     assert_eq!(before, "");
     assert_eq!(after, "x\ny");
 }
+
+#[test]
+fn another_organization_can_queue_while_the_first_is_still_pending() {
+    let first = super::BatchGuard::reserve("queue-test|org-a".into()).unwrap();
+    assert!(super::BatchGuard::reserve("queue-test|org-a".into()).is_none());
+    let second = super::BatchGuard::reserve("queue-test|org-b".into()).unwrap();
+    drop(first);
+    assert!(super::BatchGuard::reserve("queue-test|org-a".into()).is_some());
+    drop(second);
+}

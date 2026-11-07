@@ -14,9 +14,9 @@ import { settingsInput } from './settingsHelpers';
 // Mirror `DEFAULT_CLAUDE_COMMAND` / `DEFAULT_CODEX_COMMAND` in
 // src-tauri/src/agent_notes/launch.rs, used when a command is empty.
 const DEFAULT_CLAUDE_COMMAND =
-  'claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --dangerously-skip-permissions';
+  'claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" "{results}" --dangerously-skip-permissions';
 const DEFAULT_CODEX_COMMAND =
-  'codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" "Read {guide} and handle the open notes in {notes}"';
+  'codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" --add-dir "{results}" "Read {guide} and handle the open notes in {notes}"';
 const INPUT_CLASS =
   "h-9 rounded-md border border-input bg-background px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring";
 const MODEL_FIELDS = [
@@ -170,7 +170,7 @@ export function AgentCommandSettings() {
           <span className="text-xs text-muted-foreground">
             Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
             <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
-            <code>{"{repo}"}</code> (the pull request's repository), <code>{"{guide}"}</code> (the
+            <code>{"{repo}"}</code> (the pull request's repository), <code>{"{results}"}</code> (the result folder), <code>{"{guide}"}</code> (the
             agent guide). Notes are kept in the app data folder, outside the folder the agent
             starts in, so allow the agent to use it (e.g. <code>--add-dir {"{notes}"}</code>).
             Leave a command empty to use the default shown in it: Claude Code runs in the
@@ -311,14 +311,14 @@ export function AgentCommandSettings() {
             />
           </label>
           <span className="text-xs text-muted-foreground">
-            Every {autoAgentInterval} minutes (on the first sync after that), the default agent works through pull requests awaiting your review
-            (drafts, ones you already voted on, and ones created over 30 days ago are skipped) and
-            work items assigned to you (New or Active, changed within 30 days) that have neither agent notes nor a result HTML yet,
-            {autoAgentMax} per check, including those already waiting when the app starts.
-            Each becomes an Investigate request in the Agent panel; the agent writes the result
-            HTML into the result folder and is told not to change code or propose comments. A
-            type without a result folder is skipped. The item's fields, description and comments
-            are sent to the agent.
+            Every {autoAgentInterval} minutes (on the next sync), up to {autoAgentMax} attempts run one at a time. First reviews cover
+            the full PR, skipping drafts, voted PRs and PRs over 30 days old. Tracked PRs continue
+            reviewing later pushes, except while in draft, using only changes since the last
+            fully completed review, including force pushes. Failed runs retry after a delay;
+            partial coverage keeps the previous reviewed commit. Open human requests pause
+            automatic work. Assigned work items (New or Active, changed within 30 days) are investigated if they have no prior result.
+            A result folder is required for each type. Fields, comments and code changes are sent
+            to the default agent; code is not changed and comments are not proposed.
           </span>
           <label className="flex items-center gap-2 text-sm font-medium">
             <input

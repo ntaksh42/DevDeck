@@ -80,9 +80,20 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
         const key = `${target}:${summary.itemId}`;
         const before = previous.current.get(key);
         previous.current.set(key, summary);
-        if (before && before.lastModifiedAt !== summary.lastModifiedAt) {
+        const changed =
+          !first && (!before ||
+            before.lastModifiedAt !== summary.lastModifiedAt ||
+            before.lastAgentReplyAt !== summary.lastAgentReplyAt ||
+            before.open !== summary.open || before.done !== summary.done ||
+            before.needsYou !== summary.needsYou || before.drafts !== summary.drafts);
+        if (changed) {
           void queryClient.invalidateQueries({ queryKey: ["agentNotes", target, summary.itemId] });
-          if (target === "ask") void queryClient.invalidateQueries({ queryKey: ["agentAsks"] });
+          if (target === "ask") {
+            void queryClient.invalidateQueries({ queryKey: ["agentAsks"] });
+          } else {
+            const resultKey = target === "pull-request" ? "reviewResultPreview" : "workItemResultPreview";
+            void queryClient.invalidateQueries({ queryKey: [resultKey, summary.itemId] });
+          }
         }
         if (first || !notify) continue;
         const replied =

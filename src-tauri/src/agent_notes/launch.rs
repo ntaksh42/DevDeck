@@ -2,24 +2,72 @@
 //! can be handed over without switching to a terminal.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 use serde::Deserialize;
 
 use super::{notes_dir, NoteTarget};
 use crate::error::{AppError, Result};
 
+#[cfg(windows)]
+mod job;
+
+/// A tracked process cannot outlive its controller on Windows: closing the
+/// non-inheritable job handle also terminates any descendants still running.
+pub(crate) struct TrackedChild {
+    #[cfg(windows)]
+    _job: Option<job::Job>,
+    child: Child,
+}
+
+impl TrackedChild {
+    pub(crate) fn new(mut child: Child) -> Result<Self> {
+        #[cfg(windows)]
+        let job = match job::Job::attach(&child) {
+            Ok(job) => Some(job),
+            Err(error) => {
+                // A tiny command may already have exited before assignment.
+                // Its status remains available to the normal wait path.
+                if child.try_wait()?.is_none() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error.into());
+                }
+                None
+            }
+        };
+        Ok(Self {
+            #[cfg(windows)]
+            _job: job,
+            child,
+        })
+    }
+}
+
+impl std::ops::Deref for TrackedChild {
+    type Target = Child;
+    fn deref(&self) -> &Self::Target {
+        &self.child
+    }
+}
+
+impl std::ops::DerefMut for TrackedChild {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.child
+    }
+}
+
 const GUIDE_FILE: &str = "AGENTS.md";
 /// Used when Settings has no Claude Code command, so the agent works out of the
 /// box: Claude Code in the background, allowed into the notes folder (outside
 /// the folder it starts in) and without permission prompts, which nobody could
 /// answer. The prompt comes before `--add-dir`, which takes several values.
-const DEFAULT_CLAUDE_COMMAND: &str = "claude -p \"Read {guide} and handle the open notes in {notes}\" --add-dir \"{notes}\" --disallowedTools \"Bash(az:*)\" \"Bash(git push:*)\" --dangerously-skip-permissions";
+const DEFAULT_CLAUDE_COMMAND: &str = "claude -p \"Read {guide} and handle the open notes in {notes}\" --add-dir \"{notes}\" \"{results}\" --disallowedTools \"Bash(az:*)\" \"Bash(git push:*)\" --dangerously-skip-permissions";
 /// The same for Codex: non-interactive, also outside a git repository (the
 /// result folder), and sandboxed to writing only the folder it starts in and
-/// the notes folder. Azure CLI and `git push` are blocked by the environment
+/// the notes and result folders. Azure CLI and `git push` are blocked by the environment
 /// below, as for Claude Code.
-const DEFAULT_CODEX_COMMAND: &str = "codex exec --skip-git-repo-check --sandbox workspace-write --add-dir \"{notes}\" \"Read {guide} and handle the open notes in {notes}\"";
+const DEFAULT_CODEX_COMMAND: &str = "codex exec --skip-git-repo-check --sandbox workspace-write --add-dir \"{notes}\" --add-dir \"{results}\" \"Read {guide} and handle the open notes in {notes}\"";
 /// Empty Azure CLI config folder (under the notes root) the agent starts with,
 /// so `az` is signed out: the agent reads what DevDeck gathered instead of
 /// reaching Azure DevOps with the user's credentials.
@@ -128,7 +176,7 @@ pub(crate) fn is_plain_folder_name(name: &str) -> bool {
 /// Placeholders in the command: `{target}` (`work-item` / `pull-request`),
 /// `{id}` (item id), `{notes}` (the item's notes folder), `{workspace}` (the
 /// workspace folder, empty when unset), `{repo}` (the repository name, empty
-/// for work items) and `{guide}` (the agent guide in the result folder). The
+/// for work items), `{results}` (the result folder) and `{guide}` (its guide). The
 /// command runs through the system shell in [`AgentLaunch::work_dir`] and is
 /// not waited on by the caller.
 pub(crate) fn run_agent(
@@ -138,6 +186,24 @@ pub(crate) fn run_agent(
     target: NoteTarget,
     item_id: i64,
 ) -> Result<()> {
+    let mut child = spawn_agent(launch, agent, command, target, item_id, None)?;
+    // The command is not waited on by the request, but something has to reap it.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+/// Starts the same protected command while leaving completion tracking to the
+/// caller. Automatic runs retain both output streams in their private log.
+pub(crate) fn spawn_agent(
+    launch: &AgentLaunch<'_>,
+    agent: AgentKind,
+    command: Option<&str>,
+    target: NoteTarget,
+    item_id: i64,
+    log_path: Option<&Path>,
+) -> Result<Child> {
     let command = expand(agent, command, launch, target, item_id)?;
     let work_dir = launch.work_dir();
 
@@ -157,17 +223,18 @@ pub(crate) fn run_agent(
     for var in AZURE_TOKEN_VARS {
         cmd.env_remove(var);
     }
-    let mut child = cmd
-        .current_dir(&work_dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
-    // The command is not waited on by the request, but something has to reap it.
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(())
+    cmd.current_dir(&work_dir).stdin(Stdio::null());
+    match log_path {
+        Some(path) => {
+            let log = std::fs::File::create(path)?;
+            cmd.stdout(Stdio::from(log.try_clone()?))
+                .stderr(Stdio::from(log));
+        }
+        None => {
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+    }
+    Ok(cmd.spawn()?)
 }
 
 /// The system shell running `command`. On Windows the string is handed to
@@ -223,6 +290,7 @@ fn expand(
         .replace("{target}", target.as_str())
         .replace("{id}", &item_id.to_string())
         .replace("{notes}", &notes.display().to_string())
+        .replace("{results}", &launch.result_folder.display().to_string())
         .replace("{workspace}", &workspace)
         .replace("{repo}", repo)
         .replace("{guide}", &guide.display().to_string());

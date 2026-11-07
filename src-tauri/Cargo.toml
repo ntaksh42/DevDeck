@@ -40,6 +40,9 @@ url = { workspace = true }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+
 [dev-dependencies]
 tempfile = "3"
 wiremock = "0.6"
