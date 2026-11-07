@@ -24,6 +24,7 @@ import {
   type WiSortState,
 } from './workItemsGridHelpers';
 import { BulkActionBar, BulkFailurePanel } from './BulkActionBar';
+import { BulkInvestigateButton } from './BulkInvestigateButton';
 import { WiGridHeader } from './WiGridHeader';
 import { useExtraColumnLabel } from './useWorkItemFields';
 import { WiGridBody } from './WiGridBody';
@@ -369,6 +370,7 @@ export function WorkItemsGrid({
           onPrioritySelect={(priority) => g.bulk.bulkPriorityMutation.mutate(priority)}
           tagsPending={g.bulk.bulkTagsMutation.isPending}
           onTagsApply={(tag, mode) => g.bulk.bulkTagsMutation.mutate({ tag, mode })}
+          extraActions={<BulkInvestigateButton items={g.checkedItems} />}
           snoozePending={state.snoozeMutation.isPending}
           onSnoozeOpen={(anchorRect) => {
             state.snoozeTargetRef.current = [...g.checkedItems];

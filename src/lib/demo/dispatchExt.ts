@@ -45,7 +45,7 @@ import {
   demoSetInboxItemState,
   demoSetReplyReminder,
 } from "@/lib/demo/actionInbox";
-import { demoAutoQueuePreview, demoListAutoQueue, demoRunAutoQueue } from "@/lib/demo/autoQueue";
+import { demoAutoQueuePreview, demoListAutoQueue, demoRunAssignedWorkItems, demoRunAutoQueue } from "@/lib/demo/autoQueue";
 import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
@@ -287,6 +287,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
       return demoListAutoQueue();
     case "get_auto_queue_preview":
       return demoAutoQueuePreview((args as { input: AutoQueueTarget }).input);
+    case "run_assigned_work_item_investigations":
+      return demoRunAssignedWorkItems();
+    case "run_work_item_investigations":
+      return ((args as { input?: unknown[] } | undefined)?.input ?? []).length;
     case "run_auto_queue":
       return demoRunAutoQueue((args as { input: AutoQueueTarget[] }).input);
     case "run_agent":

@@ -115,6 +115,7 @@ export function startFakeAdo({ scenario, org, port, options, log = console.log }
       const item = state.workItems.find((w) => w.id === Number(m[1]));
       return item ? withoutComments(item) : null;
     }],
+    ["GET", /^(?:\/[^/]+)*\/_apis\/wit\/workitemtypes\/[^/]+\/states$/, () => ({ count: 4, value: ["New", "Active", "Resolved", "Closed"].map((name) => ({ name })) })],
     ["GET", /^\/[^/]+\/_apis\/wit\/workitems\/(\d+)\/comments$/, (m) => {
       const comments = state.workItems.find((w) => w.id === Number(m[1]))?.comments ?? [];
       // Azure DevOps lists comments newest first.
