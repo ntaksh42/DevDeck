@@ -242,6 +242,44 @@ after
 }
 
 #[test]
+fn the_retired_result_html_skill_is_removed_only_when_devdeck_wrote_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let notes_root = Path::new("C:/data/agent-notes");
+    let path = temp.path().join("devdeck-result-html").join("SKILL.md");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        "<!-- devdeck:managed (DevDeck が起動時に上書きします。編集しないでください) -->\nold",
+    )
+    .unwrap();
+    ensure_skill(temp.path(), notes_root).unwrap();
+    assert!(!path.parent().unwrap().exists());
+
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, "user skill").unwrap();
+    ensure_skill(temp.path(), notes_root).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), "user skill");
+}
+
+#[test]
+fn the_guide_carries_the_result_html_format_except_for_free_standing_requests() {
+    for (target, expected) in [
+        (NoteTarget::PullRequest, true),
+        (NoteTarget::WorkItem, true),
+        (NoteTarget::Ask, false),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        ensure_guide(temp.path(), target, temp.path()).unwrap();
+        let guide = fs::read_to_string(temp.path().join("AGENTS.md")).unwrap();
+        assert_eq!(
+            guide.contains("# DevDeck の結果 HTML の書き方"),
+            expected,
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
 fn ensure_guide_skips_missing_folder() {
     let temp = tempfile::tempdir().unwrap();
     let missing = temp.path().join("missing");
@@ -368,15 +406,8 @@ fn skill_shares_the_guide_text_and_leaves_user_skills_alone() {
     let body = skill.split_once("# DevDeck の Agent notes").unwrap().1;
     assert!(guide.contains(body));
 
-    // The result HTML format is placed beside it.
-    let format =
-        fs::read_to_string(temp.path().join("devdeck-result-html").join("SKILL.md")).unwrap();
-    assert!(format.starts_with(
-        "---
-name: devdeck-result-html
-"
-    ));
-    assert!(format.contains("インライン SVG"));
+    // No skill is placed for the result HTML format: the guide carries it.
+    assert!(!temp.path().join("devdeck-result-html").exists());
 
     // An outdated managed skill is refreshed; a user-written one is kept.
     fs::write(&path, skill.replace("data-agent-note", "OLD")).unwrap();
