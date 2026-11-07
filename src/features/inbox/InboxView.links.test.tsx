@@ -17,19 +17,21 @@ afterEach(() => {
 });
 
 describe("InboxView related links", () => {
-  it("lists a pull request's linked work items above the conversation", async () => {
+  it("folds a pull request's links to one line under the conversation and opens them", async () => {
     renderView();
     const list = await openList();
     fireEvent.click(rowFor(list, "!42"));
     const links = await screen.findByRole("region", { name: "Related links" });
+    expect(within(links).queryByRole("button", { name: /#123/ })).toBeNull();
+    fireEvent.click(within(links).getByRole("button", { name: /Linked/ }));
     await waitFor(() => {
       expect(within(links).getByRole("button", { name: /#123/ })).toBeTruthy();
       expect(within(links).getByRole("button", { name: /#118/ })).toBeTruthy();
     });
     expect(within(links).getByText("Linked")).toBeTruthy();
-    // Above the thread, so the pinned reply box never covers it.
+    // After the thread, so the comment is the first thing to read.
     const thread = await screen.findByText("Could you add a test for the empty case?");
-    expect(links.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(thread.compareDocumentPosition(links) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("lists a work item's parent and opens a link with its number key", async () => {
@@ -37,6 +39,7 @@ describe("InboxView related links", () => {
     const list = await openList();
     fireEvent.click(rowFor(list, "#123"));
     const links = await screen.findByRole("region", { name: "Related links" });
+    fireEvent.click(within(links).getAllByRole("button")[0]);
     expect(within(links).getByRole("button", { name: /#90/ })).toBeTruthy();
 
     const opened = vi.fn();

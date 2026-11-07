@@ -4,7 +4,7 @@ test("Inbox uses row focus and Ctrl+G returns from the preview to the selected r
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
   const list = page.getByRole("listbox", { name: "Inbox items" });
-  const row = list.getByRole("option").filter({ hasText: "!103 api-gateway" });
+  const row = list.getByRole("option").filter({ hasText: "!103 " });
   await row.click();
   await expect(row).toBeFocused();
   const focusedShadow = await row.evaluate((el) => getComputedStyle(el).boxShadow);
@@ -21,7 +21,7 @@ test("Inbox uses row focus and Ctrl+G returns from the preview to the selected r
   expect(await row.evaluate((el) => getComputedStyle(el).boxShadow)).toBe(focusedShadow);
 
   await page.keyboard.press("j");
-  await expect(list.getByRole("option").filter({ hasText: "!189 android-app" })).toBeFocused();
+  await expect(list.getByRole("option").filter({ hasText: "!189 " })).toBeFocused();
   await page.keyboard.press("k");
   await expect(row).toBeFocused();
 });
@@ -29,7 +29,7 @@ test("Inbox uses row focus and Ctrl+G returns from the preview to the selected r
 test("Ctrl+G returns from Agent conversations to the Inbox row", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
-  const row = page.getByRole("listbox", { name: "Inbox items" }).getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
+  const row = page.getByRole("listbox", { name: "Inbox items" }).getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
   await row.click();
   await page.keyboard.press("q");
   const conversations = page.getByLabel("Agent conversations");

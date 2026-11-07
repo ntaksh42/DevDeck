@@ -101,14 +101,14 @@ export function inboxSubjectLabel(item: InboxEntry): string {
 }
 
 /**
- * The PR / work item title for rows whose own text is a comment, so the row
- * says what the comment is about. Rows that already show the title (no
- * comment) and non-PR / WI rows have none.
+ * What a row is about: `!42 PR title` / `#123 work item title`, so the comment
+ * next to it needs no guessing. The repository / project moves to the tooltip.
  */
-export function inboxRowTitle(item: InboxItem): string | null {
-  if (!item.snippet || !item.title) return null;
-  if (!isPullRequestItem(item) && !isWorkItemItem(item)) return null;
-  return item.title === item.snippet ? null : item.title;
+export function inboxRowSubject(item: InboxEntry): string {
+  if (!item.title) return inboxSubjectLabel(item);
+  if (isPullRequestItem(item)) return `!${item.subjectId} ${item.title}`;
+  if (isWorkItemItem(item)) return `#${item.subjectId} ${item.title}`;
+  return inboxSubjectLabel(item);
 }
 
 /** `refs/heads/feature/x` → `feature/x`. */
