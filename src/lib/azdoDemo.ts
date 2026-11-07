@@ -1,4 +1,5 @@
 import { demoPaletteSearch } from "./demo/palette";
+import { stopDemoPrSearch } from "./demo/prSearch";
 import type {
   AddAzureCliOrganizationInput,
   AddPatOrganizationInput,
@@ -115,6 +116,11 @@ let demoSettings: AppSettings = { ...DEFAULT_DEMO_SETTINGS };
 let demoSyncStates: SyncState[] = DEFAULT_DEMO_SYNC_STATES.map((s) => ({ ...s }));
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
+  if (command === "stop_pull_request_search") {
+    const input = (args as { input: { organizationId?: string; searchId: string } }).input;
+    stopDemoPrSearch(input);
+    return;
+  }
   await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
 
   if (shouldFailDemoCommand(command)) {

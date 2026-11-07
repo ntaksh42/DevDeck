@@ -196,6 +196,7 @@ pub fn run() {
             commands::orgs::set_active_organization,
             commands::orgs::get_provider_capabilities,
             commands::prs::search_pull_requests,
+            commands::prs::stop_pull_request_search,
             commands::prs::list_my_review_pull_requests,
             commands::prs::list_my_created_pull_requests,
             commands::pr_review::get_pull_request_review,

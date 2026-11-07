@@ -2,6 +2,8 @@ mod branch_stats;
 mod palette;
 mod ref_updates;
 mod requests;
+mod search_page;
+pub use search_page::PullRequestPageCriteria;
 mod types;
 
 pub use branch_stats::GitBranchStats;
@@ -16,3 +18,6 @@ mod tests_commits;
 mod tests_pull_requests;
 #[cfg(test)]
 mod tests_pull_requests_paging;
+
+#[cfg(test)]
+mod tests_search_page;

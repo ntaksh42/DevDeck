@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 for (const view of [
-  { key: "q", query: "42", prefix: "pr:", placeholder: "title, author, branch…", filter: "Filter by Repository", title: "Add pull request search dashboard", grid: "Pull request search results" },
+  { key: "q", query: "42", prefix: "pr:", placeholder: "Search pull requests…", filter: "Filter by Repository", title: "Add pull request search dashboard", grid: "Pull request search results" },
   { key: "f", query: "123", prefix: "wi:", placeholder: "Search work items…", filter: "Filter by State", title: "Validate onboarding with PAT credentials", grid: "Work items" },
 ]) {
   test(`${view.prefix} external lookup clears column filters`, async ({ page }) => {

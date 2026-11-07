@@ -8,7 +8,7 @@ test("continues keyboard range selection when a new search removes the anchor", 
   await expect(searchNav).toBeEnabled();
   await searchNav.focus();
   await page.keyboard.press("Enter");
-  const input = main.getByPlaceholder("title, author, branch…");
+  const input = main.getByPlaceholder("Search pull requests…");
   await input.focus();
   await page.keyboard.press("Enter");
   const grid = main.getByRole("grid", { name: "Pull request search results" });

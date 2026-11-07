@@ -34,9 +34,7 @@ export type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "
 
 export type PrSearchStatus = NonNullable<SearchPullRequestsInput["statuses"]>[number];
 
-// Active PRs come from the local cache; the other statuses are fetched live from
-// Azure DevOps by prs.rs search() because completed/abandoned history is too
-// large to sync. The note under the form explains the difference.
+// The search screen retrieves selected Azure DevOps statuses on demand.
 export const PR_SEARCH_STATUS_OPTIONS: { value: PrSearchStatus; label: string }[] = [
   { value: "active", label: "Active" },
   { value: "completed", label: "Completed" },
@@ -57,7 +55,7 @@ export function loadPrSearchStatuses(): PrSearchStatus[] {
   } catch {
     // Ignore malformed storage and fall back to the default below.
   }
-  return ["active"];
+  return ["active", "completed"];
 }
 
 export type PrSearchDateBasis = NonNullable<SearchPullRequestsInput["dateBasis"]>;

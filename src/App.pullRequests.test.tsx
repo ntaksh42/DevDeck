@@ -108,17 +108,17 @@ describe("App — Pull Requests", () => {
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("button", { name: "Search" })[0]);
 
-    fireEvent.change(await main.findByPlaceholderText("title, author, branch…"), {
+    fireEvent.change(await main.findByPlaceholderText("Search pull requests…"), {
       target: { value: "search" },
     });
     fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
-        input: {
+        input: expect.objectContaining({
           organizationId: "contoso",
           query: "search",
-          statuses: ["active"],
+          statuses: ["active", "completed"],
           projectIds: undefined,
           repositoryIds: undefined,
           targetBranches: undefined,
@@ -127,26 +127,26 @@ describe("App — Pull Requests", () => {
           dateBasis: "created",
           excludeDrafts: undefined,
           sortBy: "created",
-        },
+          progressive: true,
+          searchId: expect.any(String),
+          authorId: undefined,
+          reviewerId: undefined,
+          excludeWords: undefined,
+        }),
       });
     });
     const searchGrid = await screen.findByRole("grid", { name: "Pull request search results" });
     expect(await within(searchGrid).findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
-    expect(screen.getByText("Could not fetch 1 project(s): Restricted.")).toBeTruthy();
+    expect(screen.getByText("Incomplete results: Restricted")).toBeTruthy();
 
-    // Status is now a multi-select filter: non-active statuses are selectable
-    // and forwarded to the backend as an array.
-    fireEvent.click(main.getByRole("button", { name: "Filter by status" }));
-    expect(main.getByRole("option", { name: "Completed" })).toBeTruthy();
-    expect(main.getByRole("option", { name: "Abandoned" })).toBeTruthy();
-    // Switch the selection from the default active to completed only.
-    fireEvent.click(main.getByRole("option", { name: "Active" }));
-    fireEvent.click(main.getByRole("option", { name: "Completed" }));
-    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    fireEvent.click(main.getByRole("button", { name: "Filters" }));
+    const filters = within(screen.getByRole("dialog", { name: "PR search filters" }));
+    fireEvent.click(filters.getByRole("checkbox", { name: "Active" }));
+    fireEvent.click(filters.getByRole("button", { name: "Apply & search" }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
-        input: {
+        input: expect.objectContaining({
           organizationId: "contoso",
           query: "search",
           statuses: ["completed"],
@@ -158,7 +158,12 @@ describe("App — Pull Requests", () => {
           dateBasis: "created",
           excludeDrafts: undefined,
           sortBy: "created",
-        },
+          progressive: true,
+          searchId: expect.any(String),
+          authorId: undefined,
+          reviewerId: undefined,
+          excludeWords: undefined,
+        }),
       });
     });
 

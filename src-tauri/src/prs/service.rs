@@ -17,6 +17,7 @@ pub struct PullRequestService {
     #[allow(dead_code)]
     pub(super) secrets: SecretStore,
     pub(super) palette_cache: super::palette::PalettePrCache,
+    pub(super) search_sessions: super::progressive::SearchSessions,
 }
 
 impl PullRequestService {
@@ -25,6 +26,7 @@ impl PullRequestService {
             db,
             secrets,
             palette_cache: Default::default(),
+            search_sessions: Default::default(),
         }
     }
 
@@ -130,6 +132,19 @@ impl PullRequestService {
     // branches. Target-branch and date-window filters are pushed to the server
     // on the live path and applied in memory on the cache path.
     pub async fn search(&self, input: SearchPullRequestsInput) -> Result<PullRequestSearchResult> {
+        if input.progressive.unwrap_or(false) {
+            return self.search_progressive(input).await;
+        }
+        if input.author_id.is_some()
+            || input.reviewer_id.is_some()
+            || input.exclude_words.is_some()
+            || input.continuation_token.is_some()
+            || input.search_id.is_some()
+        {
+            return Err(AppError::InvalidInput(
+                "Advanced search requires progressive mode".into(),
+            ));
+        }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
 
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
@@ -247,6 +262,7 @@ impl PullRequestService {
             total,
             truncated,
             warnings,
+            ..Default::default()
         })
     }
 

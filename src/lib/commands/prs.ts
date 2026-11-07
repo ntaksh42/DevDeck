@@ -26,6 +26,12 @@ const pullRequestSearchResultSchema = z.object({
   total: z.number(),
   truncated: z.boolean(),
   warnings: z.array(z.string()),
+  searchId: z.string().optional(),
+  continuationToken: z.string().nullable().optional(),
+  scannedCount: z.number().optional(),
+  searchComplete: z.boolean().optional(),
+  hasMore: z.boolean().optional(),
+  failedScopes: z.array(z.string()).optional(),
 });
 
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
@@ -113,6 +119,15 @@ export type SearchPullRequestsInput = {
   excludeDrafts?: boolean;
   /** Result ordering. Defaults to "created". */
   sortBy?: "created" | "closed" | "title";
+  /** Opt into bounded live exploration rather than the legacy cached lookup. */
+  progressive?: boolean;
+  searchId?: string;
+  continuationToken?: string;
+  retryFailed?: boolean;
+  /** Identity IDs; `me` resolves to the current connection's signed-in user. */
+  authorId?: string;
+  reviewerId?: string;
+  excludeWords?: string;
 };
 
 export type ListMyReviewPullRequestsInput = {
@@ -128,6 +143,13 @@ export async function searchPullRequests(
 ): Promise<PullRequestSearchResult> {
   const result = await invokeCommand("search_pull_requests", { input });
   return pullRequestSearchResultSchema.parse(result);
+}
+
+export async function stopPullRequestSearch(input: {
+  organizationId?: string;
+  searchId: string;
+}): Promise<void> {
+  await invokeCommand("stop_pull_request_search", { input });
 }
 
 export async function listMyReviewPullRequests(

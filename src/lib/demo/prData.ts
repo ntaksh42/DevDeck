@@ -11,6 +11,7 @@ import {
   applyReviewPullRequestScenario,
 } from "@/lib/azdoDemoHarness";
 import { demoThreadsFor, demoVoteLabel } from "@/lib/demo/prReview";
+import { demoProgressivePrSearch, matchesDemoPrPeople } from "./prSearch";
 
 // In-memory vote store for browser demo mode. Votes cast via
 // submit_pull_request_vote persist for the session.
@@ -178,9 +179,11 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
     if (repositoryFilter.size > 0 && !repositoryFilter.has(pr.repositoryId)) return false;
     if (!statusFilter.has(pr.status)) return false;
     if (targetBranches.size > 0 && !targetBranches.has(pr.targetRefName.toLowerCase())) return false;
-    if (!inWindow(useClosedBasis ? pr.closedDate : pr.creationDate)) return false;
+    const closedBasis = input?.progressive ? input.dateBasis === "closed" && pr.status !== "active" : useClosedBasis;
+    if (!inWindow(closedBasis ? pr.closedDate : pr.creationDate)) return false;
     if (excludeDrafts && pr.isDraft) return false;
-    if (query) {
+    if (input?.progressive && !matchesDemoPrPeople(input, pr)) return false;
+    if (query && !input?.progressive) {
       const textMatch = [pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
         (v) => v.toLowerCase().includes(query),
       );
@@ -189,6 +192,8 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
     }
     return true;
   });
+
+  if (input?.progressive) return demoProgressivePrSearch(input, matched);
 
   const sorted = matched.slice().sort((a, b) => {
     if (sortBy === "title") {

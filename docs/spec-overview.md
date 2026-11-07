@@ -72,7 +72,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 |---|---|
 | **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。テキストフィルタは読み込み済みデータの値 (リポジトリ/作者) をキーボード操作可能なオートコンプリートで候補表示 (`FilterAutocomplete`)。フィルタは Reviews ペインのドックのタブ帯に置き、既定では小さな「Ctrl+F」ボタンに畳んでおく。`Ctrl+F` / `/` / ボタンで開いて入力欄にフォーカスし、`Escape` で畳んでグリッドの選択行へフォーカスを戻す。畳んでも値は保持し、有効なテキストはタブ帯にチップ (✕ でクリア) として残す。Show Drafts チェックボックス (ドラフト件数付き、`D` で切替) はフィルタの横に常時表示する。その横の「Group」セレクト (`B` で切替) で行のグループを投票状態 (既定) とリポジトリ (名前順) から選べる。グループの折りたたみ状態は方式ごとにローカルへ保存する。空のままフォーカスが外れた場合も畳む。プレビューヘッダー (`PrReviewHeader`) は上から「PR タイトル + Active/Draft → 問題点のバッジ (CI・Conflicts・コメント、該当時のみ) → `source → target` と `#ID · 作成者 · 経過` → Reviewers (承認数 + レビュアー) → Labels」の順にコンパクトに並べる。タイトルとメタデータは省略せず幅に応じて折り返し、Reviewers / Labels は見出し幅を揃え、チップは折り返す。その直下に投票を左、マージ戦略 / Complete / その他操作を右に置き、狭い幅では操作グループ単位で折り返す。ズーム・Email a link・Work Items・最大化の操作ボタン (`PrReviewToolbar`) はヘッダーではなく、Conversation / Result の各タブのドックのタブ帯右端に置く。タブ帯の幅がタブ全部とアイコン全部に足りないとき (初期幅など) は、最大化以外を「⋯」(View options) メニューにまとめ、タブが dockview のオーバーフローに隠れないようにする。メニューは開くと先頭項目にフォーカスし、↑↓ で移動、Enter/Space で実行、Escape で閉じてトリガーへフォーカスを返す (ズーム項目は実行後も開いたまま)。PR / Work Item プレビューのセクション見出し (Description・Comments など) は薄い青の帯 + 左アクセントバーで区切る。Result タブでは結果を広く見せるため、`#ID タイトル` だけの 1 行に縮める。コメントバッジは未解決があれば「N unresolved」で強調し、すべて解決済みなら「N resolved」を控えめに表示する (人間コメントを含むスレッドのみ集計しシステムスレッドは除外、0件は非表示)。システムスレッド (投票・push などの自動イベント) は Conversation に表示しない。。グリッドの下に「Work Items」ドックペイン (`LinkedWorkItemsPanel`) がある。既定ではタブ帯だけに畳まれており (状態は `azdodeck:myReviews:linkedWorkItemsCollapsed` に保存)、タブ帯のトグル (リンク件数 + Show/Hide) で開閉する。開くときは畳む前の高さに戻し、畳んだまま再起動した場合など高さが分からないときは同じ列の半分の高さで開く。畳んだまま Move panel で移動しても畳んだ状態を保つ。`t` キーまたはプレビューヘッダの clipboard ボタンで展開してフォーカスする。このペインはPR にリンクされた作業項目を `list_pull_request_work_items` (Azure DevOps の PR work items API、GitHub は空) の結果と説明文/コミットの `AB#NNN` 言及を統合して取得し、既存の `WorkItemPreviewPanel` でプレビューする。複数ある場合はタブ上部のラジオリストから `↑↓`/`←→` で選択 (`Esc` でグリッドへフォーカス復帰)。取得結果は TanStack Query キャッシュ (60 秒) を利用。コメントスレッドカード (`PrThreadCard`、Conversation タブで使用) は Azure DevOps 準拠の見た目: コメントごとに著者名から生成したイニシャル円アバター、カード右上に折りたたみトグルと Active/Resolved のステータスドロップダウン (バックエンドが対応する2状態のみ)。ファイルパスの無いスレッドは先頭コメントの著者行がそのままカードの見出し行を兼ねる。未解決スレッドはカード左端の琥珀色の線で示し、Resolved のスレッドは既定で折りたたむ (折りたたみ時はファイル名・先頭コメントの著者・1行サマリ・コメント数だけの1行)。カード下部は「Reply」「Resolve/Reactivate」のリンク型ボタン (Reply で返信コンポーザーに展開、Escape で畳んでプレビューへフォーカスを返す)。 |
 | **My Pull Requests** | 自分が作成した active PR を一覧 (`list_my_created_pull_requests`、同期済みの active PR キャッシュ (`pull_requests`) から作成者の ID (`created_by_id`、大文字小文字を無視) で絞り込む。Approvals は PR 同期が保存する `pr_reviewer_counts` の集計 (vote==10 の人数/レビュアー総数)。キャッシュ元と同じく 1 プロジェクト 500 件の同期上限があり、上限に達したプロジェクトでは窓の外の PR が出ないことがある)。グリッドは My Reviews と同じ CSS グリッド構成・行スタイル・ステータスバーで、列 (PR# / Repository / Title〔Draft / Ready to merge バッジ込み〕/ Created / Target / Approvals〔vote==10 の人数/レビュアー総数〕) はヘッダクリックでソート可能、ドラッグで列幅リサイズ (localStorage 永続化)、Columns メニューで表示列を切替 (PR#/Title は必須)。タブ帯のフィルタ横に Show Drafts チェックボックス (既定オン、ドラフト件数付き) を常時表示し、オフでドラフトを除外する。テキストフィルタは読み込み済みデータの値 (リポジトリ/タイトル/ターゲット) をオートコンプリート候補表示するクライアント側絞り込み (`FilterAutocomplete`)。フィルタはグリッド上端のタイトル帯に「Ctrl+F」ボタンとして畳んでおき、My Reviews と同じ操作 (`DockFilterBar`: `Ctrl+F`/`/`/ボタンで開く、`Escape` で畳んで行へフォーカスを戻す、値はチップで残す) で使う。右側には My Reviews と同じ PR レビューパネル (Conversation / Result) をドックし、選択中の PR を表示する (レイアウトは `azdodeck:layout:myPullRequestsPreview:dockview:v1` に保存)。キーボード操作 (`↑↓`/`J K`/`Home`/`End`、`Enter`/`→` でプレビューへフォーカス、`O`/`Ctrl+Enter` でブラウザ、`\` でプレビュー最大化、`C` で URL コピー)。複数組織は組織セレクタで切替。PR 同期 (`myReviews` / `hot` / `all` スコープ) の完了 (`sync:updated`) で再描画し、API は呼ばない。初回同期前や作成者 ID が未取得の組織では空になる。`warnings` は常に空。 |
-| **Pull Request Search** | プロジェクト/リポジトリ/ステータス (active/completed/abandoned、いずれも複数選択可。空=既定 active)/ターゲットブランチ/期間 (作成日 or 完了日基準)/ドラフト除外 (検索入力行の Hide drafts チェックボックス) で PR を検索。並び替え (作成日・完了日・タイトル)。active はキャッシュ、それ以外はライブ取得 (ターゲットブランチ・期間はサーバ側フィルタ)。リポジトリ欄の候補は組織の全プロジェクトのリポジトリ一覧 (`list_repositories`: プロジェクトごとのリポジトリ一覧をプロセス内で 1 時間キャッシュ) から作る。ターゲットブランチ欄は選択中のリポジトリの実ブランチ (`list_repo_branches`) を複数選択候補として表示 (`MultiSelectFilter`、候補検索とキーボード操作に対応)。複数選択時は選択ブランチごとの結果を統合する。結果は先頭 100 件で打ち切り、超過時はインジケータ表示。ソート可能グリッド、列リサイズ、`C` で URL コピー。 検索フォームはラベルを小さくした2行に詰め、キャッシュ/ライブ取得の説明は Hide drafts 横の情報アイコンのツールチップにする。結果の件数 (`N items`、検索前は `No search yet`)・アクティブな列フィルタ数・Columns ボタン・`?` は Results ペイン下端の共通ステータスバーに置く (以前はタブ帯にあった Columns もここへ移した。ペイン内に見出し行は持たない)。 |
+| **Pull Request Search** | 検索欄・Filters・Search と有効条件のチップを表示する。Filters は状態・作成者・レビュアー、More filters はプロジェクト/リポジトリ/ターゲットブランチ/期間/ドラフト除外/除外語。Apply & search で条件を確定して検索する。初期状態は active + completed (保存済みの選択を優先)。Azure DevOps は全ステータスを検索時にライブ取得し、100件ずつ追加探索する。複数語AND・除外・フレーズ・PR番号検索に対応。作成者/レビュアーは個人IDで指定し Me も選べる。並び替え・列フィルタは取得済みの結果に適用。右側の Conversation / Result プレビュー、列リサイズ・Columns・複数選択・URLコピーを維持する。GitHub は既存の検索条件と取得経路を使う。 |
 | **My Work Items** | 自分に割当中の未完了の作業項目 (同期 WIQL で `System.State` が Closed / Done / Completed / Removed の項目は除外 (`System.StateCategory` は WIQL で参照できない)。サイドバーのバッジも同じ集合の件数)。スマートフィルタは Work items ペインのタブ帯に「Ctrl+F」ボタンとして畳んでおく (`WorkItemFilterBar`、操作は My Reviews と同じ。Work Item Views の list レイアウトと Work Items Search の結果フィルタも同じ)。状態・種別・割当先・タグ (`System.Tags`、各タグをチップ表示)・更新日時。最後に開いてから変更された項目に未読マーカー (ChangedDate の差分でローカル検出、開くと消える)。 |
 | **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。グリッドの Columns メニューの「Field columns」から、組織全体の Azure DevOps フィールドを検索 (名前/参照名/型の部分一致、`Enter` で先頭候補を追加) して追加列にでき、チェックを外すと削除する。プロジェクト未指定でも候補を取得し、未検索時も `Custom.` 以外の名前空間を含める (表示は最大20候補、検索で絞り込み)。追加列はビューの Extra columns (ビュー編集ダイアログと同じ設定、最大20列) として保存される。グリッドの列見出しとコピー (`Ctrl+C`) のヘッダーは Azure DevOps の表示名で出し (Columns メニューと同じフィールド定義のキャッシュを共有)、定義が未取得または該当なしの間は参照名の末尾で代替する。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。展開時のコンパクト表示はビューの内容幅に合わせて間隔 4px で左詰めし、幅が足りなければ折り返す (`↑↓` は隣の行で横位置が最も近いビューへ移る)。ビュー一覧は既定で**枠なし 1 行のチップ列** (ビュー名 + 件数 + 差分。選択中は強調、アラート中・ピン留めはチップ内のアイコン/色で示す。高さは検索行と同じ `h-8`) で、同じ行の右端に List / Board の切替・「⋯」・Edit・Run all・+ Add を置く。チップは `role="option"` で、`←→` (`↑↓` も同じく前後) で移動、`Home` / `End`、クリック・フォーカス移動で選択、`Shift+←→` で並べ替え、`Delete` / `N` / `E` / `R` はカード表示と同じ。幅が足りなければチップ列だけが横スクロールする。チップ表示ではカード用の Pin / 左右移動 / Preview 表示切替ボタンと表示密度スイッチは行から外し、Pin・Preview 表示切替・左右移動は「⋯」メニューの先頭に置く。ヘッダー左端の ▸/▾ トグルまたは `Ctrl+B` (グリッドからも有効) でカード表示 (従来の枠付きヘッダー + カード / コンパクト行のグリッド。Pin / 左右移動 / Preview 切替ボタンと密度スイッチ付き) と切り替える。表示の選択 (`azdodeck:workItemViewsCollapsed`、保存値が無い・`true` ならチップ、`false` ならカード) と密度 (`azdodeck:workItemViewsCardMode`、カード表示のみ) は localStorage に保存する。トグルで表示を切り替えた後、フォーカスはチップ→トグル / カード→選択中のカードへ戻す。カードには件数推移のスパークラインを描画する (`azdodeck:workItems:viewCountHistory`、ビューごと最大20点、同値の連続は記録しない。2点未満は非表示。増加=赤/減少=緑/横ばい=灰)。ビュー JSON の Export はデスクトップ版では保存ダイアログで出力先とファイル名を選択し、ブラウザ版では既定のダウンロード先へ保存する。 カード表示のヘッダーは1行 (Views · 件数) で、Pin / Preview / Share / Export / Import はアイコンのみのボタン (名前はツールチップとスクリーンリーダー用テキスト)。カードは名前 → 件数+差分+スパークライン → 制限・ソート等のメタ情報1行の3段。 |
 | **Work Item Search** | キーワード + プロジェクト/状態/種別 (いずれも複数選択可) での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。 |
@@ -82,14 +82,21 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Inbox** | 自分に向けられたコメント (PR / WI のメンション・返信、自作 PR へのコメント) を 1 か所で見て、その場で返信・Resolve・Done・Snooze するビュー (サイドバー最上位に固定、`G` → `I`)。**詳細な仕様 (検出・状態・重要度・プレビュー・キー操作・関連リンク・Claude の判断メモ・コマンド) は [`docs/spec-inbox.md`](spec-inbox.md) に分けた。Inbox を変えるときはそちらを更新する。** |
 | **Analyze** | 登録したクエリを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリを複数登録できる (0 件のときは保存を拒否)。`DockableWorkspace` (レイアウトのキー `azdodeck:layout:analyze:dockview:v1`) に載せ、左のグループ一覧 (タブ名 `Groups`、タブ帯右に `+ Add group`、下端のステータスバーに `N items` と `?` ボタン = Help を開く) + 右の詳細 (タブ名 `Trend`、タブ帯右に Day / Week の切替)。Agent パネルもドックに加わる。画面の文言はすべて英語。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。行を開くと数値テーブル (Period / Count / Change / Note) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりクエリ 12 件が上限。ブランチ別コミット推移の廃止前に保存したブランチメンバーは読み込み時に捨てる)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替、`Esc` で一覧へ戻る。ダイアログを閉じるとフォーカスは開いた要素へ、グループ削除後は一覧へ戻る。選択中のグループは Agent パネルの対象になる (下記)。`G` チェーンは `A`。 |
 
-My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnings }`、
-PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warnings }` を返す。
-ライブ取得のプロジェクト単位の失敗 (403/404/一時的なサーバーエラーを含む) はスキップし、
-成功した結果を表示する。`warnings` は取得できなかったプロジェクト名の重複なしの配列で、
-両画面に件数と名前を表示する。成功した取得が 0 件で失敗がある場合だけエラーにする。
-空の成功レスポンスは成功と数える。複数ステータス・ターゲットブランチの検索では全取得を
-通じて成功を判定し、active キャッシュの取得成功も含める。GitHub 接続とブラウザデモでは
-`warnings` は空配列。
+### PR 検索の条件・追加探索
+
+- Azure DevOps の検索対象はタイトル・作成者名・プロジェクト・リポジトリ・両ブランチ。空白区切りは AND、`-test` は除外、`"connection timeout"` はフレーズ。各語は別の対象項目に一致してもよい。大文字小文字は Unicode の小文字化で無視する。`#123` は番号完全一致、裸の数字は従来の番号前方一致またはテキスト部分一致。説明・コメント・コードの全文検索はしない。
+- Exclude words では空白区切りの語/引用フレーズをすべて除外条件にする。各入力200文字・合計20条件まで。閉じていない引用符・空フレーズ・単独の `-`・不正な `#番号` は通信前にエラー。フレーズ内は `\\` / `\"` のエスケープに対応する。OR や正規表現の演算子は導入しない。
+- 作成者とレビュアーは各1人、両方選ぶ場合は AND。Me は対象組織の認証ユーザーIDに解決する。レビュアーは現在登録中の個人で、投票の有無は問わない。チーム経由の担当・単なる過去のコメント参加者は対象外。人物候補は名前/メールで検索し、同名をメール併記で区別する。
+- Filters は下書きとして編集し、Apply & search で確定・検索。Escape/外側クリックで破棄して起点へフォーカスを戻す。候補は上下/Enter/Escape、ダイアログ内は Tab/Shift+Tab で完結し、IME変換中の Enter では確定しない。有効条件はチップから解除できる。
+- `search_pull_requests` の `progressive: true` は `searchId`・`authorId`・`reviewerId`・`excludeWords`・`continuationToken`・`retryFailed` を扱う。戻り値は既存の `{ pullRequests, total, truncated, warnings }` に `searchId, continuationToken, scannedCount, searchComplete, hasMore, failedScopes` を追加する。`pullRequests` は今回の差分 (最大100件)、`total` は累計返却件数で、探索中の全体総数を意味しない。
+- APIは200件の要求サイズで最大10ページ・20秒を一区切りとする。プロジェクト/ステータス/ブランチを順番に探索し、短いページでも終了とみなさず空ページで完了する。`$skip` は実際の返却件数で進める。取得済みIDと余剰の一致結果を保持し、100件の表示上限や既存のプロジェクト500件枠の先も探索できる。
+- 一致0件でも未探索範囲があれば No matches yet と Search more を表示する。すべての範囲が取得済みで失敗がなければ Search complete、0件なら No pull requests matched.。失敗範囲は成功結果と区別して表示し、Retry failed scopes で再試行する。全範囲の取得失敗は検索エラーとし、0件成功にはしない。
+- `stop_pull_request_search({ organizationId, searchId })` は継続処理の停止フラグを立て、処理済みページ・結果を残す。条件・組織の異なる検索を続行トークンで混ぜず、同じ検索の二重実行を拒否する。続行情報はメモリのみで最後の操作から10分で期限切れとし、画面には再検索を案内する。
+- 追加取得と並べ替えでは選択中PRとフォーカスをIDで維持する。ソートは取得済みの範囲の順序で、未探索の結果を含む全体上位順は保証しない。検索中にサーバ側データが変更されるため固定スナップショットでもない。語や組織を変えた後の古い応答を採用しない。
+- 履歴には人物ID/表示名と除外語も保存し、古い履歴の不足フィールドは既定値で補う。Ctrl+K から直接渡されたPRは再検索せず表示する。GitHub および `progressive` 未指定の旧呼出元は既存の検索契約を維持する。ブラウザデモは同じ式・条件・追加取得を実装し、`?prSearchScenario=empty-first` / `partial` で途中0件・部分失敗を検証できる。
+
+My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnings }` を返す。
+旧 PR 検索では live 取得のプロジェクト単位の失敗を `warnings` にまとめ、成功した結果を表示する。空の成功レスポンスは成功と数え、全取得が失敗した場合はエラーにする。
 
 ### 横断機能
 
@@ -935,24 +942,14 @@ format!(
   持たないコントロールにもテーマ色のリングを出す。
   OS の「視覚効果を減らす」設定 (`prefers-reduced-motion`) ではトランジションと pulse/ping を止める
   (スピナーは処理中表示のため回し続ける)。
-- PR の **active** 検索はローカル同期キャッシュから動作する。**completed / abandoned**
-  は履歴が大きくキャッシュしないため、`search_pull_requests` が Azure DevOps から
-  ライブ取得する。
-  ステータスは複数選択でき、選択された各ステータスについてキャッシュ (active) とライブ
-  (completed/abandoned) の経路を実行して結果を結合する (集合は互いに素なので重複除去は不要)。
-  ステータス未選択は active 既定 (安価なキャッシュ経路) にフォールバックする。
-  キャッシュとライブ取得の両方を備えないステータスを UI に追加しない。
-  プロジェクト/リポジトリの絞り込みは複数選択で、キャッシュ経路とライブ経路の双方に
-  共通のメンバーシップ判定としてメモリ内で適用する (ライブ取得は対象プロジェクトのみに
-  スコープして API 呼び出しを抑える)。ターゲットブランチと期間はライブ取得ではサーバ側
-  (`searchCriteria.targetRefName` / `minTime`・`maxTime`・`queryTimeRangeType`) で、active
-  キャッシュでは creation_date を対象にメモリ内で絞り込む。active 行は完了日を持たないため期間は常に作成日基準。
+- PR 検索画面は Azure DevOps の active/completed/abandoned を検索時にライブ取得し、作成者・レビュアー・ブランチ・期間・リポジトリの条件をAPI側へ渡す。バックグラウンド同期のキャッシュや同期範囲は変更しない。
+  `progressive` 未指定の旧呼出元は active を同期キャッシュ、それ以外をライブ取得する従来経路を使う。active は完了日を持たないため、Closed 指定の期間でも作成日を使用することを条件欄に表示する。
   期間の下限/上限は `YYYY-MM-DD` を UTC の 00:00:00 / 23:59:59.9999999 に展開した RFC3339 で表す。
   上限は最終秒を丸ごと含める必要がある (Azure DevOps の日時は秒未満の精度を持つため、
   23:59:59 ちょうどを上限にすると当日 23:59:59.xxx 作成分が漏れる)。精度は Azure DevOps 自身の
   .NET 日時と同じ 100ns (tick) 単位に揃える。メモリ内の絞り込み (`within_window`) は文字列比較
   ではなく RFC3339 をパースした瞬時値で比較する (`Z` と `+00:00` の表記差で順序が狂うため)。
-  ドラフト除外用に active キャッシュ (`pull_requests.is_draft`) が draft 状態を保持する。
+  旧経路のドラフト除外用に active キャッシュ (`pull_requests.is_draft`) が draft 状態を保持する。
 - Azure DevOps のリッチテキストは表示前にサニタイズ・正規化し、生の HTML を可視テキストに漏らさない。
   本文中の認証必須な添付画像 (Work Item 添付ストアの `_apis/wit/attachments/`、および PR の説明・
   コメントに貼り付けた画像が使う `_apis/git/repositories/{repo}/pullRequests/{id}/attachments/`) は

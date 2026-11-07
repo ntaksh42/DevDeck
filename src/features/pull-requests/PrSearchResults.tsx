@@ -1,5 +1,4 @@
 import { useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
-import { Filter } from 'lucide-react';
 import { type PullRequestSummary } from '@/lib/azdoCommands';
 import {
   clamp,
@@ -18,7 +17,6 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { parkGridFocus } from '@/lib/parkGridFocus';
 import { usePendingRowFocus } from '@/lib/usePendingRowFocus';
-import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
@@ -33,12 +31,14 @@ import {
 import { columnFilterNotes, prAgentList, usePrReviewPanels } from './usePrReviewPanels';
 import { DockableWorkspace, type DockablePanelSpec } from '@/components/DockableWorkspace';
 import { MemoPrSearchRow } from './MemoPrSearchRow';
+import { PrSearchGridHeader } from './PrSearchGridHeader';
+import { PrSearchProgressControls, PrSearchSort, type PrSearchProgressState } from './PrSearchProgress';
+import { usePrSearchSelection } from './usePrSearchSelection';
 import {
   type PrSearchFilterableColumn,
   PR_SEARCH_KEYS,
   PR_SEARCH_COLUMN_LABELS,
   PR_SEARCH_REQUIRED_COLUMNS,
-  PR_SEARCH_COLUMN_FILTER_KEY,
   PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY,
   PR_SEARCH_FILTERABLE_COLUMNS,
   DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
@@ -64,6 +64,8 @@ export function PullRequestResults({
   truncated = false,
   total = 0,
   filterResetKey,
+  failed = false,
+  progress, sortBy, onSortChange,
 }: {
   activeExternalFilterCount?: number;
   /** Replaces the default "Run a search" empty state (e.g. recent searches). */
@@ -75,8 +77,11 @@ export function PullRequestResults({
   truncated?: boolean;
   total?: number;
   filterResetKey?: number;
+  failed?: boolean;
+  progress?: PrSearchProgressState;
+  sortBy?: import("./PrSearchTypes").PrSearchSortBy;
+  onSortChange?: (value: import("./PrSearchTypes").PrSearchSortBy) => void;
 }) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [columnFilters, setColumnFilters] = useState<Partial<Record<PrSearchFilterableColumn, Set<string>>>>({});
   const [openFilterCol, setOpenFilterCol] = useState<PrSearchFilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
@@ -120,7 +125,7 @@ export function PullRequestResults({
   );
 
   const {
-    scrollerRef,
+    scrollerRef, scrollerEl,
     firstRow: firstVirtualRow,
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
@@ -131,6 +136,7 @@ export function PullRequestResults({
     rowHeight: PR_SEARCH_ROW_HEIGHT,
     overscan: PR_SEARCH_OVERSCAN,
   });
+  const { selectedIndex, setSelectedIndex } = usePrSearchSelection(filteredResults, filterResetKey, scrollerEl);
   const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
 
   const columnFilterCount = activeColumnFilterCount(columnFilters);
@@ -141,18 +147,13 @@ export function PullRequestResults({
     if (filterResetKey !== undefined) setColumnFilters({});
   }, [filterResetKey]);
 
-  useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
-  }, [filteredResults.length]);
-
-  // Clamping on length alone leaves the old index in place when a new search
-  // happens to return the same number of rows, so the preview pane would show a
-  // different pull request than the highlighted row.
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [results]);
-
   const countLabel = useMemo(() => {
+    if (failed && results.length === 0) return "Search failed";
+    if (progress?.progressive && searched) {
+      const count = hasActiveColumnFilters ? `${filteredResults.length} visible / ${results.length} found` : `${results.length} found`;
+      const status = loading ? (progress.stopping ? "Stopping…" : "Searching…") : progress.complete ? "Search complete" : progress.hasMore ? "More to search" : "Partial results";
+      return `${count} · ${progress.scannedCount.toLocaleString()} checked · ${status}`;
+    }
     if (loading) return "Searching…";
     if (!searched) return "No search yet";
     // When the backend capped the result set, show the cap (e.g. "100+") so the
@@ -163,7 +164,7 @@ export function PullRequestResults({
     }
     const suffix = truncated ? ` (showing first ${results.length} of ${total}+)` : "";
     return `${shown} item${results.length === 1 ? "" : "s"}${suffix}`;
-  }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
+  }, [failed, filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated, progress]);
 
   const selection = useRangeSelection({
     rows: filteredResults,
@@ -338,7 +339,7 @@ export function PullRequestResults({
         emptyContent ?? <PreviewEmptyState message="Run a search to load pull requests." hint={SEARCH_EMPTY_HINT} />
       ) : results.length === 0 && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-          No pull requests matched.
+          {failed ? "Search failed. Run Search to try again." : progress?.progressive && !progress.complete ? "No matches yet. More PRs remain to search, or some scopes need to be retried." : "No pull requests matched."}
         </div>
       ) : (
         <div
@@ -351,41 +352,8 @@ export function PullRequestResults({
         >
           <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
           <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
-          <div
-            role="row"
-            className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
-            style={{ gridTemplateColumns: columnTemplate }}
-          >
-            {shownColumns.map((key, i) => {
-              const filterKey = PR_SEARCH_COLUMN_FILTER_KEY[key];
-              const isLast = i === shownColumns.length - 1;
-              return (
-                <div key={key} role="columnheader" className="relative min-w-0 px-1">
-                  <div className="flex min-w-0 items-center">
-                    <span className="truncate">{PR_SEARCH_COLUMN_LABELS[key]}</span>
-                    {filterKey ? (
-                      <button
-                        type="button"
-                        aria-label={`Filter by ${PR_SEARCH_COLUMN_LABELS[key]}`}
-                        onClick={(event) => openFilter(filterKey, event.currentTarget)}
-                        className={`ml-1 shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
-                          columnFilters[filterKey] !== undefined
-                            ? "text-primary"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <Filter className="h-3 w-3" aria-hidden="true" />
-                      </button>
-                    ) : null}
-                  </div>
-                  {isLast ? null : (
-                    <ColumnResizeHandle {...columnResizeProps(key)} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {loading ? (
+          <PrSearchGridHeader columns={shownColumns} template={columnTemplate} filters={columnFilters} resizeProps={columnResizeProps} onFilter={openFilter} />
+          {loading && results.length === 0 ? (
             <LoadingState />
           ) : filteredResults.length === 0 ? (
             <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -433,7 +401,7 @@ export function PullRequestResults({
         fitWidths={{ auto: autoColumnWidths, onFit: resetColumnWidths }}
         onColumns={setColumnMenuRect}
         helpSection="pr-search"
-      />
+      ><PrSearchProgressControls progress={progress} loading={loading} /></ListStatusBar>
       </div>
   );
 
@@ -442,7 +410,7 @@ export function PullRequestResults({
       <DockableWorkspace
         storageKey={`${PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY}:dockview:v2`}
         panels={[
-          { id: 'grid', title: 'Pull requests', content: gridPane, minWidth: 480 },
+          { id: 'grid', title: 'Pull requests', content: gridPane, minWidth: 480, headerActions: sortBy && onSortChange ? <PrSearchSort value={sortBy} onChange={onSortChange} /> : undefined },
           {
             ...reviewAnchor,
             position: { relativeTo: 'grid', direction: 'right' },

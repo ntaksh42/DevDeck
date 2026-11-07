@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 for (const view of [
-  { scope: "prSearch", key: "q", placeholder: "title, author, branch…" },
+  { scope: "prSearch", key: "q", placeholder: "Search pull requests…" },
   { scope: "workItemSearch", key: "f", placeholder: "Search work items…" },
 ]) {
   test(`${view.scope}: deleting history keeps a keyboard path to search`, async ({ page }) => {

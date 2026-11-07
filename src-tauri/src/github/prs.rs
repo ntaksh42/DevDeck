@@ -5,8 +5,8 @@ use crate::auth::github_client_for_organization;
 use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::prs::{
-    MyCreatedPullRequestSummary, PullRequestSummary, ReviewPullRequestSummary,
-    SearchPullRequestsInput,
+    MyCreatedPullRequestSummary, PullRequestSearchResult, PullRequestSummary,
+    ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::secrets::SecretStore;
 
@@ -273,6 +273,55 @@ fn item_to_summary(org_id: &str, item: IssueSearchItem) -> MyCreatedPullRequestS
     }
 }
 
+/// Runs the shared PR-search contract using GitHub's existing search semantics.
+pub(crate) async fn search_from_input(
+    org: &Organization,
+    secrets: &SecretStore,
+    input: SearchPullRequestsInput,
+) -> Result<PullRequestSearchResult> {
+    if input.progressive.unwrap_or(false)
+        || input.author_id.is_some()
+        || input.reviewer_id.is_some()
+        || input.exclude_words.is_some()
+        || input.continuation_token.is_some()
+        || input.search_id.is_some()
+    {
+        return Err(AppError::NotSupported(
+            "Advanced PR search is supported for Azure DevOps connections only".into(),
+        ));
+    }
+    let active_only = input
+        .statuses
+        .as_ref()
+        .map(|s| s.is_empty() || s.iter().all(|s| s.eq_ignore_ascii_case("active")))
+        .unwrap_or(true);
+    let query = input.query.clone().unwrap_or_default();
+    // The repository / target-branch / date filters translate into GitHub
+    // search qualifiers. Previously every field except `query`, `statuses`
+    // and `exclude_drafts` was dropped on the floor, so the search screen's
+    // filters silently did nothing on a GitHub connection.
+    let qualifiers = PrSearchQualifiers::from_input(&input)?;
+    let mut results =
+        search_pull_requests(org, secrets, &query, active_only, &qualifiers, 100).await?;
+    if input.exclude_drafts.unwrap_or(false) {
+        results.retain(|pr| !pr.is_draft);
+    }
+    // `sort_by` is applied locally: GitHub's `sort:` qualifier has no
+    // equivalent for the "title" ordering the UI offers.
+    crate::prs::sort_summaries(
+        &mut results,
+        crate::prs::parse_sort_by(input.sort_by.as_deref()),
+    );
+    let total = results.len();
+    Ok(PullRequestSearchResult {
+        pull_requests: results,
+        total,
+        truncated: false,
+        warnings: Vec::new(),
+        ..Default::default()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,6 +339,7 @@ mod tests {
             date_basis: None,
             exclude_drafts: None,
             sort_by: None,
+            ..Default::default()
         }
     }
 

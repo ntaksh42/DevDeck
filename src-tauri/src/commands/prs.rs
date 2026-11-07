@@ -5,6 +5,7 @@ use crate::error::Result;
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
+    StopPullRequestSearchInput,
 };
 
 #[tauri::command]
@@ -40,4 +41,13 @@ pub async fn list_my_created_pull_requests(
         .await?
         .list_my_created_pull_requests(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn stop_pull_request_search(
+    input: StopPullRequestSearchInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    state.pull_requests.stop_search(input).await
 }
