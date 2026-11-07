@@ -114,6 +114,27 @@ export async function addWorkItemLink(input: {
   await invokeCommand("add_work_item_link", { input });
 }
 
+export type CreateWorkItemBranchResult = {
+  branchName: string;
+  /** False when the branch exists but linking it to the work item failed. */
+  linked: boolean;
+  linkError: string | null;
+};
+
+/** Creates a branch from `baseBranch` and links it to the work item (Development section). */
+export async function createWorkItemBranch(input: {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  repositoryId: string;
+  baseBranch: string;
+  branchName: string;
+}): Promise<CreateWorkItemBranchResult> {
+  return (await invokeCommand("create_work_item_branch", {
+    input,
+  })) as CreateWorkItemBranchResult;
+}
+
 export async function removeWorkItemLink(input: {
   organizationId?: string;
   projectId: string;

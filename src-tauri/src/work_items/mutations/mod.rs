@@ -5,8 +5,11 @@
 //! mode stops a run partway, the remaining items are reported as failures rather
 //! than being silently dropped, so the frontend can notify the user.
 
+mod branch;
 mod comments;
 mod create;
+
+pub use branch::{CreateWorkItemBranchInput, CreateWorkItemBranchResult};
 
 use std::collections::HashMap;
 

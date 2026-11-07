@@ -163,6 +163,16 @@ pub async fn add_work_item_link(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+pub async fn create_work_item_branch(
+    input: crate::work_items::CreateWorkItemBranchInput,
+    state: State<'_, AppState>,
+) -> Result<crate::work_items::CreateWorkItemBranchResult> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.create_branch(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn remove_work_item_link(
     input: RemoveWorkItemLinkInput,
     state: State<'_, AppState>,
