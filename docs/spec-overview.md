@@ -312,6 +312,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     並びは結論 → ポイントの図 → 本文 → 根拠 → 未確認 → (PR のみ) 畳んだ指摘の下書き、見出しの番号は対象 PR / Work Item への
     リンク、図はインライン SVG (プレビューは JavaScript・外部ファイル不可)。
     ガイドと自動実行の Note は、結果 HTML をこの書式で書くよう指示する。
+    同じ番号の結果ファイルが既にあれば、先に読んで事実・根拠・判定を引き継ぎ、この書式に組み直して保存する
+    (標準名なら上書き、標準名でなければ新しい標準名で保存し古いほうは残す)。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・
