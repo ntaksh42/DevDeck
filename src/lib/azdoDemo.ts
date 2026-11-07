@@ -330,6 +330,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchWorkItemMentionsInput } | undefined)?.input;
       return demoMentionCandidates(input?.query);
     }
+    case "resolve_mention_identities": {
+      const input = (args as { input?: { ids?: string[] } } | undefined)?.input;
+      const ids = new Set((input?.ids ?? []).map((id) => id.toLowerCase()));
+      return demoMentionCandidates().filter((person) => ids.has(person.id.toLowerCase()));
+    }
     case "search_pull_request_mentions": {
       const input = (args as { input?: SearchPullRequestMentionsInput } | undefined)?.input;
       return demoMentionCandidates(input?.query);

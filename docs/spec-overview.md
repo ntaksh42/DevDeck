@@ -384,6 +384,10 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   ID 指定で追加・削除できる (`add_work_item_link` / `remove_work_item_link`)。
 - **PR 完了オプション**: complete 時にマージ戦略・ソースブランチ削除に加え、関連 work item を
   次状態へ自動遷移する `transitionWorkItems` を指定できる (`update_pull_request` の complete アクション)。
+- **メンションの名前解決**: コメント内の `@<GUID>` は、既知の名前 (Work Item のコメント投稿者・直前に選んだ人)
+  で置換し、残りの GUID は `resolve_mention_identities` (vssps `_apis/identities?identityIds=`、最大 50 件) で
+  表示名に引く。結果はセッション中キャッシュする (`useMentionIdentityNames`)。Work Item のコメント、Inbox の
+  Work Item コメント / PR スレッド / 説明、PR のスレッド / 説明が対象。引けない GUID は `@<GUID>` のまま表示する。
 - **PR レビュアー管理**: レビューパネルから既存レビュアーの必須/任意切替・削除に加え、
   レビュアーの追加ができる。「Add」は @メンションと同じディレクトリ検索 (`search_pull_request_mentions`、
   2 文字以上、既存レビュアーは除外) の候補を `↑↓` で選び Enter で追加 (「Required」で必須指定、Esc で閉じて

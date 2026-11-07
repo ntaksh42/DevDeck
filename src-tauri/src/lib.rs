@@ -228,6 +228,7 @@ pub fn run() {
             commands::work_items::count_work_item_query,
             commands::work_items::get_work_item_preview,
             commands::work_items::search_work_item_mentions,
+            commands::work_items::resolve_mention_identities,
             commands::work_items::record_mention_interaction,
             commands::work_items::record_assignee_interaction,
             commands::work_items::search_work_item_assignees,

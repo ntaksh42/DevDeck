@@ -378,6 +378,18 @@ export async function searchWorkItemMentions(
   return mentionCandidatesSchema.parse(result);
 }
 
+export type ResolveMentionIdentitiesInput = {
+  organizationId?: string;
+  ids: string[];
+};
+
+export async function resolveMentionIdentities(
+  input: ResolveMentionIdentitiesInput,
+): Promise<MentionCandidate[]> {
+  const result = await invokeCommand("resolve_mention_identities", { input });
+  return mentionCandidatesSchema.parse(result);
+}
+
 export async function recordMentionInteraction(
   input: RecordMentionInteractionInput,
 ): Promise<void> {

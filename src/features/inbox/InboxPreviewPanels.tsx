@@ -12,6 +12,7 @@ import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { PrThreadCard } from "@/features/pull-requests/PrThreadCard";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
 import { commentRichHtml } from "@/features/work-items/workItemHtml";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import type { InboxEntry } from "./inboxPresentation";
 
 /** Text to start the reply box with; a new `key` remounts the composer with it. */
@@ -69,6 +70,7 @@ export function ThreadPanel({
         mentionSearch={mentionSearch}
         resolveImageSource={resolveImageSource}
         baseUrl={item.webUrl}
+        organizationId={item.organizationId}
         onReply={onReply}
         onToggleStatus={onToggleStatus}
       />
@@ -156,6 +158,11 @@ export function WorkItemPanel({
     if (draft) setReplyTo(null);
   }, [draft]);
 
+  const mentionDisplayNames = useMentionIdentityNames(
+    item.organizationId,
+    workItem?.comments.flatMap((comment) => [comment.text, comment.renderedText]) ?? [],
+  );
+
   if (!workItem) {
     return (
       <p className="py-2 text-xs text-muted-foreground">
@@ -167,7 +174,6 @@ export function WorkItemPanel({
   const mentionIndex = workItem.comments.findIndex((comment) => comment.id === item.commentId);
   const shown = Math.max(3, mentionIndex + 1);
   const latest = workItem.comments.slice(0, showAll ? undefined : shown);
-  const mentionDisplayNames = new Map<string, string>();
   return (
     <div className="space-y-1.5 py-1">
       <p className="text-xs text-muted-foreground">

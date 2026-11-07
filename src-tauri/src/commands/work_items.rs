@@ -10,13 +10,13 @@ use crate::work_items::{
     ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
     ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemTypesInput,
     ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption, RecordAssigneeInteractionInput,
-    RecordMentionInteractionInput, RemoveWorkItemLinkInput, RunWorkItemQueryInput,
-    SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
-    SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
-    SetWorkItemsStateInput, SetWorkItemsTagsInput, UnfollowWorkItemInput,
-    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
-    WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
-    WorkItemSummary, WorkItemUpdateSummary,
+    RecordMentionInteractionInput, RemoveWorkItemLinkInput, ResolveMentionIdentitiesInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
+    UnfollowWorkItemInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
+    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
+    WorkItemPreview, WorkItemProjectOption, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[tauri::command]
@@ -87,6 +87,15 @@ pub async fn search_work_item_mentions(
         .await?
         .search_work_item_mentions(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn resolve_mention_identities(
+    input: ResolveMentionIdentitiesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<MentionCandidate>> {
+    state.work_items.resolve_mention_identities(input).await
 }
 
 #[tauri::command]

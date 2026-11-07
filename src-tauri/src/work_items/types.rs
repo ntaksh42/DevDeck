@@ -66,6 +66,13 @@ pub struct SearchWorkItemMentionsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ResolveMentionIdentitiesInput {
+    pub organization_id: Option<String>,
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecordMentionInteractionInput {
     pub organization_id: Option<String>,
     pub user_id: Option<String>,
