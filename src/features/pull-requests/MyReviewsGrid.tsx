@@ -35,7 +35,7 @@ import {
   sortLabels,
 } from './myReviewsTypes';
 import { useMyReviewsGrid } from './useMyReviewsGrid';
-import type { MyReviewsGridProps } from './myReviewsTypes';
+import type { MyReviewsGridProps, ReviewSection } from './myReviewsTypes';
 
 // Re-export for callers that imported from this path.
 export { reviewAgeDays } from './myReviewsHelpers';
@@ -357,6 +357,7 @@ export function MyReviewsGrid({
                             count={row.count}
                             collapsed={collapsed}
                             preview={row.preview}
+                            section={g.groupBy === 'status' ? (row.key as ReviewSection) : undefined}
                             onToggle={() => g.toggleSection(row.key)}
                           />
                         );
