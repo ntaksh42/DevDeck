@@ -47,6 +47,7 @@ export function AgentCommandSettings() {
   const [autoAgentMax, setAutoAgentMax] = useState(3);
   const [autoAgentInterval, setAutoAgentInterval] = useState(15);
   const [autoPipelines, setAutoPipelines] = useState(false);
+  const [autoApproval, setAutoApproval] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
     claudeModelChoices: "",
@@ -91,6 +92,9 @@ export function AgentCommandSettings() {
     setAutoPipelines(settingsQuery.data?.autoAgentPipelinesEnabled ?? false);
   }, [settingsQuery.data?.autoAgentPipelinesEnabled]);
   useEffect(() => {
+    setAutoApproval(settingsQuery.data?.autoAgentApprovalEnabled ?? false);
+  }, [settingsQuery.data?.autoAgentApprovalEnabled]);
+  useEffect(() => {
     const data = settingsQuery.data;
     setModels({
       claudeModel: data?.claudeModel ?? "",
@@ -121,6 +125,7 @@ export function AgentCommandSettings() {
         autoAgentMaxPerSync: autoAgentMax,
         autoAgentIntervalMinutes: autoAgentInterval,
         autoAgentPipelinesEnabled: autoPipelines,
+        autoAgentApprovalEnabled: autoApproval,
         ...models,
       }),
     );
@@ -311,9 +316,22 @@ export function AgentCommandSettings() {
             reviewing later pushes, except while in draft, using only changes since the last
             fully completed review, including force pushes. Failed runs retry after a delay;
             partial coverage keeps the previous reviewed commit. Open human requests pause
-            automatic work. Assigned work items are investigated if they have no prior result.
+            automatic work. Assigned work items (New or Active, changed within 30 days) are investigated if they have no prior result.
             A result folder is required for each type. Fields, comments and code changes are sent
             to the default agent; code is not changed and comments are not proposed.
+          </span>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoApproval}
+              onChange={(event) => setAutoApproval(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Choose what to run in Auto queue first
+          </label>
+          <span className="text-xs text-muted-foreground">
+            Nothing starts by itself: the candidates are listed in Auto queue with the material the
+            agent would get and its size, and only the ones you pick are handed to the agent.
           </span>
         </div>
 

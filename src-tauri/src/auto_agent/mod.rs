@@ -6,25 +6,31 @@
 //! Result panel. The items form a queue worked off a few per check, so what was waiting when
 //! the app started (or when the setting was turned on) is handled too. The
 //! agent writes the result HTML; it gets no Azure DevOps access and is told
-//! not to change code or propose comments.
+//! not to change code or propose comments. With `auto_agent_approval_enabled`
+//! nothing starts by itself: [`queue`] lists the candidates and starts only the
+//! ones picked in Auto queue, through the same runner.
 
 mod context;
 mod diffs;
+pub(crate) mod queue;
 mod runner;
 mod state;
 
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration as StdDuration, Instant};
 
-use crate::agent_notes::NoteTarget;
+use crate::agent_notes::{self, NoteTarget};
 use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, Organization};
 use crate::error::Result;
+use crate::settings::result_files;
 
 /// Pull requests created longer ago than this are left to a manual request.
 const MAX_PR_AGE_DAYS: i64 = 30;
+/// Work items not changed for longer than this are left to a manual request.
+const MAX_WI_AGE_DAYS: i64 = 30;
 /// Organization batches wait their turn instead of being dropped while a
 /// different organization's agent is still running.
 static BATCH_SLOT: LazyLock<tokio::sync::Semaphore> =
@@ -67,14 +73,14 @@ impl AutoItem {
         state::history_path(db, &org.id, repo, self.target(), self.id())
     }
 
-    fn target(&self) -> NoteTarget {
+    pub(crate) fn target(&self) -> NoteTarget {
         match self {
             Self::PullRequest(_) => NoteTarget::PullRequest,
             Self::WorkItem(_) => NoteTarget::WorkItem,
         }
     }
 
-    fn id(&self) -> i64 {
+    pub(crate) fn id(&self) -> i64 {
         match self {
             Self::PullRequest(pr) => pr.pull_request_id,
             Self::WorkItem(wi) => wi.id,
@@ -92,8 +98,50 @@ fn awaits_review(pr: &CachedReviewPr, now: DateTime<Utc>) -> bool {
     !pr.is_draft && pr.my_vote == 0 && recent
 }
 
+/// Whether the work item still needs an investigation: its state is `New` or
+/// `Active`, and it changed within [`MAX_WI_AGE_DAYS`]. An unreadable change
+/// date does not exclude it.
+fn awaits_investigation(wi: &CachedWorkItem, now: DateTime<Utc>) -> bool {
+    let open = wi
+        .state
+        .as_deref()
+        .is_some_and(|state| ["new", "active"].contains(&state.trim().to_lowercase().as_str()));
+    let recent = wi
+        .changed_date
+        .as_deref()
+        .and_then(|date| DateTime::parse_from_rfc3339(date).ok())
+        .map(|changed| now - changed.with_timezone(&Utc) <= Duration::days(MAX_WI_AGE_DAYS))
+        .unwrap_or(true);
+    open && recent
+}
+
+/// Whether an item was already handled before automatic tracking: it has a
+/// notes folder (the user or an earlier run asked) or a result HTML. An
+/// unreadable result folder counts as handled, so nothing is listed blind.
+pub(crate) fn handled_check<'a>(
+    root: &'a Path,
+    review_folder: Option<&'a Path>,
+    work_item_folder: Option<&'a Path>,
+) -> impl Fn(NoteTarget, i64) -> bool + 'a {
+    move |target, id| {
+        if agent_notes::notes_dir(root, target, id).exists() {
+            return true;
+        }
+        let found = match target {
+            NoteTarget::PullRequest => {
+                review_folder.map(|folder| result_files::find_review_result_file(folder, id))
+            }
+            _ => {
+                work_item_folder.map(|folder| result_files::find_work_item_result_file(folder, id))
+            }
+        };
+        found.is_none_or(|found| !matches!(found, Ok(None)))
+    }
+}
+
 /// The next items of the queue, pull requests first, up to `limit`. Pull
-/// requests I voted on, drafts and old ones are left out, and so is anything
+/// requests I voted on, drafts and old ones, and work items that are not new
+/// or active or have not changed lately, are left out, and so is anything
 /// already handled according to the caller's predicate. Initial selection
 /// remains separate from the durable revision checks for tracked PRs.
 pub(crate) fn pick(
@@ -107,7 +155,10 @@ pub(crate) fn pick(
         .into_iter()
         .filter(|pr| awaits_review(pr, now))
         .map(AutoItem::PullRequest);
-    let work_items = work_items.into_iter().map(AutoItem::WorkItem);
+    let work_items = work_items
+        .into_iter()
+        .filter(|wi| awaits_investigation(wi, now))
+        .map(AutoItem::WorkItem);
     prs.chain(work_items)
         .filter(|item| !is_handled(item.target(), item.id()))
         .take(limit)
@@ -137,7 +188,7 @@ impl Drop for BatchGuard {
 }
 
 pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
-    if !settings.auto_agent_enabled {
+    if !settings.auto_agent_enabled || settings.auto_agent_approval_enabled {
         return;
     }
     let key = format!("{}|{}", db.cache_key(), org.id);
@@ -155,6 +206,7 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
         let outcome = match db.get_app_settings() {
             Ok(settings)
                 if settings.auto_agent_enabled
+                    && !settings.auto_agent_approval_enabled
                     && claim_check(&key, settings.auto_agent_interval_minutes, Instant::now()) =>
             {
                 run_batch(&db, &settings, &org).await

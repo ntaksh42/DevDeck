@@ -111,6 +111,19 @@ pub(super) async fn process_item(
     Ok(true)
 }
 
+/// The material an attempt would hand to the agent, for the Auto queue
+/// preview. `None` when there is nothing reviewable to hand over.
+pub(super) async fn preview(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    org: &Organization,
+    item: &AutoItem,
+) -> Result<Option<String>> {
+    let history = History::read(&item.history_path(db, org))?;
+    let material = prepare(db, settings, org, item, &history, &mut (None, None)).await?;
+    Ok(material.filter(|m| m.has_content).map(|m| m.document))
+}
+
 async fn prepare(
     db: &AppDatabase,
     settings: &AppSettings,

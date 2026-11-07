@@ -52,6 +52,14 @@ export function useCommandActions({
     {
       disabled: organizationsLength === 0,
       group: "Navigation",
+      id: "nav.autoQueue",
+      keywords: ["agent", "auto", "review", "investigate", "approve"],
+      label: "Go to Agent Auto Queue",
+      run: () => setView("autoQueue"),
+    },
+    {
+      disabled: organizationsLength === 0,
+      group: "Navigation",
       id: "nav.myReviews",
       keywords: ["pull request", "review"],
       label: "Go to My Reviews",
@@ -104,14 +112,6 @@ export function useCommandActions({
       keywords: ["build", "ci", "pipeline"],
       label: "Go to Pipelines",
       run: () => setView("pipelines"),
-    },
-    {
-      disabled: organizationsLength === 0,
-      group: "Navigation",
-      id: "nav.analyze",
-      keywords: ["trend", "chart", "query"],
-      label: "Go to Analyze",
-      run: () => setView("analyze"),
     },
     {
       group: "Navigation",

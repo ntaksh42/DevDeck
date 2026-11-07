@@ -35,6 +35,14 @@ describe("keybindings registry", () => {
     expect(resolveKeybindings()).toEqual(defaultKeybindingMap());
   });
 
+  it("uses A for Agent Auto Queue and ignores retired Analyze overrides", () => {
+    window.localStorage.setItem(KEYBINDINGS_STORAGE_KEY, JSON.stringify({ gotoAnalyze: "Z" }));
+    expect(resolveKeybindings().gotoAutoQueue).toBe("A");
+    expect(loadKeybindingOverrides()).toEqual({});
+    saveKeybindingOverrides({ gotoAutoQueue: "Z" });
+    expect(resolveKeybindings().gotoAutoQueue).toBe("Z");
+  });
+
   it("applies stored overrides and falls back to defaults for the rest", () => {
     saveKeybindingOverrides({ commandPalette: "Ctrl+J" });
     const map = resolveKeybindings();

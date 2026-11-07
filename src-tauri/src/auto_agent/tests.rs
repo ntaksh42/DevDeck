@@ -7,6 +7,22 @@ use chrono::{DateTime, Utc};
 use std::time::{Duration, Instant};
 
 #[test]
+fn an_item_with_a_notes_folder_or_result_html_is_handled() {
+    let root = tempfile::tempdir().unwrap();
+    let review = tempfile::tempdir().unwrap();
+    let work_items = tempfile::tempdir().unwrap();
+    let handled = super::handled_check(root.path(), Some(review.path()), Some(work_items.path()));
+    assert!(!handled(NoteTarget::PullRequest, 7));
+
+    std::fs::create_dir(root.path().join("pr-7")).unwrap();
+    assert!(handled(NoteTarget::PullRequest, 7));
+    assert!(!handled(NoteTarget::WorkItem, 7));
+    // No result folder for a type: nothing is started blind.
+    let without_folder = super::handled_check(root.path(), None, None);
+    assert!(without_folder(NoteTarget::WorkItem, 8));
+}
+
+#[test]
 fn a_check_is_due_only_after_the_interval() {
     let start = Instant::now();
     assert!(is_due(None, start, 15));
@@ -82,7 +98,7 @@ fn wi(id: i64) -> CachedWorkItem {
         id,
         title: format!("WI {id}"),
         work_item_type: None,
-        state: None,
+        state: Some("Active".into()),
         assigned_to: None,
         assigned_to_unique_name: None,
         changed_date: None,
@@ -113,6 +129,38 @@ fn picks_unhandled_non_draft_items_pull_requests_first() {
             (NoteTarget::PullRequest, 2),
             (NoteTarget::WorkItem, 10),
             (NoteTarget::WorkItem, 11)
+        ]
+    );
+}
+
+#[test]
+fn work_items_must_be_new_or_active_and_changed_within_30_days() {
+    let with = |id, state: Option<&str>, changed: Option<&str>| CachedWorkItem {
+        state: state.map(str::to_string),
+        changed_date: changed.map(str::to_string),
+        ..wi(id)
+    };
+    let picked = pick(
+        Vec::new(),
+        vec![
+            with(1, Some("New"), Some("2026-11-01T00:00:00Z")),
+            with(2, Some("active"), Some("2026-10-09T00:00:00Z")),
+            with(3, Some("Active"), Some("2026-10-07T00:00:00Z")),
+            with(4, Some("Doing"), Some("2026-11-01T00:00:00Z")),
+            with(5, Some("Closed"), Some("2026-11-01T00:00:00Z")),
+            with(6, None, Some("2026-11-01T00:00:00Z")),
+            with(7, Some("Active"), None),
+        ],
+        10,
+        now(),
+        |_, _| false,
+    );
+    assert_eq!(
+        ids(&picked),
+        vec![
+            (NoteTarget::WorkItem, 1),
+            (NoteTarget::WorkItem, 2),
+            (NoteTarget::WorkItem, 7)
         ]
     );
 }

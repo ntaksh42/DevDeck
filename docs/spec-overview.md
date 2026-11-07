@@ -64,7 +64,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 My Items (割当件数)、ピン留めした Work Item View (最後に取得した件数)、
 Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非表示。
 
-最上位ナビ項目 (Pull Requests / Work Items / Pipelines / Analyze) はドラッグ&ドロップ
+最上位ナビ項目 (Pull Requests / Work Items / Pipelines) はドラッグ&ドロップ
 またはキーボード (`Alt+↑` / `Alt+↓`) で並べ替えできる。順序は localStorage
 (`azdodeck:layout:navOrder`) に永続化される。Help / Settings は下部固定で対象外。
 
@@ -79,8 +79,8 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 実行の成果物 (artifacts) を一覧表示しブラウザでダウンロード (`list_pipeline_artifacts`)。終了済みの実行で失敗 (failed / canceled) したステージがあると、実行詳細の「Failed stages」に各ステージの「Retry failed jobs」(失敗ジョブのみ) / 「Retry all jobs」(全ジョブ) を出し、インライン確認の後に同じ実行内でそのステージだけを再実行する (`retry_pipeline_stage`: `PATCH build/builds/{id}/stages/{identifier}` に `state=retry`・`forceRetryAllJobs`。ステージ識別子は Timeline の `identifier`。実行全体の Re-run (新規実行を Queue) とは別操作で、書き込み系なので read-only 検証モードでは出さず、バックエンドも拒否する)。実行詳細の「Tests」には、ビルドが公開したテスト実行の合計 (passed / failed / skipped・other) と失敗テスト (最大 100 件、超過時は件数を明示。テスト名・実行名・所要時間、クリックで展開してエラーメッセージ) を表示する (`list_pipeline_test_results`: Test Runs API を `buildUri` で引き、失敗件数のある実行のみ `outcomes=Failed` の結果を取得)。テスト未公開のビルドや取得失敗時は欄を出さない。失敗テストがあるときは、同じパイプライン定義・同じブランチの直近 10 回の完了済み実行の失敗テストと突き合わせ (`list_flaky_tests`: 各実行の Test Runs と失敗結果 (テスト実行あたり最大 300 件) を並列度 4 で取得し、完了済みビルドの結果はビルド ID と完了時刻をキーにプロセス内でキャッシュ。取得できなかった実行は飛ばして件数を返し、全部失敗したときだけエラー)、各失敗テストにバッジを付ける: `Flaky n/m` (同じコミットで失敗と成功の両方がある、または同じビルド内の同名テスト実行 (ジョブの再試行) で通った)、`Unstable n/m` (成功と失敗が 2 回以上入れ替わった)、`New since {ビルド番号}` (それまで通っていて、その実行以降失敗し続けている)、`Failing n/m` (見えた実行すべてで失敗)、`Fixed later` (その後の実行では通っている)。テストの成功は失敗結果だけから推定する (テストを公開し、失敗一覧をすべて取得できた実行で名前が無ければ成功、テスト未公開・失敗一覧が上限で切れた実行は数えない)。テスト名は Tests 欄と同じ表示名 (タイトル、無ければ自動テスト名) で突き合わせる。バッジの説明は展開時に 1 行で表示する (ツールチップにも同じ文)。表示中の失敗がすべて Flaky / Unstable なら「All failures are known flaky tests — retrying the failed jobs is likely enough.」、一部なら件数を 1 行で出し、欄の末尾に比較した実行数を出す。比較の取得失敗時はバッジを出さず、Tests 欄自体は従来どおり表示する。GitHub 接続は `NotSupported`。 ブランチ + 任意のランタイムパラメータを指定して新規実行をキュー投入 (`queue_pipeline_run`)。 自分に割り当てられた保留中の承認 (manual approval) をアプリ内で承認/却下 (`list_pipeline_approvals` / `update_pipeline_approval`)。承認待ちは件数と先頭の依頼だけを1行の帯に畳んで表示し、帯のボタン (Enter/Space) で一覧を開閉する。Project / Pipeline の選択と Watch / Queue run は1行のツールバーにまとめる。 パイプラインを Watch (購読、localStorage、最大 100) すると実行履歴を常時追跡し、最新実行の開始/終了をデスクトップ通知 (`desktop_notifications_enabled` に従う)。Watched pipelines ボードにペイン内の見出し行は無い。ペインのタブ名は「Watched pipelines」で、Sort セレクトと更新時刻つきの更新ボタンはドックのタブ帯の右側 (フィルタの右) に置く (ボードが `toolbarSlot` へ portal で描画する)。件数は下端の共通ステータスバーに `N items · ● N running · N failed · N approvals` (既存のピルの色とフィルタ/トグル動作はそのまま) として出し、右端の `?` が Help の Pipelines の節を開く (run を選択中は従来のキー操作ヒント行もステータスバーの上に出る)。実行中 (最新実行が active) のパイプライン数は「N running」ピル (パルスドット) で示し、該当行を青の左アクセント + パルスドットで強調して、いま実行中のパイプラインが一目で分かる。実行中の購読は表示順のみ一覧の先頭に固定表示 (安定ソート。実行中同士・非実行中同士は元の購読順を維持し、localStorage の購読順自体は変更しない)。見出しボタンは 1 つの Tab 停止 (roving) で、`↑↓`/`J K`/`Home`/`End` で見出し間を移動、`Enter`/`Space` で実行履歴を開閉、`Delete` で Watch を外す (行の ✕ は Tab 順から外す)。行の見出しボタンにフォーカスすると、その pipeline の最新実行が Agent パネルの対象になる (実行の詳細を開くとその実行が優先)。承認待ちが選択中プロジェクトにあるときは、Agent パネルの `+ Pending approvals (N)` で承認待ちの表を足せる (承認は実行 ID を持たないため、実行の対象にはならない)。 Queue run のブランチ欄は、選択中のパイプライン定義 (`get_pipeline_definition` が返す `repository`) が Azure Repos (TfsGit) を参照していればそのブランチ一覧 (`list_repo_branches`) をキーボード操作対応の候補選択欄 (`FilterableSelect`、既定値はリポジトリの既定ブランチ) で提示し、候補にない値の自由入力も許可する。リポジトリ情報が無い/TfsGit 以外/ブランチ取得失敗の場合は従来どおりの自由入力欄にフォールバックする。選択・入力したブランチ名は `refs/heads/` 形式に正規化してから `queue_pipeline_run` に渡す。Queue run のパラメータ欄は、選択中の定義が上書き可能な変数 (`allowOverride === true`) を持つ場合、変数ごとのラベル付き入力欄 (シークレット変数は空欄始まりのパスワード入力) を表示し、既定値から変更した変数のみを `parameters` として送信する。上書き可能な変数が無い/定義詳細が未取得の場合は従来どおり `name=value` 改行区切りの自由入力欄のみを表示する (両方表示時は「追加パラメータ」欄として残り、変数入力欄と同名キーがあれば変数入力欄側が優先される)。 定義の非シークレット変数の追加/変更/削除と CI トリガー (継続的インテグレーション) の有効化/無効化・ブランチ/パスフィルタ編集を `update_pipeline_definition` で行える (書き込みガード対象)。実装は定義の生 JSON を取得→変更→PUT で送信し、`isSecret: true` の変数は常に温存され、入力に同名エントリがあれば拒否される。CI トリガーを有効化する際はブランチフィルタが 1 件以上必要、無効化するとトリガーエントリを削除する。他のトリガー種別 (schedule / pullRequest 等) は変更されない。 定義パネル (`PipelineDefinitionPanel`) の Edit ボタンから編集フォーム (`PipelineDefinitionEditForm`) を開き、非シークレット変数を行単位で追加/変更/削除 (name / value / allowOverride チェックボックス) できる。シークレット変数は "(secret)" 表示の読み取り専用行として並び、編集・削除操作を提供しない。CI トリガーは有効/無効チェックボックスと branch/path filters (1 行 1 件のテキストエリア) を編集でき、セクションを触っていなければ保存時に `ciTrigger: null` を送りトリガーを変更しない。Save は `update_pipeline_definition` を呼び、成功時は返却された定義でクエリキャッシュを更新して閲覧モードに戻り、失敗時はパネル内にエラーを表示したまま編集状態を維持する。編集モードは Edit ボタンから開始 (最初の入力にフォーカス)、Escape または Cancel/Save で終了しフォーカスを Edit ボタンへ戻す、キー操作はフォーム内に閉じ込めて背後のビューに伝播しない。 |
 | **Settings** | パネルを 7 カテゴリ (Accounts / Appearance & keyboard / Notifications / Views & workflow / Project / Data & sync / Advanced) に分けて表示。左側 (狭い幅では上部) に sticky なセクションナビとフィルタ入力を置く。フィルタは全語 AND・大文字小文字無視でカテゴリ名・パネル名・キーワードに一致するパネルだけを残し、該当なしのカテゴリはナビで無効化、全件不一致なら空状態 + Clear filter。フィルタは `focusFilter` (既定 `Ctrl+F`) でフォーカス、`Enter` で最初の一致パネルの先頭コントロールへ移動、`Escape` は 1 回目でクリア・2 回目でフォーカス解除。ナビは `↑↓`/`←→`/`Home`/`End` でボタン間移動、Enter/クリックでセクションへスクロールしてフォーカス、スクロール位置に応じて現在セクションを `aria-current` で強調。Connections 一覧は Add connection の直前 (先頭) に表示。実験フラグで非表示のパネル (Usage stats / Diagnostics) はフィルタ・ナビの対象外。内容: 組織設定 (PAT / Azure CLI)、外観 (テーマ + UI scale)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き、行の条件付き色ルール (Work Item グリッドの行を条件で着色、先勝ち、localStorage 永続化)。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
 | **Notifications** | 通知履歴 (`notifications` テーブル) 専用ビュー。サイドバー最上位に固定表示 (ドラッグ並べ替え対象外)、未読件数バッジ付き。フィルタ: Unread only トグル、種別のカテゴリボタン (All / PR / Work item / Pipeline / Sync、件数付き。件数は読み込み済みの行から数え、絞り込みは `kinds` でバックエンドが行う)、組織が2件以上のときのみ表示される単一選択の組織セレクト。一覧は `list_notifications` (`limit=100`、`beforeId` カーソルで「Load more」) を `useInfiniteQuery` で取得し、共有 `useGridVirtualizer` で仮想化。行は未読ドット・タイトル・相対時刻・種別ラベル+詳細+本文冒頭、webUrl があれば行内に外部ブラウザで開くボタン。キーボード: `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter` でジャンプ (種別ごとに PR Search / Work Item Search / Pipelines / Settings のいずれかへ遷移、または `webUrl` を外部ブラウザで開く。対象を特定できない場合は何もしない) と同時に既読化、`Ctrl+Enter` は `webUrl` を外部ブラウザで開いて既読化、`R` で選択行を既読化 (バックエンドに未読へ戻す手段が無いため、未読の行を既読にするだけの片方向操作)。選択行の PR / WI 通知は Agent パネルの対象になる (ペイロードに PR / WI の ID・リポジトリ・プロジェクト名が入る種別のみ。プロジェクト ID は通知に無いため名前で代用する。タイトルは本文が「タイトル + 改行 + リポジトリ / 組織」形式のときだけ付く)。ドックが無いため Agent パネルは右端のドロワーで、閉じた状態で始まり、`Ctrl+J` で開閉する。一覧の下端には他の一覧と同じ共通ステータスバー (`N items · N unread` と `?`) を置く。本文にタイトル行が無い通知は、通知タイトルの「種別: 」より後ろを Agent の対象のタイトルにする。ヘッダーの「Mark all read」で全既読。既読操作は `mark_notifications_read` / `mark_all_notifications_read` を呼び関連クエリを invalidate。`notifications:inbox-updated` イベント (App 直下で購読) を受けて一覧・未読バッジの両方を invalidate するため、ビューを開いていなくてもバッジは最新化される。パイプライン監視の開始/終了通知 (`usePipelineWatchNotifications`) とパイプライン手動実行のキュー投入 (App の `runQuickPipeline`) は、デスクトップ通知トーストと同じタイミングで `record_notification` を呼び、同じ履歴に記録する (kind: `pipelineWatchStarted` / `pipelineWatchFinished` / `pipelineRunQueued`)。失敗したパイプラインの自動調査を起動したときも `pipelineInvestigationStarted` を記録する。`G` チェーンは `N`。 |
+| **Agent Auto Queue** | 自動レビュー / 自動調査の候補 (PR / WI) を左に一覧、右に選択中の 1 件の資料プレビュー (先頭 30,000 文字・文字数・トークン見積) で並べ、チェックしたものだけエージェントに渡すビュー (サイドバーの Inbox の下とコマンドパレット「Go to Agent Auto Queue」から開く。`G` → `A` で開く)。キー: ↑↓ 移動 / Space 選択 / A 全選択 / S スキップ / Ctrl+Enter 実行。開いた時と実行・スキップの後はフォーカスを一覧に戻す。同期のたびに再取得する。 |
 | **Inbox** | 自分に向けられたコメント (PR / WI のメンション・返信、自作 PR へのコメント) を 1 か所で見て、その場で返信・Resolve・Done・Snooze するビュー (サイドバー最上位に固定、`G` → `I`)。**詳細な仕様 (検出・状態・重要度・プレビュー・キー操作・関連リンク・Claude の判断メモ・コマンド) は [`docs/spec-inbox.md`](spec-inbox.md) に分けた。Inbox を変えるときはそちらを更新する。** |
-| **Analyze** | 登録したクエリを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリを複数登録できる (0 件のときは保存を拒否)。`DockableWorkspace` (レイアウトのキー `azdodeck:layout:analyze:dockview:v1`) に載せ、左のグループ一覧 (タブ名 `Groups`、タブ帯右に `+ Add group`、下端のステータスバーに `N items` と `?` ボタン = Help を開く) + 右の詳細 (タブ名 `Trend`、タブ帯右に Day / Week の切替)。Agent パネルもドックに加わる。画面の文言はすべて英語。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。行を開くと数値テーブル (Period / Count / Change / Note) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりクエリ 12 件が上限。ブランチ別コミット推移の廃止前に保存したブランチメンバーは読み込み時に捨てる)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替、`Esc` で一覧へ戻る。ダイアログを閉じるとフォーカスは開いた要素へ、グループ削除後は一覧へ戻る。選択中のグループは Agent パネルの対象になる (下記)。`G` チェーンは `A`。 |
 
 ### PR 検索の条件・追加探索
 
@@ -152,7 +152,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     PR (My Reviews / My Pull Requests / PR Search / Inbox の PR 項目 / Notifications の PR 通知)、
     WI (My Items / Views / Search / Inbox の WI 項目 / Notifications の WI 通知)、
     パイプライン実行 (Pipelines の実行詳細、詳細を開く前は Watched pipelines で最後にフォーカスした行の最新実行)、
-    Wiki ページ (Wiki プレビューの「Ask agent」)、Analyze のグループ (種類 `analyze-group`: id = グループ id、title = グループ名。表示中のクエリごとの WIQL と期間別の件数を、再取得せず `analyzeGroupContext` に保持して文脈ドキュメントに書き出す)。対象は入力欄の placeholder
+    Wiki ページ (Wiki プレビューの「Ask agent」)。対象は入力欄の placeholder
     (`Ask about !45 …` / 対象なしは `Ask the agent…`) にも出す。Inbox の PR メンション / 返信は対象スレッド
     (`threadId`) も渡し、資料ではそのスレッドを先頭に置いて印を付ける。
     `usePublishAgentSubject` に `undefined` を渡すと同じ View 内の別の公開元に任せる (Pipelines は実行詳細を開くと
@@ -179,10 +179,10 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     My Items / Followed / Work Item Search / Work Item Views のグリッド表示 (表示中の WI。Views は WIQL も。ボード表示は対象外)、
     Inbox (表示中の項目、Done / Snoozed の切替とテキストフィルタ)、Pipelines (`+ Pending approvals (N)`: 選択中プロジェクトの承認待ち)。
   - **会話の単位**: 対象が PR / WI なら従来の項目ごとのメモ (`agent-notes/{pr|wi}-{id}/`、結果フォルダの設定が前提)。
-    それ以外 (パイプライン実行 / Wiki / Analyze グループ) と対象なしは依頼ごとの会話 (`target` = `ask`、`agent-notes/ask-{yyyyMMddHHmmss}/`、結果フォルダ不要)。
+    それ以外 (パイプライン実行 / Wiki) と対象なしは依頼ごとの会話 (`target` = `ask`、`agent-notes/ask-{yyyyMMddHHmmss}/`、結果フォルダ不要)。
     パネルに出すのは今の対象についての会話だけ。対象が PR / WI ならその項目のメモだけで、依頼は出さない。
     それ以外の対象なら最近の依頼 30 件 (`list_agent_asks`) のうちその対象についての依頼 (front-matter の `context` で判定。
-    パイプライン実行と Wiki は URL、Analyze グループは context 行で照合する。実行は結果で表示名が変わるため URL で照合)、
+    パイプライン実行は結果で表示名が変わるため、Wiki と同じく URL で照合)、
     対象なしなら対象なしで送った依頼だけ (`contextIsAbout`)。見出しなしの 1 本の一覧にし、
     Needs you → Open → Done の順、各グループ内は最終更新の新しい順に並べる。他の対象への返信待ちは、それぞれの対象を開いたときの Agent パネルで扱う。
   - **依頼の種類**: 画面では選ばせない。新しいメモの `kind` は付けず (空)、エージェントが本文から判断する
@@ -265,10 +265,12 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
     `investigate` / `summarize`。
   - **自動レビュー / 自動調査** (`auto_agent/`、設定 `auto_agent_enabled`、既定オフ): 組織の同期後、確認間隔 `auto_agent_interval_minutes` (既定 15 分) が過ぎていれば、My Reviews と My Work Items のキャッシュから対象を選び、既定のエージェント・モデルで `investigate` Note を実行する。1 回の確認・1 組織あたりの試行上限は `auto_agent_max_per_sync` (1〜10、既定 3)。全組織を通じて、自動実行は完了まで 1 プロセスずつ。他組織のバッチは待機し、同じ組織の重複待機は作らない。未試行・試行の古い項目を先に扱う。結果フォルダが未設定の種類は対象外。人の未対応 Note やユーザーの返信がある項目は自動実行を止め、人の依頼を優先する。過去の自動失敗 Note は、新しい資料による自動依頼に置き換える。
+    - **WI の対象**: 状態が `New` または `Active` (大文字小文字は区別しない) で、最終更新 (`changed_date`) が 30 日以内の WI。日付が読めない WI は除外しない (Basic プロセスの `To do` / `Doing` は対象外)。結果 HTML が既にある WI、成功済みの WI は再実行しない。
     - **PR の対象と範囲**: 初回は非ドラフト・未投票 (`my_vote` が 0)・作成から 30 日以内の PR を対象とする。管理開始後は投票済み・30 日超でも追加 push を追い、ドラフト中は止める。初回は PR 全体をレビューする。既存の HTML や Note だけではレビュー済み commit を確定しない。次回からは、最後に全範囲のレビューを成功した source commit と最新 source commit の内容を直接比較する。force push も同じ 2 commit 間の差分を対象とする。追加差分で直った指摘は解消済みにし、無関係な以前の指摘は再確認済みとせず残して、結果 HTML を更新する。
     - **資料と網羅性**: REST で PR の説明・コメント・変更内容、WI のプレビューを集めて `_context/` に保存する。PR は離れた変更箇所を分け、行番号と前後 3 行を付ける。差分は最大 40 ファイル・350,000 UTF-8 bytes、資料全体は 480,000 bytes まで。差分を先に収め、上限・binary・取得不能による未確認箇所を明記する。部分レビューではレビュー済み commit を進めず、同じ head を自動で繰り返さない。追加 push があれば最後の完全成功 commit から比較する。コード変更・コメント提案はさせない。
     - **成功判定と再試行**: 終了コード 0、Note の `_done/` への移動、結果 HTML の新規作成または更新、差分資料に省略がないことがそろったときだけ成功とする。資料取得・起動・実行の失敗は記録し、5 分、10 分、20 分、40 分、以後最大 1 時間の待機後、次の確認時に再試行する。1 試行は 30 分でタイムアウトする。Windows の追跡プロセスは Job Object に所属させ、アプリ終了時も終了させる。再起動まで除外するリストは使わない。
     - **記録と表示**: 実行範囲の commit、成否、Note、終了コード、試行ごとの stdout/stderr ログをアプリデータ内の `auto-agent/{hex組織ID}/{hexリポジトリID}/pr-{id}.json` と隣接ログに記録する。WI はリポジトリ ID の代わりにプロジェクト ID を使う。失敗・部分レビューは管理側の返信として Agent パネルに出す。Note の新規作成・変更・完了を検知すると、該当 PR/WI の結果 HTML を再取得する。Note と結果 HTML の名前は従来の番号形式のため、他組織・リポジトリの同番号と衝突すると自動実行を止め、警告ログに残す。
+  - **Agent Auto Queue** (設定 `auto_agent_approval_enabled`、既定オフ): オンにすると自動レビュー / 自動調査は自動では起動せず (`auto_agent::start` が何もしない)、候補を一覧にして人が選んだものだけ起動する。候補は自動実行の初回条件と同じ項目のうち、notes フォルダ・結果 HTML・自動実行の履歴のどれも無いものを全組織分、件数上限なしで返す (`list_auto_queue`)。1 件を選ぶと、エージェントに渡す資料の先頭 30,000 文字と全体の文字数・トークン見積 (文字数 ÷ 3) を返す (`get_auto_queue_preview`。PR の差分を REST で取るため、画面で選んだ 1 件ずつ取得する。変更が読めない PR は理由を返す)。選んだ項目は `run_auto_queue` が順にバックグラウンドで起動する (自動実行と同じ `runner::process_item` を通るので、増分レビュー・失敗時の再試行・履歴の記録も同じ。自動バッチとは同時に走らず、全組織で 1 つずつ)。スキップした項目は localStorage `azdodeck:autoQueue:skipped` に持ち (最大 500 件)、一覧から隠すだけでバックエンドは変えない。
   - **失敗したパイプラインの自動調査** (設定 `auto_agent_pipelines_enabled`、既定オフ。Read-only 検証モードでは起動しない): アプリ全体で Watch 中のパイプラインを監視するフック (`usePipelineWatchNotifications`。デスクトップ通知とこの設定のどちらかがオンの間だけポーリングする) が、最新実行の終了を検知し、結果が `failed` (canceled / partiallySucceeded は対象外) なら依頼を作る。資料は Agent パネルと同じパイプライン実行の資料 (タイムラインと失敗ステップのログ末尾) に、失敗テストと直近の実行との比較 (`list_flaky_tests` のバッジと説明、エラーの 1 行目) を足したもの。依頼文はエージェントに先頭行 `Verdict: flaky | code | infra | unknown` で結論を出させ、ログやテストのエラーを根拠に挙げさせる (コード変更・再実行・コメント提案はさせない)。`kind: investigate` の `ask` として作り、`run_agent` で既定のエージェントとモデルで起動する。同じ実行は 1 回だけ、全体で 1 時間 5 件まで (localStorage `azdodeck:pipelines:autoInvestigated` に実行ごとの記録を 14 日・最大 200 件保持)。依頼 ID が秒単位の作成時刻なので、複数の失敗は 1 秒以上空けて順番に起動する。起動すると通知履歴に `pipelineInvestigationStarted` (表示は「Agent investigating」、Enter で Pipelines へ) を記録し、エージェントの返信は既存の「Agent replied on your request」通知で知らせる。会話は Agent パネルでその実行を対象にすると表示される (実行の URL で照合)。
   - **旧保存先からの移行**: 以前は結果フォルダ配下の `.to-agent-msg/{wi|pr}-{id}/` に保存していた。起動時と設定保存時に、
     両結果フォルダの `.to-agent-msg` から各項目フォルダをファイル単位で `agent-notes/` へ移す (移動先に同名ファイルがあれば
@@ -311,10 +313,14 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     `{CODEX_HOME または %USERPROFILE%\.codex}\skills\devdeck-notes\SKILL.md` に置く / 更新する (`agent_notes/skill.rs`)。
     設定フォルダ (`.claude` / `.codex`) が無いエージェントには置かない。DevDeck 製の印
     (`<!-- devdeck:managed ... -->`) が無い既存の `SKILL.md` は変更しない。配置失敗は警告ログのみ。
-  - **Skill (`devdeck-result-html`)**: 同じ場所・同じ規則で、調査・レビュー結果 HTML の書式
-    (`agent_notes/result_format.md`) を置く。ファイル名は `PR{番号}.html` / `WIT{番号}.html`、
+  - **結果 HTML の書式** (`agent_notes/result_format.md`): skill は置かず、WI / PR の結果フォルダの `AGENTS.md`
+    (管理区間) にだけ書く (ask の `AGENTS.md` には書かない)。エージェントは起動時に `AGENTS.md` を読むよう指示される。
+    自動実行の依頼文 (`auto_agent/context.rs`) も `AGENTS.md` の節を指す。以前置いていた skill `devdeck-result-html` は、
+    DevDeck 製の印がある場合に限り起動時に削除する (印が無いユーザーの `SKILL.md` は残す)。ファイル名は `PR{番号}.html` / `WIT{番号}.html`、
     並びは結論 → ポイントの図 → 本文 → 根拠 → 未確認 → (PR のみ) 畳んだ指摘の下書き、見出しの番号は対象 PR / Work Item への
-    リンク、図はインライン SVG (プレビューは JavaScript・外部ファイル不可)。
+    リンク、図はインライン SVG (プレビューは JavaScript・外部ファイル不可)。PR の指摘の場所 (指摘一覧・根拠の `file:line`) は
+    PR の Files タブへのリンクにする (`{PR の URL}?_a=files&path=…&line=…&lineEnd=…`。追加ファイルでは該当行が強調される)。
+    行が決められないときは `line` 系を付けない。材料が分からないときは推測せず文字だけにする。
     ガイドと自動実行の Note は、結果 HTML をこの書式で書くよう指示する。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
@@ -561,6 +567,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 | `auto_agent_enabled` | 同期後、対象 PR のレビューと自分にアサインされた WI の調査を既定エージェントへ依頼する。既定オフ。PR は初回に全体、その後は最後に完全成功した commit から追加 push 分をレビューする。失敗は間隔を空けて再試行する。人の未対応依頼があれば止める。フィールド・説明・コメント・差分がエージェントに渡る。 |
 | `auto_agent_max_per_sync` | 自動レビュー / 自動調査が 1 回の確認・1 組織あたりに起動する項目の上限 (1〜10、既定 3、範囲外は丸める)。Settings → Agent command の「Items per check」。 |
 | `auto_agent_interval_minutes` | 自動レビュー / 自動調査が新しい項目を確認する間隔 (分、1〜1440、既定 15、範囲外は丸める)。同期のたびではなく、この間隔が過ぎたあとの最初の同期で確認する (確認は同期後のキャッシュを読むだけで、同期間隔より短くはならない)。Settings → Agent command の「Check every (minutes)」。 |
+| `auto_agent_approval_enabled` | 自動レビュー / 自動調査を自動で起動せず、Agent Auto Queue に候補を並べて選んだものだけ起動する。既定オフ。Settings → Agent command の「Choose what to run in Auto queue first」。 |
 | `auto_agent_pipelines_enabled` | Watch 中のパイプラインの最新実行が failed で終わったとき、その実行についての `investigate` 依頼 (Agent パネルの依頼、`ask`) を作って既定のエージェントを起動する。Watch の監視はフロントエンドで行うため、起動もフロントエンドから (`pipelineAutoInvestigate.ts`)。既定オフ。 |
 | `codex_command` | Codex で起動するときのシェルコマンド。プレースホルダは `agent_command` と同じ。未設定なら既定コマンド `codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" --add-dir "{results}" "Read {guide} and handle the open notes in {notes}"` (Codex を非対話で、書き込みを作業・メモ・結果フォルダに限るサンドボックスで実行。Azure CLI 未ログイン・git push 不可は Claude Code と同じ) を使う (`agent_notes/launch.rs` の `DEFAULT_CODEX_COMMAND`)。 |
 | `agent_command` | Claude Code で Agent パネルからの依頼・返信・Run now (`Shift+Enter`) を起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{results}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" "{results}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_CLAUDE_COMMAND`)。 |
@@ -621,7 +628,7 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 
 `R` My Reviews / `Q` PR Search / `W` My Work Items / `F` Work Item Search /
 `V` Work Item Views / `P` Pipelines / `N` Notifications / `I` Inbox /
-`O` Cross-org summary / `A` Analyze / `S` Settings。
+`O` Cross-org summary / `A` Agent Auto Queue / `S` Settings。
 移動後はコマンドパレットと同じく、遅延読み込みの完了を待って移動先の一覧 (選択行、無ければ一覧領域。
 Pipelines は Watched pipelines の見出し) にフォーカスする。
 Work Item Search は以前 `I` だったが、Inbox の追加で `F` (Find) へ移した。Settings で
@@ -629,14 +636,14 @@ Work Item Search は以前 `I` だったが、Inbox の追加で `F` (Find) へ�
 
 ### フォーカスの戻り先
 
-- モーダルダイアログ (確認ダイアログ・New Work Item・Analyze の Add group など) は `useFocusTrap` (`src/lib/useFocusTrap.ts`) で
+- モーダルダイアログ (確認ダイアログ・New Work Item など) は `useFocusTrap` (`src/lib/useFocusTrap.ts`) で
   `Tab` / `Shift+Tab` を中に閉じ込め、閉じると開いた要素へ戻す。確認ダイアログの初期フォーカスは Cancel。
 - 列ヘッダーのフィルタと Columns メニューは開くとポップアップ内 (検索欄 / 最初のトグル) にフォーカスし、閉じると開いた要素 / グリッドへ戻す。
 - Agent パネル: 会話の見出しで `Esc` はパネルを閉じてグリッドへ、畳んだ返信欄で `Esc` はその会話の見出しへ、
   見出しで `Delete` は隣の会話 (無ければ入力欄) へフォーカスを移す。入力欄 (PR のコメント欄を含む) は下書きがあっても
   `Esc` で持ち主 (会話の見出し / プレビュー) へ戻り、下書きは残す。
 - Pipelines の実行行で `Enter` は実行を選んでプレビューへフォーカスする (`→` は読み取り専用プレビューを飛ばす規則どおり)。
-- コマンドパレットには全 View への移動 (Inbox / My Pull Requests / Analyze / Notifications を含む) を並べる。
+- コマンドパレットには全 View への移動 (Inbox / My Pull Requests / Agent Auto Queue / Notifications を含む) を並べる。
 
 ### 一覧ペインのステータスバー
 
@@ -801,11 +808,6 @@ PR Search / Work Item Search でパレット等から特定の項目を開く場
   保存先は localStorage の `azdodeck:prSearch:searchHistory` / `azdodeck:workItemSearch:searchHistory`。
 - Pipelines: 何も選んでいないときは、実行中のパイプラインの最新 run (無ければ先頭行の最新 run) をプレビューに出す。
   フォーカスは一覧のまま動かさず、run を選んだ後はその選択を優先する。
-- Analyze: グループが無いとき、左ペインに「Start from a template」(Bug backlog by state / My team's WIP /
-  Assigned to me by state / Stale work items。いずれも WIQL のグループを作る) を出し、右ペインにフォーカス中の
-  テンプレートの見本グラフ (固定データ、「Sample」表示) を出す。`↑` / `↓` で移動、`Enter` で追加し、追加した
-  グループにフォーカスする。`N` で空のグループを作るのは従来どおり。
-
 その他の表示:
 - My Reviews: 折りたたんだグループの見出しの横に、中の PR の `#ID タイトル` を最大 3 件、薄い 1 行で出す
   (表示のみ。`aria-hidden`)。
@@ -1015,7 +1017,7 @@ format!(
 - テキスト入力の Enter / Escape / Tab は IME 変換中 (`isImeComposing`: `isComposing` または `key === "Process"`) は無視する。変換の確定・取り消しで検索実行・候補確定・メンション挿入・フォーカス移動が起きないようにするため、コマンドパレット、Code 検索、設定フィルタ、フィルタ候補、コメント入力、各種インライン編集欄、グローバルの Escape が共通で従う。
 - 破壊的・不可逆な操作の確認 (組織削除、PR コメント削除、レビュアー削除、PR の Complete / Abandon など) はネイティブの `window.confirm` ではなく `ConfirmDialog` (`role="alertdialog"`、初期フォーカスは Cancel、Esc でキャンセル、閉じたら起点要素へフォーカス復帰) を使う。パイプラインの Re-run / Cancel はインライン確認バー。
 - **Project info (Settings、issue #541)**: Settings の「Project」カテゴリ。アクティブな接続の 1 プロジェクトについて、チームとメンバー (`list_project_teams`: `projects/{id}/teams` と各チームの `members`。先頭 20 チームまで、超過時は注記)、サービス接続 (`list_service_connections`: `serviceendpoint/endpoints`。資格情報は読まない)、サービスフック (`list_service_hooks`: `hooks/subscriptions` をプロジェクトで絞り込み。Webhook URL などの consumerInputs は読まない) を読み取り専用で表示する。各セクションは `<details>` で、開いたときだけ取得する (権限不足などの失敗はそのセクションだけに表示)。チーム編集・接続/フックの作成・セキュリティ/権限設定の閲覧・Area/Iteration Path の編集は対象外。GitHub 接続は未対応 (`NotSupported`)。
-- **廃止したビュー**: Code (Files) ビュー (ファイル閲覧・コード検索・ブランチ/タグ管理・PR 作成) と Commits ビュー (コミット検索・バックグラウンドのコミット同期) は、Azure DevOps のレート制限 (TSTU 遅延) を招く API 呼び出しを減らすため削除した。コマンドパレットのコミット/コード検索 (`c:` / `code:`) と Analyze のブランチ別コミット推移も併せて削除。PR プレビューの Commits / Files changed タブも同じ理由で削除した (コミット一覧 `list_pull_request_commits` は Linked Work Items の `AB#NNN` 抽出、変更ファイル一覧 `list_pull_request_changes` は複数選択時のファイル重複検出で引き続き使う)。
+- **廃止したビュー**: Analyze (WIQL の履歴集計・グループ管理) は削除し、`G → A` は Agent Auto Queue に割り当てた。Code (Files) ビュー (ファイル閲覧・コード検索・ブランチ/タグ管理・PR 作成) と Commits ビュー (コミット検索・バックグラウンドのコミット同期) は、Azure DevOps のレート制限 (TSTU 遅延) を招く API 呼び出しを減らすため削除した。コマンドパレットのコミット/コード検索 (`c:` / `code:`) と Analyze のブランチ別コミット推移も併せて削除。PR プレビューの Commits / Files changed タブも同じ理由で削除した (コミット一覧 `list_pull_request_commits` は Linked Work Items の `AB#NNN` 抽出、変更ファイル一覧 `list_pull_request_changes` は複数選択時のファイル重複検出で引き続き使う)。
 - **対象外として確定した領域 (issues #538, #540)**: Test Plans (テストケース管理・実行)、Artifacts (パッケージフィード)、Wiki の編集、Azure DevOps 標準の通知購読 (個人/チーム) の閲覧・編集連携は実装しない。DevDeck は PR / Work Item / Commit / Pipeline / Code を横断する個人ダッシュボードで、これらは別プロダクト相当の大型機能になるため。通知は DevDeck 独自のローカルルール (§5) だけで管理し、ADO 側の購読設定とは意図的に非連動とする。Wiki は検索 + 読み取りプレビュー (`wiki:` パレット検索) まで。
 
 ---

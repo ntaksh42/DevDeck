@@ -11,7 +11,7 @@ import {
 import {
   Bell,
   BookOpen,
-  ChartLine,
+  Bot,
   GitBranch,
   GitPullRequest,
   Inbox,
@@ -370,16 +370,6 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         onClick={() => onNavigate("pipelines")}
       />
     ),
-    analyze: (
-      <NavButton
-        key="analyze"
-        active={activeView === "analyze"}
-        disabled={organizationsLength === 0}
-        icon={<ChartLine className="h-4 w-4" aria-hidden="true" />}
-        label="Analyze"
-        onClick={() => onNavigate("analyze")}
-      />
-    ),
   };
 
   return (
@@ -403,6 +393,13 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             label="Inbox"
             badge={inboxBadge}
             onClick={() => onNavigate("inbox")}
+          />
+          <NavButton
+            active={activeView === "autoQueue"}
+            disabled={organizationsLength === 0}
+            icon={<Bot className="h-4 w-4" aria-hidden="true" />}
+            label="Agent Auto Queue"
+            onClick={() => onNavigate("autoQueue")}
           />
         </div>
         <div className="space-y-1">

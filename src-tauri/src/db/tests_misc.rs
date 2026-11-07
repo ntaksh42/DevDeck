@@ -178,6 +178,7 @@ fn app_settings_can_be_saved_and_cleared() {
             auto_agent_max_per_sync: 99,
             auto_agent_interval_minutes: 99999,
             auto_agent_pipelines_enabled: true,
+            auto_agent_approval_enabled: true,
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,
             notification_content_preview_enabled: false,
@@ -230,6 +231,7 @@ fn app_settings_can_be_saved_and_cleared() {
     assert_eq!(saved.auto_agent_max_per_sync, 10);
     assert_eq!(saved.auto_agent_interval_minutes, 1440);
     assert!(saved.auto_agent_pipelines_enabled);
+    assert!(saved.auto_agent_approval_enabled);
     assert!(saved.desktop_notifications_enabled);
     assert!(!saved.notification_content_preview_enabled);
     assert!(saved.notify_work_item_assignments);

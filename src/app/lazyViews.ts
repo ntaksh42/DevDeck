@@ -41,14 +41,14 @@ export const CrossOrgSummaryView = lazy(() =>
     default: m.CrossOrgSummaryView,
   })),
 );
-export const AnalyzeView = lazy(() =>
-  import("@/features/analyze/AnalyzeView").then((m) => ({
-    default: m.AnalyzeView,
-  })),
-);
 export const InboxView = lazy(() =>
   import("@/features/inbox/InboxView").then((m) => ({
     default: m.InboxView,
+  })),
+);
+export const AutoQueueView = lazy(() =>
+  import("@/features/auto-queue/AutoQueueView").then((m) => ({
+    default: m.AutoQueueView,
   })),
 );
 export const NotificationsView = lazy(() =>

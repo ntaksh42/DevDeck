@@ -11,8 +11,8 @@ export type View =
   | "pipelines"
   | "notifications"
   | "inbox"
+  | "autoQueue"
   | "crossOrgSummary"
-  | "analyze"
   | "settings";
 
 export type NavSectionId = "pullRequests" | "workItems";
@@ -39,7 +39,7 @@ export const GOTO_BINDING_VIEWS = {
   gotoNotifications: "notifications",
   gotoInbox: "inbox",
   gotoCrossOrgSummary: "crossOrgSummary",
-  gotoAnalyze: "analyze",
+  gotoAutoQueue: "autoQueue",
   gotoSettings: "settings",
 } satisfies Partial<Record<keyof KeybindingMap, View>>;
 

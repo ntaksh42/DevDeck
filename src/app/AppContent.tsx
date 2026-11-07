@@ -15,10 +15,10 @@ import {
   SetupPanel,
   PullRequestSearch,
   MyPullRequestsGrid,
-  AnalyzeView,
   CrossOrgSummaryView,
   NotificationsView,
   InboxView,
+  AutoQueueView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
 
@@ -109,12 +109,12 @@ export function AppContent({
           <PipelinesView />
         ) : activeView === "inbox" ? (
           <InboxView />
+        ) : activeView === "autoQueue" ? (
+          <AutoQueueView />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (
           <CrossOrgSummaryView onOpenView={onOpenView} />
-        ) : activeView === "analyze" ? (
-          <AnalyzeView />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (
