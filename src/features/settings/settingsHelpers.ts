@@ -27,6 +27,7 @@ export function settingsInput(
     inboxInsightMaxPerSync: settings?.inboxInsightMaxPerSync ?? 3,
     autoAgentEnabled: settings?.autoAgentEnabled ?? false,
     autoAgentMaxPerSync: settings?.autoAgentMaxPerSync ?? 3,
+    autoAgentIntervalMinutes: settings?.autoAgentIntervalMinutes ?? 15,
     autoAgentPipelinesEnabled: settings?.autoAgentPipelinesEnabled ?? false,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,

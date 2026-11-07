@@ -56,6 +56,7 @@ export const appSettingsSchema = z.object({
   inboxInsightMaxPerSync: z.number().int().default(3),
   autoAgentEnabled: z.boolean().default(false),
   autoAgentMaxPerSync: z.number().int().default(3),
+  autoAgentIntervalMinutes: z.number().int().default(15),
   autoAgentPipelinesEnabled: z.boolean().default(false),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
@@ -204,6 +205,7 @@ export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
   autoAgentEnabled?: boolean;
   autoAgentMaxPerSync?: number;
+  autoAgentIntervalMinutes?: number;
   autoAgentPipelinesEnabled?: boolean;
   workItemResultFolderPath?: string | null;
   showWindowHotkey?: string | null;

@@ -1,9 +1,48 @@
 use super::context::html_to_text;
 use super::diffs::changed_region;
-use super::{pick, AutoItem};
+use super::{claim_check, is_due, pick, AutoItem};
 use crate::agent_notes::NoteTarget;
 use crate::db::{CachedReviewPr, CachedWorkItem};
 use chrono::{DateTime, Utc};
+use std::time::{Duration, Instant};
+
+#[test]
+fn a_check_is_due_only_after_the_interval() {
+    let start = Instant::now();
+    assert!(is_due(None, start, 15));
+    assert!(!is_due(
+        Some(start),
+        start + Duration::from_secs(14 * 60),
+        15
+    ));
+    assert!(is_due(
+        Some(start),
+        start + Duration::from_secs(15 * 60),
+        15
+    ));
+}
+
+#[test]
+fn claiming_a_check_blocks_the_next_one_within_the_interval() {
+    let start = Instant::now();
+    assert!(claim_check("claim-test-org", 15, start));
+    assert!(!claim_check(
+        "claim-test-org",
+        15,
+        start + Duration::from_secs(60)
+    ));
+    assert!(claim_check(
+        "claim-test-org",
+        15,
+        start + Duration::from_secs(15 * 60)
+    ));
+    // Another organization has its own clock.
+    assert!(claim_check(
+        "claim-test-other",
+        15,
+        start + Duration::from_secs(60)
+    ));
+}
 
 fn now() -> DateTime<Utc> {
     DateTime::parse_from_rfc3339("2026-11-07T00:00:00Z")

@@ -34,6 +34,7 @@ function nonDefaultSettings(): AppSettings {
     inboxInsightMaxPerSync: 3,
     autoAgentEnabled: true,
     autoAgentMaxPerSync: 3,
+    autoAgentIntervalMinutes: 15,
     autoAgentPipelinesEnabled: true,
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
