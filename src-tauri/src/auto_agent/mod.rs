@@ -1,8 +1,9 @@
-//! Automatic review and investigation (setting `auto_agent_enabled`): after
-//! each sync, pull requests awaiting my review and work items assigned to me
-//! that are not handled yet are handed to the agent as an Agent notes
-//! `investigate` note, exactly as if the user had asked from the Result panel.
-//! The items form a queue worked off a few per sync, so what was waiting when
+//! Automatic review and investigation (setting `auto_agent_enabled`): on a sync
+//! at least `auto_agent_interval_minutes` after the previous check (the first
+//! one after startup always checks), pull requests awaiting my review and work
+//! items assigned to me that are not handled yet are handed to the agent as an
+//! Agent notes `investigate` note, exactly as if the user had asked from the
+//! Result panel. The items form a queue worked off a few per check, so what was waiting when
 //! the app started (or when the setting was turned on) is handled too. The
 //! agent writes the result HTML; it gets no Azure DevOps access and is told
 //! not to change code or propose comments.
@@ -11,10 +12,11 @@ mod context;
 mod diffs;
 
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
+use std::time::{Duration as StdDuration, Instant};
 
 use crate::agent_notes::{self, AgentNoteService, CreateAgentNoteInput, NoteTarget, RunAgentInput};
 use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, Organization};
@@ -33,9 +35,31 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 /// left alone instead of asking the agent to review code it cannot see, and so
 /// that they do not take a slot of every following sync.
 static NO_CHANGES: LazyLock<Mutex<HashSet<i64>>> = LazyLock::new(Mutex::default);
+/// When each organization's queue was last checked, so checks happen every
+/// `auto_agent_interval_minutes` instead of after every sync.
+static LAST_CHECK: LazyLock<Mutex<HashMap<String, Instant>>> = LazyLock::new(Mutex::default);
 
 fn has_no_changes(id: i64) -> bool {
     NO_CHANGES.lock().is_ok_and(|set| set.contains(&id))
+}
+
+/// Whether the interval since `last` has elapsed (never checked counts as due).
+fn is_due(last: Option<Instant>, now: Instant, interval_minutes: i64) -> bool {
+    let interval = StdDuration::from_secs(interval_minutes.max(1) as u64 * 60);
+    last.is_none_or(|last| now.saturating_duration_since(last) >= interval)
+}
+
+/// Records a check for the organization and returns true when one is due, so
+/// a sync that comes sooner than the interval leaves the queue alone.
+fn claim_check(org_id: &str, interval_minutes: i64, now: Instant) -> bool {
+    let Ok(mut last_checks) = LAST_CHECK.lock() else {
+        return true;
+    };
+    if !is_due(last_checks.get(org_id).copied(), now, interval_minutes) {
+        return false;
+    }
+    last_checks.insert(org_id.to_string(), now);
+    true
 }
 
 /// One item to hand to the agent.
@@ -98,6 +122,14 @@ pub(crate) fn pick(
 /// without a result folder is skipped (there is nowhere to write the result).
 pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
     if !settings.auto_agent_enabled || RUNNING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if !claim_check(
+        &org.id,
+        settings.auto_agent_interval_minutes,
+        Instant::now(),
+    ) {
+        RUNNING.store(false, Ordering::SeqCst);
         return;
     }
     let review_folder = settings.review_result_folder_path.as_deref().map(Path::new);
