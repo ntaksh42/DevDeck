@@ -64,6 +64,7 @@ export function WorkItemCommentsSection({
   return preview.comments.length > 0 ? (
     <PreviewSection
       accentColor="border-l-muted-foreground"
+      primary
       className={className}
       collapseId="comments"
       title={`Comments (${preview.comments.length})`}
@@ -132,6 +133,7 @@ export function WorkItemCommentsSection({
   ) : preview.commentsUnavailable ? (
     <PreviewSection
       accentColor="border-l-muted-foreground"
+      primary
       className={className}
       collapseId="comments"
       title="Comments"

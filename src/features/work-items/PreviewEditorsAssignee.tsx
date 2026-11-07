@@ -55,7 +55,7 @@ export function AssigneePicker({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-2xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full truncate rounded px-1 text-left text-xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "Unassigned"}
       >
         {pending ? "Updating..." : current ?? "Unassigned"}

@@ -37,6 +37,7 @@ export { workItemStateDotClass, workItemTypeColor } from "./WorkItemBadges";
 /** Panel width (CSS px, before zoom) at which comments go beside the details by default. */
 const SIDE_BY_SIDE_MIN_WIDTH = 880;
 const COMMENTS_LAYOUT_KEY = "azdodeck:wiPreview:commentsLayout";
+const FIELDS_EXPANDED_KEY = "azdodeck:wiPreview:fieldsExpanded";
 type CommentsLayout = "auto" | "side" | "below";
 
 export function WorkItemPreviewDetails({
@@ -128,6 +129,16 @@ export function WorkItemPreviewDetails({
   );
   const sideBySide = commentsLayout === "side" || (commentsLayout === "auto" && wideEnough);
 
+  const [fieldsExpanded, setFieldsExpanded] = useState<boolean>(() =>
+    readStoredJson<boolean>(FIELDS_EXPANDED_KEY, (raw) => (raw === true ? true : undefined), false),
+  );
+
+  function toggleFieldsExpanded() {
+    const next = !fieldsExpanded;
+    setFieldsExpanded(next);
+    writeStoredJson(FIELDS_EXPANDED_KEY, next);
+  }
+
   function toggleCommentsLayout() {
     const next = sideBySide ? "below" : "side";
     setCommentsLayout(next);
@@ -200,6 +211,22 @@ export function WorkItemPreviewDetails({
     sideBySide,
     visible: visibleSections,
   });
+  // Only State / Assigned / Priority stay in view; the other field pills sit
+  // behind a "+N" toggle so the header isn't three rows of chips.
+  const isPrimaryField = (editable: string | undefined) =>
+    editable === "state" || editable === "assignee" || editable === "priority";
+  const secondaryFieldCount =
+    selectedFieldDefinitions.filter((field) => !isPrimaryField(field.editable)).length +
+    customPreviewFields.length;
+  // Hidden with CSS rather than unmounted so the pickers keep their state.
+  function wrapSecondaryField(node: ReactNode, key: string, editable: string | undefined) {
+    if (isPrimaryField(editable)) return node;
+    return (
+      <span key={key} className={fieldsExpanded ? "contents" : "hidden"}>
+        {node}
+      </span>
+    );
+  }
   const mainColumn = sideBySide ? "main" : null;
   const commentsInSide = sideBySide && sectionColumn(sections.layout, "comments") === "side";
 
@@ -209,7 +236,12 @@ export function WorkItemPreviewDetails({
       case "acceptanceCriteria": {
         const title = id === "description" ? "Description" : "Acceptance Criteria";
         return (
-          <PreviewSection accentColor="border-l-primary" collapseId={id} title={title}>
+          <PreviewSection
+            accentColor="border-l-primary"
+            primary={id === "description"}
+            collapseId={id}
+            title={title}
+          >
             {/* Unframed: the section band already marks where the field starts. */}
             <RichHtmlFrame
               baseUrl={preview.webUrl}
@@ -240,7 +272,7 @@ export function WorkItemPreviewDetails({
       ref={rootRef}
       aria-keyshortcuts="Control+P"
       aria-label="Work item preview"
-      className={`min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02] ${
+      className={`min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-[13px] outline-none focus:bg-primary/[0.02] ${
         sections.dragging ? "[&_iframe]:pointer-events-none" : ""
       }`}
       data-primary-preview="true"
@@ -306,7 +338,7 @@ export function WorkItemPreviewDetails({
             block doesn't leave dead space when values are short. */}
         <div className="flex flex-wrap items-center gap-1 pt-1.5">
           {selectedFieldDefinitions.map((field) =>
-            field.editable === "state" ? (
+            wrapSecondaryField(field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
                 {stateControl}
               </PreviewControl>
@@ -349,13 +381,27 @@ export function WorkItemPreviewDetails({
                 value={previewFieldValue(preview, field.key) ?? "—"}
                 wide={isWidePreviewField(field.key)}
               />
+            ), field.key, field.editable),
+          )}
+          {customPreviewFields.map((field) =>
+            wrapSecondaryField(
+              <Fragment key={field.referenceName}>
+                {renderCustomFieldControl(field)}
+              </Fragment>,
+              field.referenceName,
+              undefined,
             ),
           )}
-          {customPreviewFields.map((field) => (
-            <Fragment key={field.referenceName}>
-              {renderCustomFieldControl(field)}
-            </Fragment>
-          ))}
+          {secondaryFieldCount > 0 ? (
+            <button
+              type="button"
+              aria-expanded={fieldsExpanded}
+              onClick={toggleFieldsExpanded}
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-secondary focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {fieldsExpanded ? "Less ▴" : `+${secondaryFieldCount} ▾`}
+            </button>
+          ) : null}
         </div>
       </div>
 
