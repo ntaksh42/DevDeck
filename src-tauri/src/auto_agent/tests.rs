@@ -1,11 +1,10 @@
 use super::context::html_to_text;
 use super::diffs::changed_region;
 use super::queue::{self, WorkItemTarget};
-use super::{claim_check, held_key, is_due, is_held, pick, AutoItem, HELD};
+use super::{claim_check, is_due, pick, AutoItem};
 use crate::agent_notes::NoteTarget;
-use crate::db::{AppDatabase, CachedReviewPr, CachedWorkItem, Organization};
+use crate::db::{AppDatabase, CachedReviewPr, CachedWorkItem};
 use chrono::{DateTime, Utc};
-use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 #[test]
@@ -136,7 +135,7 @@ fn picks_unhandled_non_draft_items_pull_requests_first() {
 }
 
 #[test]
-fn work_items_must_be_new_or_active_and_changed_within_30_days() {
+fn work_items_must_be_open_and_changed_within_30_days() {
     let with = |id, state: Option<&str>, changed: Option<&str>| CachedWorkItem {
         state: state.map(str::to_string),
         changed_date: changed.map(str::to_string),
@@ -162,6 +161,7 @@ fn work_items_must_be_new_or_active_and_changed_within_30_days() {
         vec![
             (NoteTarget::WorkItem, 1),
             (NoteTarget::WorkItem, 2),
+            (NoteTarget::WorkItem, 4),
             (NoteTarget::WorkItem, 7)
         ]
     );
@@ -249,46 +249,6 @@ fn another_organization_can_queue_while_the_first_is_still_pending() {
     drop(first);
     assert!(super::BatchGuard::reserve("queue-test|org-a".into()).is_some());
     drop(second);
-}
-
-fn org() -> Organization {
-    Organization {
-        id: "held-test-org".into(),
-        name: "org".into(),
-        display_name: None,
-        base_url: "https://dev.azure.com/org".into(),
-        auth_provider: "pat".into(),
-        credential_key: "unused".into(),
-        authenticated_user_id: None,
-        authenticated_user_display_name: None,
-        authenticated_user_unique_name: None,
-        created_at: String::new(),
-        updated_at: String::new(),
-        provider_kind: "azdo".into(),
-    }
-}
-
-#[test]
-fn only_the_items_of_the_first_scan_are_held_back() {
-    let dir = tempfile::tempdir().unwrap();
-    let db = AppDatabase::new(dir.path().join("db.sqlite3"));
-    db.initialize().unwrap();
-    let org = org();
-    let first_scan = AutoItem::PullRequest(pr(1, false));
-    let later = AutoItem::PullRequest(pr(2, false));
-    // A work item with the same number is a different item.
-    let same_number = AutoItem::WorkItem(wi(1));
-    assert!(
-        !is_held(&db, &org, &first_scan),
-        "nothing is held before the first scan"
-    );
-    HELD.lock().unwrap().insert(
-        format!("{}|{}", db.cache_key(), org.id),
-        HashSet::from([held_key(&first_scan)]),
-    );
-    assert!(is_held(&db, &org, &first_scan));
-    assert!(!is_held(&db, &org, &later));
-    assert!(!is_held(&db, &org, &same_number));
 }
 
 #[test]

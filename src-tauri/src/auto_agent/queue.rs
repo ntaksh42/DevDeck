@@ -67,15 +67,14 @@ pub fn list(db: &AppDatabase) -> Result<Vec<AutoQueueItem>> {
     for org in db.list_organizations()? {
         let items = candidates(db, &settings, &org)?;
         queue.extend(items.into_iter().map(|item| {
-            let held = settings.auto_agent_approval_enabled || super::is_held(db, &org, &item);
+            let held = settings.auto_agent_approval_enabled;
             to_queue_item(&org, item, held)
         }));
     }
     Ok(queue)
 }
 
-/// The unhandled candidates of one organization. The first automatic batch
-/// after startup holds these back so they wait for a pick in Auto queue.
+/// The unhandled candidates of one organization.
 pub(super) fn candidates(
     db: &AppDatabase,
     settings: &AppSettings,
