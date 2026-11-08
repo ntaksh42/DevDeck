@@ -48,8 +48,9 @@ pub async fn run_work_item_investigations(
 #[tracing::instrument(skip(state))]
 pub async fn run_auto_queue(
     input: Vec<AutoQueueTarget>,
+    focus: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<usize> {
     let db = state.db.clone();
-    run_blocking(move || queue::run(&db, input)).await
+    run_blocking(move || queue::run(&db, input, focus)).await
 }

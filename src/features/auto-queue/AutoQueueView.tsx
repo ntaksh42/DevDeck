@@ -8,6 +8,7 @@ import {
   listAutoQueue,
   runAutoQueue,
   type AutoQueueItem,
+  type AutoQueueTarget,
 } from "@/lib/azdoCommands";
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { pushToast } from "@/lib/toast";
@@ -71,7 +72,7 @@ export function AutoQueueView({ onDecided }: { onDecided?: () => void } = {}) {
   });
 
   const runMutation = useMutation({
-    mutationFn: runAutoQueue,
+    mutationFn: (targets: AutoQueueTarget[]) => runAutoQueue(targets),
     onSuccess: (count, targets) => {
       pushToast(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
