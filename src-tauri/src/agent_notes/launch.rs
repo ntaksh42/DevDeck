@@ -145,7 +145,7 @@ pub(crate) struct AgentLaunch<'a> {
 
 impl AgentLaunch<'_> {
     /// The clone of the repository inside the workspace when there is one, else
-    /// the workspace itself, else the result folder. DevDeck never clones or
+    /// the workspace itself, else the result folder. Only an automatic review
     /// checks out anything; the folder is only where the agent starts.
     pub(crate) fn work_dir(&self) -> PathBuf {
         let Some(workspace) = self.workspace else {

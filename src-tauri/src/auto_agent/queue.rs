@@ -85,6 +85,16 @@ pub(super) fn candidates(
         folder(&settings.review_result_folder_path),
         folder(&settings.work_item_result_folder_path),
     );
+    // A folder that cannot be read would mark every item handled and leave the
+    // queue silently empty, so say what is wrong instead.
+    for (label, path) in [("review", review_folder), ("work item", work_item_folder)] {
+        if let Some(path) = path.filter(|path| !path.is_dir()) {
+            return Err(AppError::InvalidInput(format!(
+                "The {label} result folder does not exist or is not a folder: {}",
+                path.display()
+            )));
+        }
+    }
     let prs = match review_folder {
         Some(_) => db.list_review_pull_requests(&org.id)?,
         None => Vec::new(),
@@ -132,6 +142,23 @@ fn to_queue_item(org: &Organization, item: AutoItem, held: bool) -> AutoQueueIte
         created_date,
         held,
     }
+}
+
+/// Automatic runs pause when another organization or repository already uses
+/// the item number (notes and results are named by number alone). Say so when
+/// the user picks such an item, instead of silently doing nothing.
+pub(super) fn ensure_unique_number(
+    db: &AppDatabase,
+    org: &Organization,
+    item: &AutoItem,
+) -> Result<()> {
+    if super::state::has_number_collision(db, &item.history_path(db, org))? {
+        return Err(AppError::InvalidInput(format!(
+            "#{} is also used by another organization or repository, so notes and results would be mixed up. It is not started.",
+            item.id()
+        )));
+    }
+    Ok(())
 }
 
 /// Finds the cached item behind a target; it may be gone since the list was drawn.
@@ -196,7 +223,9 @@ pub fn run(
     let settings = db.get_app_settings()?;
     let mut picked = Vec::new();
     for target in &targets {
-        picked.push(find(db, target)?);
+        let (org, item) = find(db, target)?;
+        ensure_unique_number(db, &org, &item)?;
+        picked.push((org, item));
     }
     let count = picked.len();
     let focus = focus
@@ -213,7 +242,9 @@ pub fn run_assigned_work_items(db: &AppDatabase, agent: Option<AgentKind>) -> Re
     let mut picked = Vec::new();
     for org in db.list_organizations()? {
         for item in candidates(db, &settings, &org)? {
-            if item.target() == NoteTarget::WorkItem {
+            if item.target() == NoteTarget::WorkItem
+                && !super::state::has_number_collision(db, &item.history_path(db, &org))?
+            {
                 picked.push((org.clone(), item));
             }
         }
@@ -265,7 +296,9 @@ pub fn run_work_items(
             web_url: None,
             tags: None,
         };
-        picked.push((org, AutoItem::WorkItem(item)));
+        let item = AutoItem::WorkItem(item);
+        ensure_unique_number(db, &org, &item)?;
+        picked.push((org, item));
     }
     let count = picked.len();
     if count > 0 {

@@ -3,7 +3,7 @@ use super::diffs::changed_region;
 use super::queue::{self, WorkItemTarget};
 use super::{claim_check, is_due, pick, AutoItem};
 use crate::agent_notes::NoteTarget;
-use crate::db::{AppDatabase, CachedReviewPr, CachedWorkItem};
+use crate::db::{AppDatabase, CachedReviewPr, CachedWorkItem, Organization};
 use chrono::{DateTime, Utc};
 use std::time::{Duration, Instant};
 
@@ -265,4 +265,87 @@ fn picked_work_items_of_an_unknown_organization_are_rejected() {
     };
     let error = queue::run_work_items(&db, vec![target], None).unwrap_err();
     assert!(error.to_string().contains("organization not found"));
+}
+
+#[test]
+fn a_batch_leaves_hand_made_items_to_a_pick() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDatabase::new(dir.path().join("db.sqlite3"));
+    db.initialize().unwrap();
+    let org = org();
+    // PR 1 has a result made by hand, 2 is new, and 4 is handled by hand but an
+    // automatic attempt already tracks it.
+    let tracked = super::state::history_path(&db, &org.id, "r", NoteTarget::PullRequest, 4);
+    super::state::History::default().save(&tracked).unwrap();
+    let items = super::batch_items(
+        &db,
+        &org,
+        vec![pr(1, false), pr(2, false), pr(4, false)],
+        vec![wi(5), wi(6)],
+        |target, id| (target == NoteTarget::PullRequest && (id == 1 || id == 4)) || id == 6,
+    );
+    assert_eq!(
+        ids(&items),
+        vec![
+            (NoteTarget::PullRequest, 4),
+            (NoteTarget::PullRequest, 2),
+            (NoteTarget::WorkItem, 5)
+        ]
+    );
+}
+
+#[test]
+fn a_missing_result_folder_is_reported_instead_of_emptying_the_queue() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDatabase::new(dir.path().join("db.sqlite3"));
+    db.initialize().unwrap();
+    let mut settings = db.get_app_settings().unwrap();
+    settings.review_result_folder_path = Some(dir.path().join("not-created").display().to_string());
+    let error = queue::candidates(&db, &settings, &org()).unwrap_err();
+    assert!(error.to_string().contains("review result folder"));
+}
+
+#[test]
+fn picking_an_item_whose_number_another_scope_uses_says_why_it_is_not_started() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = AppDatabase::new(dir.path().join("db.sqlite3"));
+    db.initialize().unwrap();
+    let mine = org();
+    let mut other_org = org();
+    other_org.id = "other-org".into();
+    let item = AutoItem::PullRequest(pr(7, false));
+    queue::ensure_unique_number(&db, &mine, &item).unwrap();
+    let theirs = super::state::history_path(&db, &other_org.id, "r", NoteTarget::PullRequest, 7);
+    super::state::History::default().save(&theirs).unwrap();
+    let error = queue::ensure_unique_number(&db, &mine, &item).unwrap_err();
+    assert!(error.to_string().contains("#7"));
+}
+
+#[test]
+fn the_note_asks_for_review_criteria_or_an_investigation_approach() {
+    let review = super::context::note_body(NoteTarget::PullRequest, r"C:\r");
+    assert!(review.contains("レビューの観点"));
+    assert!(review.contains("`unverified`"));
+    assert!(review.contains(r"C:\r\AGENTS.md"));
+    let investigation = super::context::note_body(NoteTarget::WorkItem, r"C:\w");
+    assert!(investigation.contains("調査の進め方"));
+    assert!(investigation.contains("コード未確認"));
+    assert!(!investigation.contains("レビューの観点"));
+}
+
+fn org() -> Organization {
+    Organization {
+        id: "test-org".into(),
+        name: "org".into(),
+        display_name: None,
+        base_url: "https://dev.azure.com/org".into(),
+        auth_provider: "pat".into(),
+        credential_key: "unused".into(),
+        authenticated_user_id: None,
+        authenticated_user_display_name: None,
+        authenticated_user_unique_name: None,
+        created_at: String::new(),
+        updated_at: String::new(),
+        provider_kind: "azdo".into(),
+    }
 }

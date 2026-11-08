@@ -6,11 +6,14 @@
 //! Result panel. The items form a queue worked off a few per check, so what was waiting when
 //! the app started (or when the setting was turned on) is handled too. The
 //! agent writes the result HTML; it gets no Azure DevOps access and is told
-//! not to change code or propose comments. Every batch runs new items and
+//! not to change code or propose comments. With an agent workspace folder set,
+//! a pull request's repository is shallow-cloned there first ([`clone`]) so the
+//! agent can read the code around the diff. Every batch runs new items and
 //! follows pushes by itself. With `auto_agent_approval_enabled`
 //! nothing starts by itself: [`queue`] lists the candidates and starts only the
 //! ones picked in Auto queue, through the same runner.
 
+mod clone;
 mod context;
 mod diffs;
 pub(crate) mod queue;
@@ -220,17 +223,21 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
     });
 }
 
-async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization) -> Result<()> {
-    let prs = if settings.review_result_folder_path.is_some() {
-        db.list_review_pull_requests(&org.id)?
-    } else {
-        Vec::new()
-    };
-    let work_items = if settings.work_item_result_folder_path.is_some() {
-        db.list_my_work_items(&org.id)?
-    } else {
-        Vec::new()
-    };
+fn folder_path(path: &Option<String>) -> Option<&Path> {
+    path.as_deref().map(Path::new)
+}
+
+/// The items one batch may start: PRs an earlier attempt tracks (they follow
+/// pushes), plus the initial candidates. Anything handled outside automatic
+/// tracking (a notes folder or a result HTML made by hand) waits for a pick in
+/// Auto queue instead, unless an attempt already tracks it.
+fn batch_items(
+    db: &AppDatabase,
+    org: &Organization,
+    prs: Vec<CachedReviewPr>,
+    work_items: Vec<CachedWorkItem>,
+    is_handled: impl Fn(NoteTarget, i64) -> bool,
+) -> Vec<AutoItem> {
     // Previously tracked PRs keep following pushes even after a vote or the
     // initial 30-day window. Drafts still pause automatic review.
     let (tracked, initial): (Vec<_>, Vec<_>) =
@@ -244,13 +251,34 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
             )
             .exists()
         });
-    let mut items: Vec<_> = tracked
+    tracked
         .into_iter()
         .map(AutoItem::PullRequest)
         .chain(pick(initial, work_items, usize::MAX, Utc::now(), |_, _| {
             false
         }))
-        .collect();
+        .filter(|item| item.history_path(db, org).exists() || !is_handled(item.target(), item.id()))
+        .collect()
+}
+
+async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization) -> Result<()> {
+    let prs = if settings.review_result_folder_path.is_some() {
+        db.list_review_pull_requests(&org.id)?
+    } else {
+        Vec::new()
+    };
+    let work_items = if settings.work_item_result_folder_path.is_some() {
+        db.list_my_work_items(&org.id)?
+    } else {
+        Vec::new()
+    };
+    let root = agent_notes::notes_root(db);
+    let handled = handled_check(
+        &root,
+        folder_path(&settings.review_result_folder_path),
+        folder_path(&settings.work_item_result_folder_path),
+    );
+    let mut items = batch_items(db, org, prs, work_items, handled);
     // Never-attempted and least-recently-attempted items get their turn before
     // repeatedly failing entries can consume the same first slots forever.
     items.sort_by_key(|item| {
