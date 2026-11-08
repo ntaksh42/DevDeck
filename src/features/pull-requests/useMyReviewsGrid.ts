@@ -375,6 +375,21 @@ export function useMyReviewsGrid({
     );
   }
 
+  function applySnooze(snoozeUntil: string) {
+    const targets = snoozeTargetRef.current;
+    if (targets.length > 0) {
+      snoozeMutation.mutate(targets.map((target) => ({
+        organizationId,
+        itemType: 'pull_request',
+        itemKey: `${target.repositoryId}:${target.pullRequestId}`,
+        snoozeUntil,
+      })));
+      setCopyToast(`Snoozed ${targets.length} PR${targets.length === 1 ? '' : 's'}`);
+      setTimeout(() => setCopyToast(null), 1500);
+    }
+    setSnoozeAnchorRect(null);
+  }
+
   function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
     filterButtonRef.current = anchorEl;
     setFilterAnchorRect(anchorEl.getBoundingClientRect());
@@ -458,7 +473,7 @@ export function useMyReviewsGrid({
     // presentation
     visiblePrs, noVoteCount, activeFilterCount, isFiltered,
     // handlers
-    toggleSection, voteSelected, openFilter,
+    toggleSection, voteSelected, applySnooze, openFilter,
     toggleFilter, clearColumnFilter, uncheckAllColumnFilter, clearAllFilters, applySort,
     // selection (spread from sub-hook)
     ...selection,

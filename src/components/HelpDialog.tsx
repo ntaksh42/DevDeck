@@ -120,6 +120,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Vote: Approve / Suggestions / Wait / Reject / None</span><kbd className={kbd}>A / S / W / X / 0</kbd></div>
+          <div className={row}><span>Request agent review (selected rows)</span><kbd className={kbd}>I</kbd></div>
           <div className={row}><span>Collapse / expand section</span><kbd className={kbd}>Tab to header · Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>

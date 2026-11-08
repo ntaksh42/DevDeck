@@ -90,7 +90,8 @@ export function useKeyboardShortcuts({
 
     function onKeyDownCapture(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      if (isEditableTarget(event.target)) {
+      // A modal dialog owns the keyboard: no view switch may start behind it.
+      if (isEditableTarget(event.target) || document.querySelector('[aria-modal="true"]')) {
         disarm();
         return;
       }

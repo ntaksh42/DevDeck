@@ -49,9 +49,9 @@ export async function getAutoQueuePreview(input: AutoQueueTarget): Promise<AutoQ
   return autoQueuePreviewSchema.parse(result);
 }
 
-/** Hands the picked items to the agent; resolves with how many were queued. */
-export async function runAutoQueue(input: AutoQueueTarget[]): Promise<number> {
-  const result = await invokeCommand("run_auto_queue", { input });
+/** Hands the picked items to the agent; resolves with how many were queued. `focus` is what the agent should look at first. */
+export async function runAutoQueue(input: AutoQueueTarget[], focus?: string): Promise<number> {
+  const result = await invokeCommand("run_auto_queue", { input, focus });
   return z.number().int().parse(result);
 }
 

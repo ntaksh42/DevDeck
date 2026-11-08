@@ -35,6 +35,7 @@ import {
   sortLabels,
 } from './myReviewsTypes';
 import { useMyReviewsGrid } from './useMyReviewsGrid';
+import { useBulkReviewRequest } from './useBulkReviewRequest';
 import type { MyReviewsGridProps, ReviewSection } from './myReviewsTypes';
 
 // Re-export for callers that imported from this path.
@@ -48,6 +49,7 @@ export function MyReviewsGrid({
   onSelectRequestHandled,
 }: MyReviewsGridProps) {
   const g = useMyReviewsGrid({ selectRequest, onSelectRequestHandled });
+  const bulkReview = useBulkReviewRequest(g.selectedPrs);
   // `key` is bumped on every request so re-activating the same tab still fires.
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number } | undefined>();
   // The linked Work Items dock starts folded to its tab strip so the review
@@ -210,6 +212,7 @@ export function MyReviewsGrid({
       }
       return;
     }
+    if (e.key === 'i' || e.key === 'I') { e.preventDefault(); bulkReview.request(); return; }
     if (e.key === 'a' || e.key === 'A') { e.preventDefault(); g.voteSelected(10, 'Approve'); return; }
     if (e.key === 's' || e.key === 'S') { e.preventDefault(); g.voteSelected(5, 'Suggestions'); return; }
     if (e.key === 'w' || e.key === 'W') { e.preventDefault(); g.voteSelected(-5, 'Wait'); return; }
@@ -471,23 +474,11 @@ export function MyReviewsGrid({
       {g.snoozeAnchorRect ? (
         <SnoozeMenu
           anchorRect={g.snoozeAnchorRect}
-          onSnooze={(snoozeUntil) => {
-            const targets = g.snoozeTargetRef.current;
-            if (targets.length > 0) {
-              g.snoozeMutation.mutate(targets.map((target) => ({
-                organizationId: g.organizationId,
-                itemType: 'pull_request',
-                itemKey: `${target.repositoryId}:${target.pullRequestId}`,
-                snoozeUntil,
-              })));
-              g.setCopyToast(`Snoozed ${targets.length} PR${targets.length === 1 ? '' : 's'}`);
-              setTimeout(() => g.setCopyToast(null), 1500);
-            }
-            g.setSnoozeAnchorRect(null);
-          }}
+          onSnooze={g.applySnooze}
           onClose={() => g.setSnoozeAnchorRect(null)}
         />
       ) : null}
+      {bulkReview.dialog}
       {g.overlapPopupOpen && g.overlap.fileCount > 0 ? (
         <OverlapPopup
           anchorEl={g.overlapButtonRef.current}

@@ -18,6 +18,9 @@ use crate::error::{AppError, Result};
 /// Characters of the material sent to the screen; the agent gets all of it.
 const PREVIEW_CHARS: usize = 30_000;
 
+/// Longest note from the requester about what to look at.
+const FOCUS_CHARS: usize = 2_000;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoQueueItem {
@@ -186,14 +189,21 @@ const WORK_ITEM_PARALLEL: usize = 3;
 /// Hands the picked candidates to the automatic runner in the background, one
 /// after the other and never alongside an automatic batch. Returns how many
 /// were queued.
-pub fn run(db: &AppDatabase, targets: Vec<AutoQueueTarget>) -> Result<usize> {
+pub fn run(
+    db: &AppDatabase,
+    targets: Vec<AutoQueueTarget>,
+    focus: Option<String>,
+) -> Result<usize> {
     let settings = db.get_app_settings()?;
     let mut picked = Vec::new();
     for target in &targets {
         picked.push(find(db, target)?);
     }
     let count = picked.len();
-    spawn_runs(db, settings, picked, 1, None);
+    let focus = focus
+        .map(|text| text.trim().chars().take(FOCUS_CHARS).collect::<String>())
+        .filter(|text| !text.is_empty());
+    spawn_runs(db, settings, picked, 1, None, focus);
     Ok(count)
 }
 
@@ -211,7 +221,7 @@ pub fn run_assigned_work_items(db: &AppDatabase, agent: Option<AgentKind>) -> Re
     }
     let count = picked.len();
     if count > 0 {
-        spawn_runs(db, settings, picked, WORK_ITEM_PARALLEL, agent);
+        spawn_runs(db, settings, picked, WORK_ITEM_PARALLEL, agent, None);
     }
     Ok(count)
 }
@@ -260,7 +270,7 @@ pub fn run_work_items(
     }
     let count = picked.len();
     if count > 0 {
-        spawn_runs(db, settings, picked, WORK_ITEM_PARALLEL, agent);
+        spawn_runs(db, settings, picked, WORK_ITEM_PARALLEL, agent, None);
     }
     Ok(count)
 }
@@ -271,6 +281,7 @@ fn spawn_runs(
     picked: Vec<(Organization, AutoItem)>,
     parallel: usize,
     agent: Option<AgentKind>,
+    focus: Option<String>,
 ) {
     let db = db.clone();
     tauri::async_runtime::spawn(async move {
@@ -284,10 +295,10 @@ fn spawn_runs(
             let Ok(permit) = permits.clone().acquire_owned().await else {
                 break;
             };
-            let (db, settings) = (db.clone(), settings.clone());
+            let (db, settings, focus) = (db.clone(), settings.clone(), focus.clone());
             handles.push(tauri::async_runtime::spawn(async move {
                 let _permit = permit;
-                if let Err(e) = runner::process_item(&db, &settings, &org, &item, agent).await {
+                if let Err(e) = runner::process_item(&db, &settings, &org, &item, agent, focus).await {
                     tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto queue: failed to start");
                 }
             }));

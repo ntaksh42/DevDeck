@@ -53,6 +53,7 @@ fn material(folder: &Path, base: Option<&str>, head: &str, complete: bool) -> Ma
         complete,
         has_content: true,
         agent: None,
+        focus: None,
     }
 }
 
@@ -119,6 +120,31 @@ async fn successful_exit_without_result_does_not_mark_commit_reviewed() {
         .as_ref()
         .unwrap()
         .contains("result HTML"));
+}
+
+#[tokio::test]
+async fn requester_focus_points_reach_the_agent_note() {
+    let root = tempfile::tempdir().unwrap();
+    let (db, folder) = setup(root.path(), "echo done".into());
+    let path = root.path().join("runs/pr-7.json");
+    let mut history = History::default();
+    let mut material = material(&folder, None, "b", true);
+    material.focus = Some(
+        "Is the retry safe?
+Check the null case"
+            .into(),
+    );
+    let _ = execute(&db, &item(), &path, &mut history, material, 5).await;
+    let notes = AgentNoteService::new(db)
+        .list(ListAgentNotesInput {
+            target: NoteTarget::PullRequest,
+            item_id: 7,
+        })
+        .unwrap();
+    assert!(notes[0].body.contains(
+        "  > Is the retry safe?
+  > Check the null case"
+    ));
 }
 
 #[tokio::test]
@@ -247,7 +273,7 @@ async fn human_reply_on_automatic_note_pauses_automation_without_archiving() {
         updated_at: String::new(),
         provider_kind: "azdo".into(),
     };
-    assert!(!process_item(&db, &settings, &org, &item, None)
+    assert!(!process_item(&db, &settings, &org, &item, None, None)
         .await
         .unwrap());
     let notes = service

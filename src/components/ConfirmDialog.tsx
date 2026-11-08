@@ -90,7 +90,7 @@ export function ConfirmDialog({
         className="w-full max-w-sm rounded-md border border-border bg-card p-4 shadow-lg"
       >
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{message}</p>
         <div className="mt-4 flex justify-end gap-2">
           <button
             ref={cancelRef}

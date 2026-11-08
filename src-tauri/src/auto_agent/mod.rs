@@ -309,7 +309,7 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
         if !db.get_app_settings()?.auto_agent_enabled {
             break;
         }
-        match runner::process_item(db, settings, org, &item, None).await {
+        match runner::process_item(db, settings, org, &item, None, None).await {
             Ok(true) => attempted += 1,
             Ok(false) => (),
             Err(error) => {

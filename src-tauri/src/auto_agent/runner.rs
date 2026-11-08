@@ -30,6 +30,8 @@ struct Material {
     has_content: bool,
     /// Agent picked for a manual run; unset, the one chosen in Settings.
     agent: Option<AgentKind>,
+    /// Points the requester asked the agent to look at first (manual run).
+    focus: Option<String>,
 }
 
 pub(super) async fn process_item(
@@ -38,6 +40,7 @@ pub(super) async fn process_item(
     org: &Organization,
     item: &AutoItem,
     agent: Option<AgentKind>,
+    focus: Option<String>,
 ) -> Result<bool> {
     let path = item.history_path(db, org);
     if super::state::has_number_collision(db, &path)? {
@@ -88,6 +91,7 @@ pub(super) async fn process_item(
     let material = match prepare(db, settings, org, item, &history, &mut observed_range).await {
         Ok(Some(mut material)) => {
             material.agent = agent;
+            material.focus = focus;
             material
         }
         Ok(None) => return Ok(false),
@@ -184,6 +188,7 @@ async fn prepare(
                 complete: diff.complete,
                 has_content: diff.has_content || changes.files.is_empty(),
                 agent: None,
+                focus: None,
             }))
         }
         AutoItem::WorkItem(wi) => {
@@ -217,6 +222,7 @@ async fn prepare(
                 complete: true,
                 has_content: true,
                 agent: None,
+                focus: None,
             }))
         }
     }
@@ -309,6 +315,15 @@ async fn execute_attempt(
         "\n- Review range: {} -> {}. Review ONLY this supplied range. Re-evaluate previous findings touched by this range and mark them fixed or still present; retain unrelated findings as previously observed, without claiming they were re-reviewed.\n- Record both commit IDs and coverage omissions in the HTML. Do not claim omitted files were reviewed.\n- If the range is empty, update the HTML to record that there are no new code changes.\n- Do not fetch or check out another revision to replace the supplied snapshot.",
         material.base.as_deref().unwrap_or("initial PR base"), material.head.as_deref().unwrap_or("work item")
     ));
+    if let Some(focus) = &material.focus {
+        body.push_str(&format!(
+            "
+- The requester asked you to look at these points first. Address each in the HTML, saying where you found it or that you found nothing:
+{}",
+            focus.lines().map(|line| format!("  > {line}")).collect::<Vec<_>>().join("
+")
+        ));
+    }
     let note = create_note(&service, item, &body, Some(&material))?;
     let log_path = path.with_file_name(format!(
         "{}-{}.log",
