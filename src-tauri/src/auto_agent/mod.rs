@@ -6,9 +6,8 @@
 //! Result panel. The items form a queue worked off a few per check, so what was waiting when
 //! the app started (or when the setting was turned on) is handled too. The
 //! agent writes the result HTML; it gets no Azure DevOps access and is told
-//! not to change code or propose comments. The first batch of an organization
-//! after startup only lists what it finds in Auto queue (see `HELD`); later
-//! batches run new items and follow pushes by themselves. With `auto_agent_approval_enabled`
+//! not to change code or propose comments. Every batch runs new items and
+//! follows pushes by itself. With `auto_agent_approval_enabled`
 //! nothing starts by itself: [`queue`] lists the candidates and starts only the
 //! ones picked in Auto queue, through the same runner.
 
@@ -38,11 +37,6 @@ const MAX_WI_AGE_DAYS: i64 = 30;
 static BATCH_SLOT: LazyLock<tokio::sync::Semaphore> =
     LazyLock::new(|| tokio::sync::Semaphore::new(1));
 static QUEUED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
-type HeldSet = HashSet<(bool, i64)>;
-/// Candidates found by the first batch of an organization after startup. They
-/// wait for a pick in Auto queue; later batches skip them unless an attempt
-/// already tracks them. The key is present once that first scan has run.
-static HELD: LazyLock<Mutex<HashMap<String, HeldSet>>> = LazyLock::new(Mutex::default);
 static LAST_CHECK: LazyLock<Mutex<HashMap<String, Instant>>> = LazyLock::new(Mutex::default);
 
 /// Whether the interval since `last` has elapsed (never checked counts as due).
@@ -105,14 +99,13 @@ fn awaits_review(pr: &CachedReviewPr, now: DateTime<Utc>) -> bool {
     !pr.is_draft && pr.my_vote == 0 && recent
 }
 
-/// Whether the work item still needs an investigation: its state is `New` or
-/// `Active`, and it changed within [`MAX_WI_AGE_DAYS`]. An unreadable change
+/// Whether the work item still needs an investigation: its state is `New`,
+/// `Active`, or the Basic process's `To do` / `Doing`, and it changed within [`MAX_WI_AGE_DAYS`]. An unreadable change
 /// date does not exclude it.
 fn awaits_investigation(wi: &CachedWorkItem, now: DateTime<Utc>) -> bool {
-    let open = wi
-        .state
-        .as_deref()
-        .is_some_and(|state| ["new", "active"].contains(&state.trim().to_lowercase().as_str()));
+    let open = wi.state.as_deref().is_some_and(|state| {
+        ["new", "active", "to do", "doing"].contains(&state.trim().to_lowercase().as_str())
+    });
     let recent = wi
         .changed_date
         .as_deref()
@@ -227,40 +220,6 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
     });
 }
 
-fn held_key(item: &AutoItem) -> (bool, i64) {
-    (item.target() == NoteTarget::PullRequest, item.id())
-}
-
-/// Whether the first scan after startup held this item back.
-fn is_held(db: &AppDatabase, org: &Organization, item: &AutoItem) -> bool {
-    let key = format!("{}|{}", db.cache_key(), org.id);
-    HELD.lock().ok().is_some_and(|held| {
-        held.get(&key)
-            .is_some_and(|set| set.contains(&held_key(item)))
-    })
-}
-
-/// On the first scan of the organization after startup, remembers every
-/// unhandled candidate as held back; returns the held set either way.
-fn held_candidates(
-    db: &AppDatabase,
-    settings: &AppSettings,
-    org: &Organization,
-) -> Result<HeldSet> {
-    let key = format!("{}|{}", db.cache_key(), org.id);
-    if let Some(held) = HELD.lock().ok().and_then(|held| held.get(&key).cloned()) {
-        return Ok(held);
-    }
-    let held: HashSet<_> = queue::candidates(db, settings, org)?
-        .iter()
-        .map(held_key)
-        .collect();
-    if let Ok(mut all) = HELD.lock() {
-        all.insert(key, held.clone());
-    }
-    Ok(held)
-}
-
 async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization) -> Result<()> {
     let prs = if settings.review_result_folder_path.is_some() {
         db.list_review_pull_requests(&org.id)?
@@ -274,7 +233,6 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
     };
     // Previously tracked PRs keep following pushes even after a vote or the
     // initial 30-day window. Drafts still pause automatic review.
-    let held = held_candidates(db, settings, org)?;
     let (tracked, initial): (Vec<_>, Vec<_>) =
         prs.into_iter().filter(|pr| !pr.is_draft).partition(|pr| {
             state::history_path(
@@ -292,7 +250,6 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
         .chain(pick(initial, work_items, usize::MAX, Utc::now(), |_, _| {
             false
         }))
-        .filter(|item| !held.contains(&held_key(item)) || item.history_path(db, org).exists())
         .collect();
     // Never-attempted and least-recently-attempted items get their turn before
     // repeatedly failing entries can consume the same first slots forever.
