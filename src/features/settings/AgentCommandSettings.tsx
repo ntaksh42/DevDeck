@@ -212,8 +212,9 @@ export function AgentCommandSettings() {
           <span className="text-xs text-muted-foreground">
             One folder that holds your repository clones, one subfolder per repository name. The
             agent starts in the clone of the pull request's repository, or here when there is
-            none. DevDeck never clones or checks anything out. Leave empty to start in the result
-            folder.
+            none. DevDeck only clones for automatic reviews: a missing clone is made shallow, and
+            moved to the PR's latest commit before each run. A folder you cloned yourself is never
+            touched. Leave empty to start in the result folder.
           </span>
         </label>
 
@@ -288,6 +289,12 @@ export function AgentCommandSettings() {
             />
             Review pull requests and investigate work items automatically
           </label>
+          {autoAgent && !workspace.trim() && (
+            <span role="alert" className="text-xs text-amber-700 dark:text-amber-400">
+              The workspace folder is empty: reviews see only the diff, and work item investigations cannot read any code.
+              Set it so DevDeck can shallow-clone each pull request's repository there.
+            </span>
+          )}
           <label className="grid gap-1">
             <span className="text-sm font-medium">Items per check</span>
             <input

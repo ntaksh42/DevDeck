@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getAppSettings, listAutoQueue } from "@/lib/azdoCommands";
+import { autoQueueKey, getAppSettings, listAutoQueue, type AutoQueueTarget } from "@/lib/azdoCommands";
 import { AutoQueueView } from "./AutoQueueView";
-import { addSkipped, loadSkipped } from "./autoQueueSkipped";
 
-// Set once the user picked or skipped in the startup dialog; lasts until the
-// app is restarted, when the first scan holds its candidates back again.
+// Set once every held item was run or skipped in the startup dialog; lasts
+// until the app is restarted, when the first scan holds its candidates back again.
 let decidedThisLaunch = false;
 
 const FOCUSABLE = "button:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -17,6 +16,9 @@ const FOCUSABLE = "button:not([disabled]), [tabindex]:not([tabindex='-1'])";
  */
 export function AutoQueueStartupGate() {
   const [decided, setDecided] = useState(decidedThisLaunch);
+  // Items run or skipped in this dialog. Skips are not persisted: an item skipped
+  // here is held again, and asked about again, at the next start.
+  const [decidedKeys, setDecidedKeys] = useState<string[]>([]);
   const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings });
   const enabled = settingsQuery.data?.autoAgentEnabled === true && !decided;
   const queueQuery = useQuery({
@@ -27,9 +29,16 @@ export function AutoQueueStartupGate() {
   });
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  const skipped = loadSkipped();
-  const waiting = (queueQuery.data ?? []).filter((item) => item.held && !skipped.includes(`${item.organizationId}:${item.target}:${item.id}`));
+  const waiting = (queueQuery.data ?? []).filter((item) => item.held && !decidedKeys.includes(autoQueueKey(item)));
   const open = enabled && waiting.length > 0;
+
+  // The dialog stays until every held item was run or skipped.
+  useEffect(() => {
+    if (enabled && queueQuery.isSuccess && decidedKeys.length > 0 && waiting.length === 0) {
+      decidedThisLaunch = true;
+      setDecided(true);
+    }
+  }, [enabled, queueQuery.isSuccess, decidedKeys.length, waiting.length]);
 
   // Keys pressed while focus is outside the dialog must not reach the app.
   useEffect(() => {
@@ -47,9 +56,9 @@ export function AutoQueueStartupGate() {
 
   if (!open) return null;
 
-  function decide() {
-    decidedThisLaunch = true;
-    setDecided(true);
+  function decide(targets: AutoQueueTarget[]) {
+    const keys = targets.map(autoQueueKey);
+    setDecidedKeys((current) => [...new Set([...current, ...keys])]);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -87,15 +96,14 @@ export function AutoQueueStartupGate() {
           before continuing.
         </div>
         <div className="min-h-0 flex-1">
-          <AutoQueueView onDecided={decide} />
+          <AutoQueueView onDecided={decide} sessionOnly />
         </div>
         <div className="flex justify-end border-t border-border px-4 py-2">
           <button
             type="button"
             className="rounded border border-border px-3 py-1 text-sm hover:bg-muted"
             onClick={() => {
-              addSkipped(loadSkipped(), waiting);
-              decide();
+              decide(waiting);
             }}
           >
             Skip all and continue

@@ -29,9 +29,17 @@ function ageLabel(createdDate: string | null): string {
   return days <= 0 ? "today" : `${days}d`;
 }
 
-export function AutoQueueView({ onDecided }: { onDecided?: () => void } = {}) {
+/**
+ * `onDecided` receives the items the user just ran or skipped. With `sessionOnly`
+ * (the startup dialog) skips are kept in memory for this launch instead of
+ * localStorage, so an item skipped there asks again at the next start.
+ */
+export function AutoQueueView({
+  onDecided,
+  sessionOnly = false,
+}: { onDecided?: (targets: AutoQueueTarget[]) => void; sessionOnly?: boolean } = {}) {
   const queryClient = useQueryClient();
-  const [skipped, setSkipped] = useState(loadSkipped);
+  const [skipped, setSkipped] = useState<string[]>(sessionOnly ? [] : loadSkipped);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -76,7 +84,7 @@ export function AutoQueueView({ onDecided }: { onDecided?: () => void } = {}) {
     onSuccess: (count, targets) => {
       pushToast(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
-      onDecided?.();
+      onDecided?.(targets);
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
     },
@@ -96,10 +104,12 @@ export function AutoQueueView({ onDecided }: { onDecided?: () => void } = {}) {
     listRef.current?.focus();
     const targets = selected.length > 0 ? selected : focused ? [focused] : [];
     if (targets.length === 0) return;
-    setSkipped((current) => addSkipped(current, targets));
+    setSkipped((current) =>
+      sessionOnly ? [...new Set([...current, ...targets.map(autoQueueKey)])] : addSkipped(current, targets),
+    );
     setChecked(new Set());
-    onDecided?.();
-  }, [selected, focused, onDecided]);
+    onDecided?.(targets);
+  }, [selected, focused, onDecided, sessionOnly]);
 
   const toggle = useCallback((item: AutoQueueItem) => {
     setChecked((current) => {
@@ -177,7 +187,7 @@ export function AutoQueueView({ onDecided }: { onDecided?: () => void } = {}) {
         <button
           type="button"
           className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
-          onClick={() => setSkipped(clearSkipped())}
+          onClick={() => setSkipped(sessionOnly ? [] : clearSkipped())}
           disabled={skipped.length === 0}
         >
           Show skipped ({skipped.length})

@@ -118,8 +118,49 @@ pub(super) async fn process_item(
             return Err(error);
         }
     };
+    prepare_clone(settings, org, item, material.head.as_deref()).await;
     execute(db, item, &path, &mut history, material, TIMEOUT_SECS).await?;
     Ok(true)
+}
+
+/// Shallow-clones the pull request's repository into the agent workspace, when
+/// one is set, so the agent can read the code around the diff. Best effort: a
+/// failure leaves the agent with the supplied material only.
+async fn prepare_clone(
+    settings: &AppSettings,
+    org: &Organization,
+    item: &AutoItem,
+    head: Option<&str>,
+) {
+    let AutoItem::PullRequest(pr) = item else {
+        return;
+    };
+    let Some(workspace) = settings
+        .agent_workspace_path
+        .as_deref()
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+    else {
+        return;
+    };
+    let (org, pr, head) = (org.clone(), pr.clone(), head.map(str::to_string));
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        super::clone::prepare(&workspace, &org, &pr, head.as_deref())
+    })
+    .await;
+    match outcome {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(id = item.id(), %error, "auto agent: shallow clone failed");
+        }
+        Err(error) => {
+            tracing::warn!(
+                id = item.id(),
+                ?error,
+                "auto agent: shallow clone task failed"
+            );
+        }
+    }
 }
 
 /// The material an attempt would hand to the agent, for the Auto queue

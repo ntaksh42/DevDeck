@@ -46,14 +46,30 @@ describe("AutoQueueStartupGate", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("blocks the app until the held items are decided, and Escape does not close it", async () => {
-    queue = [item(1, true), item(2, false)];
+  it("asks again about an item skipped in an earlier launch", async () => {
+    window.localStorage.setItem("azdodeck:autoQueue:skipped", JSON.stringify(["org:work-item:1"]));
+    queue = [item(1, true)];
+    mount();
+    await screen.findByRole("dialog");
+    expect(screen.getByLabelText("Select Item 1")).toBeTruthy();
+  });
+
+  it("blocks the app until every held item is decided, and Escape does not close it", async () => {
+    queue = [item(1, true), item(2, true), item(3, false)];
     mount();
     const dialog = await screen.findByRole("dialog", { name: "Choose what the agent handles" });
-    expect(dialog.textContent).toContain("1 found at startup");
+    expect(dialog.textContent).toContain("2 found at startup");
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeTruthy();
+    // Deciding one of two leaves the dialog open for the other.
+    fireEvent.click(screen.getByLabelText("Select Item 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Skip S" }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(screen.getByRole("dialog").textContent).toContain("1 found at startup");
+    // A skip here is for this launch only.
+    expect(window.localStorage.getItem("azdodeck:autoQueue:skipped")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Skip all and continue" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(window.localStorage.getItem("azdodeck:autoQueue:skipped")).toBeNull();
   });
 });
