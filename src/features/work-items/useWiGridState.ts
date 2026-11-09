@@ -24,6 +24,7 @@ import {
   loadWorkItemColumnFilters,
   storeWorkItemColumnFilters,
   type WiSortKey,
+  type WiSortColumn,
   type WiSortState,
   type FilterableColumn,
 } from './workItemsGridHelpers';
@@ -179,7 +180,7 @@ export function useWiGridState({
 
   // ─── Column visibility handlers ───────────────────────────────────────────
 
-  function applyWiSort(column: WiSortKey) {
+  function applyWiSort(column: WiSortColumn) {
     setWiSort((current) => {
       const next: WiSortState =
         current.key !== column

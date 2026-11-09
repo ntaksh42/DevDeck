@@ -8,6 +8,7 @@ import {
   wiSortLabels,
   isFilterableColumn,
   type WiSortKey,
+  type WiSortColumn,
   type WiSortState,
   type FilterableColumn,
 } from './workItemsGridHelpers';
@@ -16,6 +17,8 @@ import {
 
 function WiSortHeaderButton({
   column,
+  label,
+  title,
   sort,
   onSort,
   resizeHandle,
@@ -23,19 +26,21 @@ function WiSortHeaderButton({
   onFilterOpen,
   dragProps,
 }: {
-  column: WiSortKey;
+  column: WiSortColumn;
+  label: string;
+  title?: string;
   sort: WiSortState;
-  onSort: (column: WiSortKey) => void;
+  onSort: (column: WiSortColumn) => void;
   resizeHandle?: ReactNode;
   filterActive?: boolean;
   onFilterOpen?: (anchorEl: HTMLButtonElement) => void;
   dragProps?: ColumnDragProps;
 }) {
   const active = sort.key === column;
-  const label = wiSortLabels[column];
   return (
     <div
       role="columnheader"
+      title={title}
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
       className="relative min-w-0 data-[drop-target=true]:bg-primary/15 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary"
       {...dragProps?.cell}
@@ -106,7 +111,7 @@ export function WiGridHeader({
   wiColTemplate: string;
   visibleColumns: WiSortKey[];
   sort: WiSortState;
-  onSort: (column: WiSortKey) => void;
+  onSort: (column: WiSortColumn) => void;
   columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
   onFilterOpen: (col: FilterableColumn, anchorEl: HTMLButtonElement) => void;
   columnResizeProps: (key: WiSortKey) => ColumnResizeProps;
@@ -147,6 +152,7 @@ export function WiGridHeader({
         <WiSortHeaderButton
           key={col}
           column={col}
+          label={wiSortLabels[col]}
           sort={sort}
           onSort={onSort}
           filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
@@ -160,14 +166,14 @@ export function WiGridHeader({
         />
       ))}
       {extraColumns.map((referenceName) => (
-        <div
+        <WiSortHeaderButton
           key={referenceName}
-          role="columnheader"
-          className="min-w-0 truncate px-1 py-0.5"
+          column={`field:${referenceName}`}
+          label={extraColumnLabel(referenceName)}
           title={referenceName}
-        >
-          {extraColumnLabel(referenceName)}
-        </div>
+          sort={sort}
+          onSort={onSort}
+        />
       ))}
     </div>
   );
