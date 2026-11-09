@@ -19,6 +19,28 @@ pub(crate) fn has_human_request(note: &AgentNote) -> bool {
         && (!is_automatic(note) || note.replies.last().is_some_and(|r| r.author == "user"))
 }
 
+/// Removes a finished automatic note and its collected context. The result HTML
+/// is the record; a clean run leaves nothing in the Agent panel.
+pub(crate) fn discard(
+    service: &AgentNoteService,
+    target: NoteTarget,
+    id: i64,
+    note_id: &str,
+) -> Result<()> {
+    super::validate_note_id(note_id)?;
+    let dir = notes_dir(&service.notes_root(), target, id);
+    for path in [
+        dir.join(note_id),
+        dir.join("_done").join(note_id),
+        dir.join("_context").join(note_id),
+    ] {
+        if path.is_file() {
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn append_status(
     service: &AgentNoteService,
     target: NoteTarget,

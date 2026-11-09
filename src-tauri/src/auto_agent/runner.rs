@@ -433,6 +433,8 @@ async fn execute_attempt(
     if !material.complete || insufficient {
         automation::append_status(&service, item.target(), item.id(), &note.id,
             "Coverage is incomplete. The last fully reviewed commit is unchanged; the HTML records the omitted material.", true)?;
+    } else {
+        automation::discard(&service, item.target(), item.id(), &note.id)?;
     }
     Ok(())
 }
