@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { moveColumnTo } from "./columnDrag";
 
-// Normalizes a stored/raw column list to the canonical key order, dropping
-// unknown keys and forcing the required (never-hidden) columns to stay present.
-// Falls back to all keys when nothing valid remains.
+// Normalizes a stored/raw column list, keeping the stored (user-chosen) order,
+// dropping unknown keys and forcing the required (never-hidden) columns to stay
+// present. Falls back to all keys when nothing valid remains.
 export function normalizeVisibleColumns<Key extends string>(
   keys: readonly Key[],
   requiredColumns: readonly Key[],
@@ -11,8 +12,34 @@ export function normalizeVisibleColumns<Key extends string>(
   if (!Array.isArray(raw)) return [...keys];
   const set = new Set(raw.filter((value): value is Key => keys.includes(value as Key)));
   for (const required of requiredColumns) set.add(required);
-  const ordered = keys.filter((key) => set.has(key));
-  return ordered.length > 0 ? ordered : [...keys];
+  return set.size > 0 ? [...set] : [...keys];
+}
+
+// Shows a hidden column: placed just before the next column (in canonical
+// order) that is already visible, or last when none follows.
+export function showColumn<Key extends string>(
+  keys: readonly Key[],
+  current: readonly Key[],
+  column: Key,
+): Key[] {
+  const next = keys.slice(keys.indexOf(column) + 1).find((key) => current.includes(key));
+  const at = next === undefined ? current.length : current.indexOf(next);
+  return [...current.slice(0, at), column, ...current.slice(at)];
+}
+
+// Moves `column` by `delta` positions within the visible list (clamped).
+export function moveColumnBy<Key extends string>(
+  current: readonly Key[],
+  column: Key,
+  delta: number,
+): Key[] {
+  const from = current.indexOf(column);
+  if (from < 0) return [...current];
+  const to = Math.max(0, Math.min(current.length - 1, from + delta));
+  const next = [...current];
+  next.splice(from, 1);
+  next.splice(to, 0, column);
+  return next;
 }
 
 // Manages which columns a grid shows: the visible list, a toggle that respects
@@ -35,6 +62,8 @@ export function useColumnVisibility<Key extends string>({
   visibleColumns: Key[];
   setVisibleColumns: React.Dispatch<React.SetStateAction<Key[]>>;
   toggleColumn: (column: Key) => void;
+  moveColumn: (column: Key, delta: number) => void;
+  reorderColumn: (from: Key, to: Key) => void;
   resetColumns: () => void;
 } {
   const [visibleColumns, setVisibleColumns] = useState<Key[]>(() => {
@@ -63,15 +92,25 @@ export function useColumnVisibility<Key extends string>({
       setVisibleColumns((current) =>
         current.includes(column)
           ? current.filter((key) => key !== column)
-          : keys.filter((key) => key === column || current.includes(key)),
+          : showColumn(keys, current, column),
       );
     },
     [keys, requiredColumns],
+  );
+
+  const moveColumn = useCallback(
+    (column: Key, delta: number) => setVisibleColumns((current) => moveColumnBy(current, column, delta)),
+    [],
+  );
+
+  const reorderColumn = useCallback(
+    (from: Key, to: Key) => setVisibleColumns((current) => moveColumnTo(current, from, to)),
+    [],
   );
 
   const resetColumns = useCallback(() => {
     setVisibleColumns([...keys]);
   }, [keys]);
 
-  return { visibleColumns, setVisibleColumns, toggleColumn, resetColumns };
+  return { visibleColumns, setVisibleColumns, toggleColumn, moveColumn, reorderColumn, resetColumns };
 }
