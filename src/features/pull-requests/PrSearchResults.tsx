@@ -18,6 +18,7 @@ import { recordRecentPullRequest } from '@/lib/recentItems';
 import { parkGridFocus } from '@/lib/parkGridFocus';
 import { usePendingRowFocus } from '@/lib/usePendingRowFocus';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { ListStatusBar } from '@/components/ListStatusBar';
@@ -87,11 +88,12 @@ export function PullRequestResults({
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   // The filter button that opened the dropdown, so focus can return to it on close.
   const filterButtonRef = useRef<HTMLElement | null>(null);
-  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+  const { visibleColumns, toggleColumn, moveColumn, reorderColumn, resetColumns } = useColumnVisibility({
     keys: PR_SEARCH_KEYS,
     requiredColumns: PR_SEARCH_REQUIRED_COLUMNS,
     storageKey: PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY,
   });
+  const columnDrag = useColumnDrag(reorderColumn);
   const {
     template: columnTemplate,
     minWidth: gridMinWidth, autoWidths: autoColumnWidths,
@@ -352,7 +354,7 @@ export function PullRequestResults({
         >
           <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto [overflow-anchor:none]">
           <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
-          <PrSearchGridHeader columns={shownColumns} template={columnTemplate} filters={columnFilters} resizeProps={columnResizeProps} onFilter={openFilter} />
+          <PrSearchGridHeader columns={shownColumns} template={columnTemplate} filters={columnFilters} resizeProps={columnResizeProps} columnDrag={columnDrag} onFilter={openFilter} />
           {loading && results.length === 0 ? (
             <LoadingState />
           ) : filteredResults.length === 0 ? (
@@ -455,6 +457,7 @@ export function PullRequestResults({
           visibleColumns={visibleColumns}
           requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
           onToggle={toggleColumn}
+          onMove={moveColumn}
           onReset={resetColumns}
           onClose={() => setColumnMenuRect(null)}
         />

@@ -4,6 +4,7 @@ import {
   type AppSettings,
   type UpdateAppSettingsInput,
 } from '@/lib/azdoCommands';
+import { DEFAULT_AUTO_AGENT_MAX_PER_SYNC } from '@/lib/reviewSettings';
 
 export function settingsInput(
   settings: AppSettings | undefined,
@@ -26,7 +27,7 @@ export function settingsInput(
     inboxInsightModel: settings?.inboxInsightModel ?? null,
     inboxInsightMaxPerSync: settings?.inboxInsightMaxPerSync ?? 3,
     autoAgentEnabled: settings?.autoAgentEnabled ?? false,
-    autoAgentMaxPerSync: settings?.autoAgentMaxPerSync ?? 3,
+    autoAgentMaxPerSync: settings?.autoAgentMaxPerSync ?? DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
     autoAgentIntervalMinutes: settings?.autoAgentIntervalMinutes ?? 15,
     autoAgentPipelinesEnabled: settings?.autoAgentPipelinesEnabled ?? false,
     autoAgentApprovalEnabled: settings?.autoAgentApprovalEnabled ?? false,

@@ -7,6 +7,9 @@ import type {
   WorkItemResultPreview,
 } from "@/lib/azdoCommands";
 import {
+  AUTO_AGENT_MAX_PER_SYNC_MAX,
+  AUTO_AGENT_MAX_PER_SYNC_MIN,
+  DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
 } from "@/lib/reviewSettings";
@@ -79,7 +82,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   inboxInsightModel: null,
   inboxInsightMaxPerSync: 3,
   autoAgentEnabled: false,
-  autoAgentMaxPerSync: 3,
+  autoAgentMaxPerSync: DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
   autoAgentIntervalMinutes: 15,
   autoAgentPipelinesEnabled: false,
   autoAgentApprovalEnabled: false,
@@ -196,7 +199,10 @@ export function applyDemoSettingsUpdate(
         : current.autoAgentEnabled,
     autoAgentMaxPerSync:
       input?.autoAgentMaxPerSync !== undefined
-        ? Math.min(10, Math.max(1, Math.round(input.autoAgentMaxPerSync)))
+        ? Math.min(
+            AUTO_AGENT_MAX_PER_SYNC_MAX,
+            Math.max(AUTO_AGENT_MAX_PER_SYNC_MIN, Math.round(input.autoAgentMaxPerSync)),
+          )
         : current.autoAgentMaxPerSync,
     autoAgentIntervalMinutes:
       input?.autoAgentIntervalMinutes !== undefined

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
 } from "@/lib/reviewSettings";
@@ -55,7 +56,7 @@ export const appSettingsSchema = z.object({
   inboxInsightModel: z.string().nullable().default(null),
   inboxInsightMaxPerSync: z.number().int().default(3),
   autoAgentEnabled: z.boolean().default(false),
-  autoAgentMaxPerSync: z.number().int().default(3),
+  autoAgentMaxPerSync: z.number().int().default(DEFAULT_AUTO_AGENT_MAX_PER_SYNC),
   autoAgentIntervalMinutes: z.number().int().default(15),
   autoAgentPipelinesEnabled: z.boolean().default(false),
   autoAgentApprovalEnabled: z.boolean().default(false),

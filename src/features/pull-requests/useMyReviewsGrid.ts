@@ -133,7 +133,7 @@ export function useMyReviewsGrid({
   });
 
   // ── Column hooks ───────────────────────────────────────────────────────────
-  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+  const { visibleColumns, toggleColumn, moveColumn, reorderColumn, resetColumns } = useColumnVisibility({
     keys: PR_GRID_KEYS,
     requiredColumns: PR_GRID_REQUIRED_COLUMNS,
     initialColumns: initialViewState.visibleColumns,
@@ -461,7 +461,7 @@ export function useMyReviewsGrid({
     filterButtonRef, filterInputRef,
     showDone, setShowDone, showSnoozed, setShowSnoozed, snoozedCount, leaveStateView,
     // columns
-    visibleColumns, shownColumns, toggleColumn, resetColumns,
+    visibleColumns, shownColumns, toggleColumn, moveColumn, reorderColumn, resetColumns,
     // data
     allPrs, sortedPrs, filterSuggestionPool, columnUniqueValues,
     returnedKeys, updatedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,
