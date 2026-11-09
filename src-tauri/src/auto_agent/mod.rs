@@ -27,7 +27,10 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration as StdDuration, Instant};
 
 use crate::agent_notes::{self, NoteTarget};
-use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, Organization};
+use crate::db::{
+    clamp_auto_agent_max_per_sync, AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem,
+    Organization,
+};
 use crate::error::Result;
 use crate::settings::result_files;
 
@@ -286,9 +289,10 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
             .ok()
             .and_then(|h| h.runs.last().map(|r| r.started_at))
     });
+    let max_attempts = clamp_auto_agent_max_per_sync(settings.auto_agent_max_per_sync) as usize;
     let mut attempted = 0;
     for item in items {
-        if attempted >= settings.auto_agent_max_per_sync.clamp(1, 10) as usize {
+        if attempted >= max_attempts {
             break;
         }
         if !db.get_app_settings()?.auto_agent_enabled {

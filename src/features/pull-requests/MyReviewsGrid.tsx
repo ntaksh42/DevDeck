@@ -10,6 +10,7 @@ import { DockableWorkspace, type DockablePanelSpec } from '@/components/Dockable
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { SortHeaderButton } from '@/components/SortHeaderButton';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { openExternalUrl } from '@/lib/openExternal';
 import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
@@ -49,6 +50,7 @@ export function MyReviewsGrid({
   onSelectRequestHandled,
 }: MyReviewsGridProps) {
   const g = useMyReviewsGrid({ selectRequest, onSelectRequestHandled });
+  const columnDrag = useColumnDrag(g.reorderColumn);
   const bulkReview = useBulkReviewRequest(g.selectedPrs);
   // `key` is bumped on every request so re-activating the same tab still fires.
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number } | undefined>();
@@ -329,6 +331,7 @@ export function MyReviewsGrid({
                         onSort={g.applySort}
                         filterActive={isFilterableColumn(col) && g.columnFilters[col] !== undefined}
                         onFilterOpen={isFilterableColumn(col) ? (el) => g.openFilter(col, el) : undefined}
+                        dragProps={columnDrag(col)}
                         resizeHandle={isLast ? undefined : <ColumnResizeHandle {...g.columnResizeProps(col)} />}
                       />
                     );
@@ -467,6 +470,7 @@ export function MyReviewsGrid({
           visibleColumns={g.visibleColumns}
           requiredColumns={PR_GRID_REQUIRED_COLUMNS}
           onToggle={g.toggleColumn}
+          onMove={g.moveColumn}
           onReset={g.resetColumns}
           onClose={() => g.setColumnMenuRect(null)}
         />

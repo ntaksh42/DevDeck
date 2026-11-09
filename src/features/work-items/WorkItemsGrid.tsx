@@ -7,6 +7,7 @@ import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import { DockableWorkspace, type DockablePanelSpec } from '@/components/DockableWorkspace';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { PreviewToolbarSlotProvider, usePreviewToolbarSlot } from '@/components/PreviewToolbarSlot';
 import { MemoWorkItemPreviewPanel } from './MemoWorkItemPreviewPanel';
@@ -106,6 +107,7 @@ export function WorkItemsGrid({
     onSortChange,
     snoozeOrganizationId,
   });
+  const columnDrag = useColumnDrag(state.reorderColumn);
   useEffect(() => {
     if (filterResetKey === undefined) return;
     state.setColumnFilters({});
@@ -200,6 +202,7 @@ export function WorkItemsGrid({
             columnFilters={state.columnFilters}
             onFilterOpen={g.openFilter}
             columnResizeProps={state.columnResizeProps}
+            columnDrag={columnDrag}
             extraColumns={extraColumns}
             extraColumnLabel={extraColumnLabel}
           />
@@ -447,6 +450,7 @@ export function WorkItemsGrid({
           visibleColumns={state.visibleColumns}
           requiredColumns={WI_GRID_REQUIRED_COLUMNS}
           onToggle={state.toggleColumnVisibility}
+          onMove={state.moveColumn}
           onReset={state.resetColumnVisibility}
           onClose={() => state.setColumnMenuRect(null)}
         >

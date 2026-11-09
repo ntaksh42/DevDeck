@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import type { ColumnResizeProps } from '@/lib/useGridColumns';
+import type { ColumnDragProps } from '@/lib/columnDrag';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import {
   wiSortLabels,
@@ -23,6 +24,7 @@ function WiSortHeaderButton({
   resizeHandle,
   filterActive,
   onFilterOpen,
+  dragProps,
 }: {
   column: WiSortColumn;
   label: string;
@@ -32,6 +34,7 @@ function WiSortHeaderButton({
   resizeHandle?: ReactNode;
   filterActive?: boolean;
   onFilterOpen?: (anchorEl: HTMLButtonElement) => void;
+  dragProps?: ColumnDragProps;
 }) {
   const active = sort.key === column;
   return (
@@ -39,13 +42,15 @@ function WiSortHeaderButton({
       role="columnheader"
       title={title}
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="relative min-w-0"
+      className="relative min-w-0 data-[drop-target=true]:bg-primary/15 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary"
+      {...dragProps?.cell}
     >
       <div className="flex min-w-0 items-center">
         <button
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(column)}
+          {...dragProps?.handle}
           className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
             active ? "text-foreground" : ""
           }`}
@@ -95,6 +100,7 @@ export function WiGridHeader({
   columnFilters,
   onFilterOpen,
   columnResizeProps,
+  columnDrag,
   extraColumns,
   extraColumnLabel,
 }: {
@@ -109,6 +115,7 @@ export function WiGridHeader({
   columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
   onFilterOpen: (col: FilterableColumn, anchorEl: HTMLButtonElement) => void;
   columnResizeProps: (key: WiSortKey) => ColumnResizeProps;
+  columnDrag?: (key: WiSortKey) => ColumnDragProps;
   extraColumns: string[];
   extraColumnLabel: (referenceName: string) => string;
 }) {
@@ -150,6 +157,7 @@ export function WiGridHeader({
           onSort={onSort}
           filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
           onFilterOpen={isFilterableColumn(col) ? (el) => onFilterOpen(col, el) : undefined}
+          dragProps={columnDrag?.(col)}
           resizeHandle={
             i < visibleColumns.length - 1 ? (
               <ColumnResizeHandle {...columnResizeProps(col)} />

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listSnoozedItems, snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
 import { activeSnoozedKeys } from '@/lib/snoozePresets';
 import { useGridColumns } from '@/lib/useGridColumns';
+import { moveColumnBy, showColumn } from '@/lib/useColumnVisibility';
+import { moveColumnTo } from '@/lib/columnDrag';
 import type { CustomPreviewField } from './previewFieldsStorage';
 import { loadCustomPreviewFields } from './previewFieldsStorage';
 import { workItemQueryKeys } from './queryKeys';
@@ -194,8 +196,16 @@ export function useWiGridState({
     setVisibleColumns((current) =>
       current.includes(column)
         ? current.filter((value) => value !== column)
-        : WI_GRID_KEYS.filter((value) => value === column || current.includes(value)),
+        : showColumn(WI_GRID_KEYS, current, column),
     );
+  }
+
+  function moveColumn(column: WiSortKey, delta: number) {
+    setVisibleColumns((current) => moveColumnBy(current, column, delta));
+  }
+
+  function reorderColumn(from: WiSortKey, to: WiSortKey) {
+    setVisibleColumns((current) => moveColumnTo(current, from, to));
   }
 
   function resetColumnVisibility() {
@@ -206,7 +216,7 @@ export function useWiGridState({
   return {
     sort, setWiSort, applyWiSort,
     visibleColumns, setVisibleColumns, shownColumns,
-    toggleColumnVisibility, resetColumnVisibility,
+    toggleColumnVisibility, moveColumn, reorderColumn, resetColumnVisibility,
     wiColTemplate, gridMinWidth, autoColumnWidths, resetColumnWidths, gridRef, columnResizeProps,
     copyToast, setCopyToast,
     checkedIds, setCheckedIds,
