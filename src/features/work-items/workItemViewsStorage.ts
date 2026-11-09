@@ -1,4 +1,5 @@
 import { clamp, type SortDirection } from "@/lib/utils";
+import { isWorkItemSortColumn, type WiSortColumn } from "./workItemsGridHelpers";
 import { isValidFieldReferenceName } from "./previewFieldsStorage";
 
 // Bare keys (no migration to date). On an incompatible shape change, bump with
@@ -22,7 +23,7 @@ export type WorkItemQueryView = {
   projectId: string;
   previewVisible?: boolean;
   sortDirection?: SortDirection;
-  sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "tags" | "changedDate";
+  sortKey?: WiSortColumn;
   wiql: string;
   /** Maximum results to fetch. Omitted means the query is unbounded. */
   limit?: number;
@@ -53,19 +54,6 @@ export type WorkItemQueryViewsExport = {
   exportedAt: string;
   views: WorkItemQueryView[];
 };
-
-function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
-  return (
-    value === "id" ||
-    value === "workItemType" ||
-    value === "state" ||
-    value === "title" ||
-    value === "projectName" ||
-    value === "assignedTo" ||
-    value === "tags" ||
-    value === "changedDate"
-  );
-}
 
 function defaultWorkItemQueryViews(): WorkItemQueryView[] {
   return [
@@ -155,7 +143,7 @@ export function normalizeWorkItemQueryView(value: unknown): WorkItemQueryView | 
     sortDirection: view.sortDirection === "asc" || view.sortDirection === "desc"
       ? view.sortDirection
       : "desc",
-    sortKey: isWorkItemSortKey(view.sortKey) ? view.sortKey : "changedDate",
+    sortKey: isWorkItemSortColumn(view.sortKey) ? view.sortKey : "changedDate",
     wiql: view.wiql,
     limit:
       Number.isFinite(limit) && limit > 0 && Math.round(limit) !== LEGACY_DEFAULT_VIEW_LIMIT
