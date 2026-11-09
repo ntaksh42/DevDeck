@@ -24,6 +24,9 @@ test("sorts an optional field column with Enter and Space and keeps it after rel
   await page.keyboard.press("Space");
   await expect(header).toHaveAttribute("aria-sort", "descending");
   await page.reload();
+  await page.getByRole("grid", { name: "My review pull requests" }).waitFor();
+  await page.keyboard.press("g");
+  await page.keyboard.press("v");
   await expect(sort).toBeVisible();
   await expect(header).toHaveAttribute("aria-sort", "descending");
 });
