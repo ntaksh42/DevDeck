@@ -270,7 +270,7 @@ export function AgentCommandSettings() {
               min={1}
               max={10}
               value={insightMax}
-              onChange={(event) => setInsightMax(Number(event.target.value) || DEFAULT_AUTO_AGENT_MAX_PER_SYNC)}
+              onChange={(event) => setInsightMax(Number(event.target.value) || 3)}
               className={`${INPUT_CLASS} w-24`}
             />
           </label>
@@ -307,7 +307,7 @@ export function AgentCommandSettings() {
               min={AUTO_AGENT_MAX_PER_SYNC_MIN}
               max={AUTO_AGENT_MAX_PER_SYNC_MAX}
               value={autoAgentMax}
-              onChange={(event) => setAutoAgentMax(Number(event.target.value) || 3)}
+              onChange={(event) => setAutoAgentMax(Number(event.target.value) || DEFAULT_AUTO_AGENT_MAX_PER_SYNC)}
               className={`${INPUT_CLASS} w-24`}
             />
           </label>
