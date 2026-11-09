@@ -12,6 +12,9 @@ use crate::pr_review::{PullRequestChanges, PullRequestReview};
 use crate::work_items::WorkItemPreview;
 
 const MAX_BYTES: usize = 480_000;
+/// Ends a document whose tail was cut; compare with `ends_with`, since the
+/// same words may appear inside a diff.
+pub(super) const TRUNCATED: &str = "[Context truncated: remaining metadata was omitted.]";
 
 pub(super) fn note_body(target: NoteTarget, result_folder: &str) -> String {
     let (what, folder, approach): (_, _, &[&str]) = match target {
@@ -81,10 +84,7 @@ fn finish(sections: Vec<String>) -> String {
     while !text.is_char_boundary(end) {
         end -= 1;
     }
-    format!(
-        "{}\n\n[Context truncated: remaining metadata was omitted.]",
-        &text[..end]
-    )
+    format!("{}\n\n{TRUNCATED}", &text[..end])
 }
 
 pub(super) fn pull_request(

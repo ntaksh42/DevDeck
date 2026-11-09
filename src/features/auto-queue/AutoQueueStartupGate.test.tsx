@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AutoQueueStartupGate } from "./AutoQueueStartupGate";
+import { AutoQueueStartupGate, resetStartupGateForTests } from "./AutoQueueStartupGate";
 
 const item = (id: number, held: boolean) => ({
   organizationId: "org",
@@ -31,14 +31,26 @@ function mount() {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   render(<AutoQueueStartupGate />, { wrapper });
+  return client;
 }
 
-beforeEach(() => window.localStorage.clear());
+beforeEach(() => {
+  window.localStorage.clear();
+  resetStartupGateForTests();
+});
 afterEach(cleanup);
 
-// The gate remembers its decision for the rest of the launch, so the case that
-// ends in a decision comes last.
 describe("AutoQueueStartupGate", () => {
+  it("does not open for a candidate that turns up after the first scan found none", async () => {
+    queue = [];
+    const client = mount();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    queue = [item(1, true)];
+    await client.invalidateQueries({ queryKey: ["autoQueue"] });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("stays out of the way when nothing was held back", async () => {
     queue = [item(1, false)];
     mount();

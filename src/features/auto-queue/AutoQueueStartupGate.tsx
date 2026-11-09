@@ -7,6 +7,11 @@ import { AutoQueueView } from "./AutoQueueView";
 // until the app is restarted, when the first scan holds its candidates back again.
 let decidedThisLaunch = false;
 
+/** Forgets the decision so each test starts like a fresh launch. */
+export function resetStartupGateForTests() {
+  decidedThisLaunch = false;
+}
+
 const FOCUSABLE = "button:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 /**
@@ -32,13 +37,15 @@ export function AutoQueueStartupGate() {
   const waiting = (queueQuery.data ?? []).filter((item) => item.held && !decidedKeys.includes(autoQueueKey(item)));
   const open = enabled && waiting.length > 0;
 
-  // The dialog stays until every held item was run or skipped.
+  // The dialog stays until every held item was run or skipped. Nothing held at
+  // the first scan also ends it, so a candidate that turns up hours later goes
+  // to the Auto Queue view instead of blocking the app as a "startup" dialog.
   useEffect(() => {
-    if (enabled && queueQuery.isSuccess && decidedKeys.length > 0 && waiting.length === 0) {
+    if (enabled && queueQuery.isSuccess && waiting.length === 0) {
       decidedThisLaunch = true;
       setDecided(true);
     }
-  }, [enabled, queueQuery.isSuccess, decidedKeys.length, waiting.length]);
+  }, [enabled, queueQuery.isSuccess, waiting.length]);
 
   // Keys pressed while focus is outside the dialog must not reach the app.
   useEffect(() => {
