@@ -144,6 +144,132 @@ describe("useGridFocusRestoration", () => {
     expect(document.activeElement).toBe(editor);
   });
 
+  describe("after the user scrolls the grid", () => {
+    // The scroller wraps the grid, as in Work Items and My Reviews.
+    function setupScroller(restoreFocus: () => boolean) {
+      const utils = setup(restoreFocus);
+      const scroller = document.createElement("div");
+      const grid = document.createElement("div");
+      grid.setAttribute("role", "grid");
+      grid.dataset.primaryGrid = "true";
+      grid.tabIndex = -1;
+      grid.appendChild(utils.row);
+      scroller.appendChild(grid);
+      utils.container.appendChild(scroller);
+      setRect(scroller, 0, 300);
+      return { ...utils, scroller, grid };
+    }
+
+    function setRect(element: HTMLElement, top: number, bottom: number) {
+      element.getBoundingClientRect = () => ({ top, bottom }) as DOMRect;
+    }
+
+    function focusRow(utils: ReturnType<typeof setupScroller>) {
+      act(() => {
+        utils.row.focus();
+        utils.result.current.onFocusCapture({ target: utils.row } as never);
+      });
+    }
+
+    function syncAndSettle(utils: ReturnType<typeof setupScroller>) {
+      utils.rerender({ signature: "b" });
+      act(() => {
+        vi.advanceTimersByTime(40);
+      });
+    }
+
+    it("does not pull the grid back once the focused row has scrolled out", () => {
+      const restoreFocus = vi.fn(() => true);
+      const utils = setupScroller(restoreFocus);
+      focusRow(utils);
+
+      // The wheel moves the row out of view and virtualization unmounts it,
+      // which React never reports as a blur.
+      utils.row.remove();
+      act(() => {
+        utils.scroller.dispatchEvent(new Event("scroll"));
+      });
+      syncAndSettle(utils);
+
+      expect(utils.result.current.hadFocusRef.current).toBe(false);
+      expect(restoreFocus).not.toHaveBeenCalled();
+    });
+
+    it("drops ownership when the still-focused row is scrolled out of view", () => {
+      const restoreFocus = vi.fn(() => true);
+      const utils = setupScroller(restoreFocus);
+      focusRow(utils);
+      setRect(utils.row, 900, 929);
+
+      act(() => {
+        utils.scroller.dispatchEvent(new Event("scroll"));
+      });
+
+      expect(utils.result.current.hadFocusRef.current).toBe(false);
+    });
+
+    it("keeps restoring while the focused row stays in view", () => {
+      const restoreFocus = vi.fn(() => true);
+      const utils = setupScroller(restoreFocus);
+      focusRow(utils);
+      setRect(utils.row, 100, 129);
+
+      act(() => {
+        utils.scroller.dispatchEvent(new Event("scroll"));
+      });
+      syncAndSettle(utils);
+
+      expect(restoreFocus).toHaveBeenCalled();
+    });
+
+    it("keeps ownership while a keyboard jump parks focus on the grid", () => {
+      const restoreFocus = vi.fn(() => true);
+      const utils = setupScroller(restoreFocus);
+      focusRow(utils);
+      setRect(utils.grid, -5000, 5000);
+      act(() => {
+        utils.grid.focus();
+        utils.scroller.dispatchEvent(new Event("scroll"));
+      });
+      syncAndSettle(utils);
+
+      expect(restoreFocus).toHaveBeenCalled();
+    });
+
+    it("keeps ownership while a grid that wraps its scroller holds focus", () => {
+      const restoreFocus = vi.fn(() => true);
+      const utils = setupScroller(restoreFocus);
+      // PR search and Inbox put the scroller inside the grid / listbox.
+      const outerGrid = document.createElement("div");
+      outerGrid.setAttribute("role", "grid");
+      outerGrid.tabIndex = -1;
+      utils.container.appendChild(outerGrid);
+      outerGrid.appendChild(utils.scroller);
+      focusRow(utils);
+      act(() => {
+        outerGrid.focus();
+        utils.scroller.dispatchEvent(new Event("scroll"));
+      });
+
+      expect(utils.result.current.hadFocusRef.current).toBe(true);
+    });
+
+    it("ignores scrolling a pane that is not the grid", () => {
+      const restoreFocus = vi.fn(() => true);
+      const utils = setupScroller(restoreFocus);
+      focusRow(utils);
+      utils.row.remove();
+      const preview = document.createElement("div");
+      utils.container.appendChild(preview);
+
+      act(() => {
+        preview.dispatchEvent(new Event("scroll"));
+      });
+
+      expect(utils.result.current.hadFocusRef.current).toBe(true);
+    });
+  });
+
   it("retries restoration until the row mounts back into the window", () => {
     let mounted = false;
     const restoreFocus = vi.fn(() => {

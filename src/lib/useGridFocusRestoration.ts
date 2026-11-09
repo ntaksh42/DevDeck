@@ -106,6 +106,25 @@ export function useGridFocusRestoration({
     [clearBlurTimer, focusInsideGrid],
   );
 
+  // Scrolling the grid away from the focused row (wheel or scrollbar) means the
+  // user has moved on from it. Under virtualization the row then unmounts, and
+  // React never reports that blur, so ownership would otherwise linger and the
+  // next data update would scroll the grid back to the old selection. Keyboard
+  // jumps keep the selected row (or the parked grid) in view, so they keep it.
+  useEffect(() => {
+    const onScroll = (event: Event) => {
+      if (!hadFocusRef.current) return;
+      const scroller = event.target;
+      const container = containerRef.current;
+      if (!(scroller instanceof HTMLElement) || !container?.contains(scroller)) return;
+      if (!isGridScroller(scroller) || focusedGridElementInView(scroller)) return;
+      hadFocusRef.current = false;
+    };
+    // Scroll events do not bubble; a capturing listener still sees them.
+    document.addEventListener("scroll", onScroll, true);
+    return () => document.removeEventListener("scroll", onScroll, true);
+  }, [containerRef]);
+
   useEffect(() => {
     if (!hadFocusRef.current) return;
     clearBlurTimer();
@@ -134,4 +153,23 @@ export function useGridFocusRestoration({
   }, [restoreSignature, clearBlurTimer, focusMovedOffGrid]);
 
   return { onFocusCapture, onBlurCapture, hadFocusRef };
+}
+
+/** The scroller sits around the grid (Work Items, My Reviews) or inside it (PR search, Inbox). */
+function isGridScroller(scroller: HTMLElement): boolean {
+  return Boolean(
+    scroller.closest(GRID_FOCUS_SELECTOR) ?? scroller.querySelector('[data-primary-grid="true"]'),
+  );
+}
+
+/** Whether keyboard focus is on this grid and still visible in its scroller. */
+function focusedGridElementInView(scroller: HTMLElement): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !active.closest(GRID_FOCUS_SELECTOR)) return false;
+  // Focus parked on a grid that wraps its own scroller stays in view.
+  if (active.contains(scroller)) return true;
+  if (!scroller.contains(active)) return false;
+  const row = active.getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  return row.bottom > view.top && row.top < view.bottom;
 }
