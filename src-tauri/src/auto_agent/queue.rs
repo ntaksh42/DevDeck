@@ -9,7 +9,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
-use super::{handled_check, pick, runner, AutoItem, BATCH_SLOT};
+use super::state::{History, Status};
+use super::{awaits_investigation, handled_check, pick, runner, AutoItem, BATCH_SLOT};
 use crate::agent_notes::launch::AgentKind;
 use crate::agent_notes::{self, NoteTarget};
 use crate::db::{AppDatabase, AppSettings, CachedWorkItem, Organization};
@@ -103,12 +104,31 @@ pub(super) fn candidates(
         Some(_) => db.list_my_work_items(&org.id)?,
         None => Vec::new(),
     };
-    // Items an automatic attempt already tracks follow their own retry
-    // schedule instead of waiting for approval again.
+    // Automatic runs retry what an attempt already tracks on their own
+    // schedule. With approval on nothing runs by itself, so a tracked item
+    // whose last attempt failed is listed again for a pick.
+    let now = Utc::now();
+    let retry: Vec<AutoItem> = if settings.auto_agent_approval_enabled {
+        let prs = prs.iter().filter(|pr| !pr.is_draft).cloned();
+        let work_items = work_items
+            .iter()
+            .filter(|wi| awaits_investigation(wi, now))
+            .cloned();
+        prs.map(AutoItem::PullRequest)
+            .chain(work_items.map(AutoItem::WorkItem))
+            .filter(|item| {
+                History::read(&item.history_path(db, org))
+                    .is_ok_and(|h| h.runs.last().is_some_and(|r| r.status == Status::Failed))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let handled = handled_check(&root, review_folder, work_item_folder);
-    Ok(pick(prs, work_items, usize::MAX, Utc::now(), handled)
+    Ok(pick(prs, work_items, usize::MAX, now, handled)
         .into_iter()
         .filter(|item| !item.history_path(db, org).exists())
+        .chain(retry)
         .collect())
 }
 
