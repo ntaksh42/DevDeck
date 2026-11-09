@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- report-sheet -->
+<title>Agent 自動調査の失敗原因</title>
+<style>
+:root{
+  --ag-ink:var(--foreground,#212529);--ag-muted:var(--muted-foreground,#64707C);
+  --ag-line:var(--border,#DEE2E6);--ag-paper:var(--background,#FFFFFF);
+  --ag-dim:var(--muted,#F6F8FA);--ag-link:var(--primary,#2563EB);--ag-red:#DC2626;--ag-amber:#B45309}
+*{box-sizing:border-box}
+body{background:var(--ag-paper);color:var(--ag-ink);font-family:'IBM Plex Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic UI','Meiryo',sans-serif;font-size:15px;line-height:1.75;margin:0;padding:12px 20px 24px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;line-height:1.45;margin:4px 0 10px}
+h2{font-size:17px;line-height:1.45;margin:22px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--ag-line)}
+a{color:var(--ag-link)}
+.concl{border:1px solid var(--ag-line);border-left:3px solid var(--ag-red);border-radius:8px;padding:10px 16px}
+.mono{font-family:'IBM Plex Mono',Consolas,Menlo,monospace;font-size:13px;color:var(--ag-muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;margin:6px 0}
+th,td{border-bottom:1px solid var(--ag-line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--ag-muted);font-weight:500;white-space:nowrap}
+td.no{width:2.5em;color:var(--ag-muted);font-family:'IBM Plex Mono',Consolas,monospace}
+.warn{border-left:3px solid var(--ag-muted);padding:4px 12px;margin:6px 0}
+.badge{display:inline-block;font-size:12px;line-height:1.5;font-weight:700;padding:0 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.badge.guess{color:var(--ag-amber)}
+tr.key td{font-weight:700}
+</style></head>
+<body><main>
+
+<h1>失敗の主因は「完了判定が厳しすぎる」可能性が高い</h1>
+<div class="concl"><b>結論:</b> 実ログが無いため断定はできないが、Agent が正常終了しても結果 HTML の更新を検出できないと失敗扱いになる。</div>
+
+<table>
+<tr><th>#</th><th>原因候補</th><th>中身・理由</th><th>どうするか</th><th>根拠</th><th>確度</th></tr>
+<tr class="key"><td class="no">①</td><td>完了判定が厳しい</td><td>終了コード 0 でも、note が done でない、または結果 HTML の更新日時・サイズが実行前と同じなら失敗。「差分なし」で HTML を触らない場合に当たる</td><td>ログで実際の終了状況を確認。必要なら判定を緩める</td><td class="mono">runner.rs:343-350</td><td><span class="badge guess">推測</span></td></tr>
+<tr><td class="no">②</td><td>30 分タイムアウト</td><td>大きな PR や重い調査で強制終了され「timed out」になる</td><td>ログの所要時間を確認</td><td class="mono">state.rs:11, runner.rs:388</td><td><span class="badge guess">推測</span></td></tr>
+<tr><td class="no">③</td><td>PR の source commit が取れない</td><td>一時的な API 不調で「PR source commit is unavailable」。次回再試行で直る</td><td>対応不要（頻発なら調査）</td><td class="mono">runner.rs:157-160</td><td></td></tr>
+<tr><td class="no">④</td><td>再試行のたびに note が増える</td><td>5 分から最大 1 時間の間隔で再試行し、毎回新しい note を作る</td><td>原因確定後に見直す</td><td class="mono">runner.rs:318-336, state.rs:58-67</td><td></td></tr>
+</table>
+
+<h2>要判断</h2>
+<table>
+<tr><th>#</th><th>問い</th><th>推奨と理由</th><th>他案 (利点 / 代償)</th></tr>
+<tr><td class="no">A</td><td>My Reviews から PR レビューを依頼する入口をどこに置くか</td><td>行のショートカットキー — 既存の Agent note 依頼を呼ぶだけで変更が最小で、キーボード操作の要件も満たす</td><td>プレビュー内ボタン — 見つけやすい / キー操作とフォーカス戻りの実装が増える</td></tr>
+</table>
+
+<h2>注意点</h2>
+<div class="warn">失敗ログは未確認。<code>%LOCALAPPDATA%</code> 配下で見つかったのはテスト用 fixture（DevDeck-fake）だけで、そこには「Agent did not finish…」4 件、「PR source commit is unavailable」1 件があった。実際の <code>*.log</code> と履歴 JSON のパスをもらえれば原因を確定できる。</div>
+
+</main></body></html>

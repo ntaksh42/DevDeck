@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- report-sheet -->
+<title>起動確認の結果</title>
+<style>
+:root{
+  --ag-ink:var(--foreground,#212529);--ag-muted:var(--muted-foreground,#64707C);
+  --ag-line:var(--border,#DEE2E6);--ag-paper:var(--background,#FFFFFF);
+  --ag-link:var(--primary,#2563EB);--ag-red:#DC2626;--ag-amber:#B45309}
+*{box-sizing:border-box}
+body{background:var(--ag-paper);color:var(--ag-ink);font-family:'IBM Plex Sans JP','Yu Gothic UI','Meiryo',sans-serif;font-size:15px;line-height:1.75;margin:0;padding:12px 20px 24px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;line-height:1.45;margin:4px 0 10px}
+h2{font-size:17px;margin:22px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--ag-line)}
+.concl{border:1px solid var(--ag-line);border-left:3px solid var(--ag-red);border-radius:8px;padding:10px 16px}
+.mono{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--ag-muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;margin:6px 0}
+th,td{border-bottom:1px solid var(--ag-line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--ag-muted);font-weight:500;white-space:nowrap}
+td.no{width:2.5em;color:var(--ag-muted);font-family:Consolas,monospace}
+.warn{border-left:3px solid var(--ag-muted);padding:4px 12px;margin:6px 0}
+tr.key td{font-weight:700}
+</style></head>
+<body><main>
+
+<h1>起動しても自動調査の失敗は再現できなかった</h1>
+<div class="concl"><b>結論:</b> テストと画面は正常で、原因の特定には実機の失敗ログが必要。</div>
+
+<table>
+<tr><th>#</th><th>確認</th><th>結果</th><th>根拠</th></tr>
+<tr><td class="no">①</td><td>自動調査のテスト</td><td>30 件すべて成功。フェイク Agent の成功経路も通る</td><td class="mono">cargo test -p azdo-dashboard auto_agent（PowerShell）</td></tr>
+<tr><td class="no">②</td><td>bash 実行での 2 件失敗</td><td>bash の PATH に pwsh が無いための環境差。コードの不具合ではない</td><td class="mono">runner/tests.rs:155, 294</td></tr>
+<tr><td class="no">③</td><td>ブラウザのデモ表示</td><td>My Reviews、Search、Work Items、Settings は表示できた</td><td class="mono">driver.mjs smoke</td></tr>
+<tr class="key"><td class="no">④</td><td>Commits 画面</td><td>ドライバーがボタンを見つけられず失敗。本件との関係は未調査</td><td class="mono">driver.mjs smoke</td></tr>
+<tr><td class="no">⑤</td><td>失敗の再現</td><td>デモモードには自動調査の実行系が無く、画面からは再現できない</td><td class="mono">AGENTS.md Runtime Boundaries</td></tr>
+</table>
+
+<h2>要判断</h2>
+<table>
+<tr><th>#</th><th>問い</th><th>推奨と理由</th><th>他案 (利点 / 代償)</th></tr>
+<tr><td class="no">A</td><td>次にどう進めるか</td><td>実機のログパスをもらい原因を確定してから直す — 原因が違う修正を避けられる</td><td>完了判定を先にゆるめる — すぐ着手できる / 原因が違えば無駄になる</td></tr>
+</table>
+
+<h2>注意点</h2>
+<div class="warn">コードは変更していません。開発サーバーは停止済みです。<code>%LOCALAPPDATA%</code> 配下で見つかったのは <code>DevDeck-fake</code> のテスト用データだけでした。</div>
+
+</main></body></html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- report-sheet -->
+<title>自動レビュー・調査の取りこぼし</title>
+<style>
+:root{
+  --ag-ink:var(--foreground,#212529);--ag-muted:var(--muted-foreground,#64707C);
+  --ag-line:var(--border,#DEE2E6);--ag-paper:var(--background,#FFFFFF);
+  --ag-dim:var(--muted,#F6F8FA);--ag-link:var(--primary,#2563EB);--ag-red:#DC2626}
+*{box-sizing:border-box}
+body{background:var(--ag-paper);color:var(--ag-ink);font-family:'IBM Plex Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic UI','Meiryo',sans-serif;font-size:15px;line-height:1.75;margin:0;padding:12px 20px 24px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;line-height:1.45;margin:4px 0 10px}
+h2{font-size:17px;line-height:1.45;margin:22px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--ag-line)}
+p{margin:6px 0}
+.concl{border:1px solid var(--ag-line);border-left:3px solid var(--ag-red);border-radius:8px;padding:10px 16px}
+.evidence-line{font-family:Consolas,Menlo,monospace;font-size:12px;color:var(--ag-muted);display:block;margin-top:6px}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;margin:6px 0}
+th,td{border-bottom:1px solid var(--ag-line);padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+thead th{font-size:12px;color:var(--ag-muted);font-weight:500}
+tbody th{font-size:14px;font-weight:700}
+td p{margin:0}
+.priority{display:block;font-size:11px;font-weight:500;color:var(--ag-red);margin-bottom:2px}
+.decision{background:var(--ag-dim);border-radius:8px;padding:12px 16px;margin:18px 0 6px}
+.decision h2{border:0;margin:0 0 6px;padding:0}
+.choice{display:grid;grid-template-columns:3em 1fr;gap:8px;margin:4px 0;font-size:14px}
+.choice b{font-size:12px;padding-top:2px}
+.choice p{margin:0}
+.choice.alt{color:var(--ag-muted)}
+</style></head>
+<body><main>
+
+<h1>自動実行は条件が狭く、起動直後は走らないため「もれなく」になっていない</h1>
+<div class="concl"><b>結論:</b> 対象条件を広げ、起動直後の保留を既定でやめれば、手動依頼と併せて取りこぼしを防げる。</div>
+
+<table>
+<colgroup><col style="width:18%"><col style="width:46%"><col style="width:36%"></colgroup>
+<thead><tr><th>項目</th><th>確認したこと・根拠</th><th>対応案</th></tr></thead>
+<tbody>
+<tr><th scope="row"><span class="priority">先に対応</span>起動直後の保留</th><td><p>組織ごとの最初の確認は自動実行せず Auto Queue に残す。選ぶまで走らない</p><code class="evidence-line">spec-overview.md:267</code></td><td>既定を即時実行にし、ダイアログは承認制オン時だけ出す</td></tr>
+<tr><th scope="row">WI の対象状態</th><td><p>New / Active のみ。Basic の To do / Doing は対象外</p><code class="evidence-line">spec-overview.md:268</code></td><td>Basic の状態を対象に加える</td></tr>
+<tr><th scope="row">期限</th><td><p>PR は作成 30 日以内、WI は更新 30 日以内に限る</p><code class="evidence-line">spec-overview.md:268,269</code></td><td>期限を外す、または日数を設定にする</td></tr>
+<tr><th scope="row">PR の条件</th><td><p>初回は非ドラフト・未投票のみ。投票済みは追加 push 後から</p><code class="evidence-line">spec-overview.md:269</code></td><td>現状維持でよいか要確認</td></tr>
+<tr><th scope="row">件数上限</th><td><p>1 回・1 組織あたり 3 件 (1〜10)。超過分は次回以降</p><code class="evidence-line">spec-overview.md:267,578</code></td><td>取りこぼしではなく遅延。上限を上げれば足りる</td></tr>
+<tr><th scope="row">結果フォルダ未設定</th><td><p>未設定の種類は自動実行の対象外</p><code class="evidence-line">spec-overview.md:267</code></td><td>未設定の旨を画面で知らせる</td></tr>
+</tbody>
+</table>
+
+<section class="decision">
+<h2>要判断: 仕様書だけ直すか、実装も変えるか</h2>
+<div class="choice"><b>推奨</b><p>仕様書と実装を一緒に変える — 仕様書と実装の乖離を防ぐ運用 (AGENTS.md) に合う</p></div>
+<div class="choice alt"><b>他案</b><p>先に仕様書だけ直す — 差分を見て合意できる / 実装が後回しになる</p></div>
+</section>
+
+<h2>注意点</h2>
+<p>確認したのは仕様書のみ。実装 (<code>auto_agent/</code>) が仕様どおりかは未検証。</p>
+
+</main></body></html>
