@@ -16,7 +16,7 @@ import { settingsInput } from './settingsHelpers';
 const DEFAULT_CLAUDE_COMMAND =
   'claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" "{results}" --dangerously-skip-permissions';
 const DEFAULT_CODEX_COMMAND =
-  'codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" --add-dir "{results}" "Read {guide} and handle the open notes in {notes}"';
+  'codex exec --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true --add-dir "{notes}" --add-dir "{results}" "Read {guide} and handle the open notes in {notes}"';
 const INPUT_CLASS =
   "h-9 rounded-md border border-input bg-background px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring";
 const MODEL_FIELDS = [
