@@ -67,7 +67,7 @@ const DEFAULT_CLAUDE_COMMAND: &str = "claude -p \"Read {guide} and handle the op
 /// result folder), and sandboxed to writing only the folder it starts in and
 /// the notes and result folders. Azure CLI and `git push` are blocked by the environment
 /// below, as for Claude Code.
-const DEFAULT_CODEX_COMMAND: &str = "codex exec --skip-git-repo-check --sandbox workspace-write --add-dir \"{notes}\" --add-dir \"{results}\" \"Read {guide} and handle the open notes in {notes}\"";
+const DEFAULT_CODEX_COMMAND: &str = "codex exec --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true --add-dir \"{notes}\" --add-dir \"{results}\" \"Read {guide} and handle the open notes in {notes}\"";
 /// Empty Azure CLI config folder (under the notes root) the agent starts with,
 /// so `az` is signed out: the agent reads what DevDeck gathered instead of
 /// reaching Azure DevOps with the user's credentials.
@@ -212,7 +212,12 @@ pub(crate) fn spawn_agent(
     let mut cmd = shell_command(&command);
     cmd.env("AZURE_CONFIG_DIR", &az_dir);
     // Git config entries given to this process only (GIT_CONFIG_COUNT/KEY/VALUE).
-    cmd.env("GIT_CONFIG_COUNT", BLOCKED_PUSH_PREFIXES.len().to_string());
+    // Plus `http.sslBackend=openssl`: git's default schannel cannot get
+    // credentials inside Codex's Windows sandbox, so every HTTPS fetch fails.
+    let count = BLOCKED_PUSH_PREFIXES.len();
+    cmd.env("GIT_CONFIG_COUNT", (count + 1).to_string());
+    cmd.env(format!("GIT_CONFIG_KEY_{count}"), "http.sslBackend");
+    cmd.env(format!("GIT_CONFIG_VALUE_{count}"), "openssl");
     for (index, prefix) in BLOCKED_PUSH_PREFIXES.iter().enumerate() {
         cmd.env(
             format!("GIT_CONFIG_KEY_{index}"),
