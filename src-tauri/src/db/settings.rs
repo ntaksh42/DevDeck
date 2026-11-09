@@ -118,7 +118,9 @@ pub struct AppSettings {
 }
 
 pub const DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC: i64 = 3;
-pub const DEFAULT_AUTO_AGENT_MAX_PER_SYNC: i64 = 3;
+pub const DEFAULT_AUTO_AGENT_MAX_PER_SYNC: i64 = 10;
+pub const MIN_AUTO_AGENT_MAX_PER_SYNC: i64 = 1;
+pub const MAX_AUTO_AGENT_MAX_PER_SYNC: i64 = 10;
 pub const DEFAULT_AUTO_AGENT_INTERVAL_MINUTES: i64 = 15;
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
@@ -297,7 +299,7 @@ pub fn clamp_inbox_insight_max_per_sync(value: i64) -> i64 {
 }
 
 pub fn clamp_auto_agent_max_per_sync(value: i64) -> i64 {
-    value.clamp(1, 10)
+    value.clamp(MIN_AUTO_AGENT_MAX_PER_SYNC, MAX_AUTO_AGENT_MAX_PER_SYNC)
 }
 
 pub fn clamp_auto_agent_interval_minutes(value: i64) -> i64 {
