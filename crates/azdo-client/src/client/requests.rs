@@ -444,8 +444,10 @@ impl AdoClient {
         error.is_connect() || (idempotent && error.is_timeout())
     }
 
-    fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
+    pub(crate) fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
+        // A zero or past-dated Retry-After carries no usable wait; use backoff.
         retry_after
+            .filter(|delay| !delay.is_zero())
             .map(|delay| self.retry_policy.capped_retry_after(delay))
             .unwrap_or_else(|| self.retry_policy.backoff_delay(attempt))
     }
