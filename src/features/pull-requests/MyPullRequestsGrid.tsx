@@ -13,6 +13,7 @@ import { FilterAutocomplete } from "@/components/FilterAutocomplete";
 import { DockFilterBar, useDockFilter } from "@/components/DockFilterBar";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
+import { useColumnDrag } from "@/lib/columnDrag";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
@@ -134,11 +135,12 @@ export function MyPullRequestsGrid() {
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
   const [showDrafts, setShowDrafts] = useState(true);
-  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+  const { visibleColumns, toggleColumn, moveColumn, reorderColumn, resetColumns } = useColumnVisibility({
     keys: GRID_KEYS,
     requiredColumns: REQUIRED_COLUMNS,
     storageKey: VISIBLE_COLUMNS_STORAGE_KEY,
   });
+  const columnDrag = useColumnDrag(reorderColumn);
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -393,6 +395,7 @@ export function MyPullRequestsGrid() {
                   column={col}
                   sort={sort}
                   onSort={applySort}
+                  dragProps={columnDrag(col)}
                   resizeHandle={
                     i === shownColumns.length - 1 ? undefined : (
                       <ColumnResizeHandle {...columnResizeProps(col)} />
@@ -483,6 +486,7 @@ export function MyPullRequestsGrid() {
           visibleColumns={visibleColumns}
           requiredColumns={REQUIRED_COLUMNS}
           onToggle={toggleColumn}
+          onMove={moveColumn}
           onReset={() => {
             resetColumns();
             resetWidths();

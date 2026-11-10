@@ -41,14 +41,30 @@ fn clone_url(base_url: &str, project: &str, repository: &str) -> Option<String> 
 
 fn sync_clone(dir: &Path, url: &str, head: Option<&str>) -> Result<(), String> {
     if dir.exists() {
-        if !dir.join(MARKER).exists() {
+        let Ok(marker) = std::fs::read_to_string(dir.join(MARKER)) else {
             return Ok(());
+        };
+        // Folders are named by repository name alone, so a same-named
+        // repository of another project must not be given this checkout.
+        // Markers written before the URL was recorded carry no second line.
+        if let Some(owner) = marker.lines().nth(1).filter(|owner| *owner != url) {
+            return Err(format!("{} holds a clone of {owner}", dir.display()));
         }
     } else {
         let target = dir.to_string_lossy();
-        git(None, &["clone", "--depth", "1", url, &target])?;
-        std::fs::write(dir.join(MARKER), "Shallow clone made by DevDeck.\n")
-            .map_err(|e| e.to_string())?;
+        let cloned = git(None, &["clone", "--depth", "1", url, &target]).and_then(|()| {
+            std::fs::write(
+                dir.join(MARKER),
+                format!("Shallow clone made by DevDeck.\n{url}\n"),
+            )
+            .map_err(|e| e.to_string())
+        });
+        if let Err(error) = cloned {
+            // A killed clone leaves a half-made folder that would later pass
+            // for the user's own clone and never be refreshed.
+            let _ = std::fs::remove_dir_all(dir);
+            return Err(error);
+        }
     }
     if let Some(head) = head {
         git(Some(dir), &["fetch", "--depth", "1", "origin", head])?;
@@ -160,5 +176,27 @@ mod tests {
         std::fs::create_dir_all(&users).unwrap();
         sync_clone(&users, &url, Some(&second)).unwrap();
         assert!(std::fs::read_dir(&users).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn a_clone_of_another_repository_is_not_reused_and_a_failed_clone_leaves_nothing() {
+        let root = tempfile::tempdir().unwrap();
+        let origin = root.path().join("origin");
+        std::fs::create_dir(&origin).unwrap();
+        run(&origin, &["init", "-q", "-b", "main"]);
+        let head = commit(&origin, "a.txt");
+        let url = format!(
+            "file:///{}",
+            origin.display().to_string().replace('\\', "/")
+        );
+
+        let ours = root.path().join("ws").join("repo");
+        sync_clone(&ours, &url, Some(&head)).unwrap();
+        let error = sync_clone(&ours, "file:///elsewhere/repo", Some(&head)).unwrap_err();
+        assert!(error.contains(&url), "{error}");
+
+        let missing = root.path().join("ws").join("missing");
+        assert!(sync_clone(&missing, "file:///nowhere/none", None).is_err());
+        assert!(!missing.exists());
     }
 }

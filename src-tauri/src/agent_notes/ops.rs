@@ -181,6 +181,12 @@ pub(crate) fn trash_note(
             let trash = dir.join(TRASH_DIR);
             fs::create_dir_all(&trash)?;
             fs::rename(&path, trash.join(note_id))?;
+            // Renaming keeps the old mtime, which `purge_old_trash` reads as the
+            // deletion time; stamp it now so the undo window starts at deletion.
+            fs::File::options()
+                .write(true)
+                .open(trash.join(note_id))?
+                .set_modified(SystemTime::now())?;
         }
     }
     Ok(())

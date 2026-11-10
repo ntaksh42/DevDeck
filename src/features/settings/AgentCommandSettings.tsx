@@ -8,6 +8,11 @@ import {
   type AgentKind,
 } from '@/lib/azdoCommands';
 import { settingsInput } from './settingsHelpers';
+import {
+  AUTO_AGENT_MAX_PER_SYNC_MAX,
+  AUTO_AGENT_MAX_PER_SYNC_MIN,
+  DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
+} from '@/lib/reviewSettings';
 
 // The shell command behind "Run agent" on a result's agent notes.
 
@@ -44,7 +49,7 @@ export function AgentCommandSettings() {
   const [insightModel, setInsightModel] = useState("");
   const [insightMax, setInsightMax] = useState(3);
   const [autoAgent, setAutoAgent] = useState(false);
-  const [autoAgentMax, setAutoAgentMax] = useState(3);
+  const [autoAgentMax, setAutoAgentMax] = useState(DEFAULT_AUTO_AGENT_MAX_PER_SYNC);
   const [autoAgentInterval, setAutoAgentInterval] = useState(15);
   const [autoPipelines, setAutoPipelines] = useState(false);
   const [autoApproval, setAutoApproval] = useState(false);
@@ -81,7 +86,7 @@ export function AgentCommandSettings() {
   ]);
   useEffect(() => {
     setAutoAgent(settingsQuery.data?.autoAgentEnabled ?? false);
-    setAutoAgentMax(settingsQuery.data?.autoAgentMaxPerSync ?? 3);
+    setAutoAgentMax(settingsQuery.data?.autoAgentMaxPerSync ?? DEFAULT_AUTO_AGENT_MAX_PER_SYNC);
     setAutoAgentInterval(settingsQuery.data?.autoAgentIntervalMinutes ?? 15);
   }, [
     settingsQuery.data?.autoAgentEnabled,
@@ -299,10 +304,10 @@ export function AgentCommandSettings() {
             <span className="text-sm font-medium">Items per check</span>
             <input
               type="number"
-              min={1}
-              max={10}
+              min={AUTO_AGENT_MAX_PER_SYNC_MIN}
+              max={AUTO_AGENT_MAX_PER_SYNC_MAX}
               value={autoAgentMax}
-              onChange={(event) => setAutoAgentMax(Number(event.target.value) || 3)}
+              onChange={(event) => setAutoAgentMax(Number(event.target.value) || DEFAULT_AUTO_AGENT_MAX_PER_SYNC)}
               className={`${INPUT_CLASS} w-24`}
             />
           </label>

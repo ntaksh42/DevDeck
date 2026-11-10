@@ -96,6 +96,13 @@ pub(super) async fn process_item(
         }
         Ok(None) => return Ok(false),
         Err(error) => {
+            // A repeated preparation failure reports on the note of the last
+            // failed attempt instead of piling up a new note each time.
+            let previous_note = history
+                .runs
+                .last()
+                .filter(|r| r.status == Status::Failed)
+                .and_then(|r| r.note_id.clone());
             history.begin(
                 observed_range.0.or_else(|| history.reviewed_commit.clone()),
                 observed_range.1,
@@ -105,16 +112,33 @@ pub(super) async fn process_item(
             history.save(&path)?;
             // Preparation failures are visible and retryable too, even when
             // the model never started and no context could be assembled.
-            let note = create_note(
-                &service,
-                item,
-                "DevDeck automatic review: prepare the supplied material.",
-                None,
-            )?;
-            history.runs.last_mut().unwrap().note_id = Some(note.id.clone());
+            const MESSAGE: &str = "Automatic review could not collect its material. It will retry after a delay; details are in the auto-agent history.";
+            let reused = previous_note.filter(|id| {
+                automation::append_status(&service, item.target(), item.id(), id, MESSAGE, true)
+                    .is_ok()
+            });
+            let note_id = match reused {
+                Some(id) => id,
+                None => {
+                    let note = create_note(
+                        &service,
+                        item,
+                        "DevDeck automatic review: prepare the supplied material.",
+                        None,
+                    )?;
+                    automation::append_status(
+                        &service,
+                        item.target(),
+                        item.id(),
+                        &note.id,
+                        MESSAGE,
+                        true,
+                    )?;
+                    note.id
+                }
+            };
+            history.runs.last_mut().unwrap().note_id = Some(note_id);
             history.save(&path)?;
-            automation::append_status(&service, item.target(), item.id(), &note.id,
-                "Automatic review could not collect its material. It will retry after a delay; details are in the auto-agent history.", true)?;
             return Err(error);
         }
     };
@@ -408,20 +432,22 @@ async fn execute_attempt(
         })?
         .into_iter()
         .find(|n| n.id == note.id && n.status == "done");
+    // The agent is told to end a note with `resolved: 資料不足` and no result
+    // HTML when the material is not enough; that is partial coverage, not a failure.
+    let reported_insufficient = done
+        .as_ref()
+        .and_then(|n| n.resolved.as_deref())
+        .is_some_and(|r| r.contains("資料不足"));
     if error.is_none()
-        && (done.is_none()
-            || result_stamp(&material.folder, item)?.is_none()
-            || result_stamp(&material.folder, item)? == before)
+        && !reported_insufficient
+        && (done.is_none() || {
+            let after = result_stamp(&material.folder, item)?;
+            after.is_none() || after == before
+        })
     {
         error = Some("Agent did not finish the note and update its result HTML".into());
     }
-    let insufficient = material.document.contains("[Context truncated:")
-        || done
-            .as_ref()
-            .and_then(|n| n.resolved.as_deref())
-            .is_some_and(|r| {
-                r.contains("資料不足") || r.to_ascii_lowercase().contains("insufficient")
-            });
+    let insufficient = reported_insufficient || material.document.ends_with(context::TRUNCATED);
     let failed = error.is_some();
     history.finish(material.complete && !insufficient, error.clone(), exit_code);
     history.save(path)?;
@@ -433,6 +459,8 @@ async fn execute_attempt(
     if !material.complete || insufficient {
         automation::append_status(&service, item.target(), item.id(), &note.id,
             "Coverage is incomplete. The last fully reviewed commit is unchanged; the HTML records the omitted material.", true)?;
+    } else {
+        automation::discard(&service, item.target(), item.id(), &note.id)?;
     }
     Ok(())
 }
