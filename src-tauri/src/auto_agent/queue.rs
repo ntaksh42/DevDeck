@@ -9,6 +9,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
+use super::state::{History, Status};
 use super::{handled_check, pick, runner, AutoItem, BATCH_SLOT};
 use crate::agent_notes::launch::AgentKind;
 use crate::agent_notes::{self, NoteTarget};
@@ -108,8 +109,24 @@ pub(super) fn candidates(
     let handled = handled_check(&root, review_folder, work_item_folder);
     Ok(pick(prs, work_items, usize::MAX, Utc::now(), handled)
         .into_iter()
-        .filter(|item| !item.history_path(db, org).exists())
+        .filter(|item| awaits_pick(&item.history_path(db, org)))
         .collect())
+}
+
+/// An item without history waits for a pick. With approval on, automatic
+/// retries are off, so a failed attempt whose backoff has expired must come
+/// back to the queue instead of being stuck behind its history file.
+fn awaits_pick(history_path: &Path) -> bool {
+    if !history_path.exists() {
+        return true;
+    }
+    History::read(history_path).is_ok_and(|history| {
+        history
+            .runs
+            .last()
+            .is_some_and(|run| run.status == Status::Failed)
+            && history.due(Utc::now())
+    })
 }
 
 fn to_queue_item(org: &Organization, item: AutoItem, held: bool) -> AutoQueueItem {

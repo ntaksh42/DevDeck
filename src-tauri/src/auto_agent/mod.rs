@@ -308,3 +308,6 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod audit_tests;
