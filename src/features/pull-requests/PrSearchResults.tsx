@@ -132,6 +132,7 @@ export function PullRequestResults({
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight: virtualTotalHeight,
     scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: filteredResults.length,
@@ -369,7 +370,7 @@ export function PullRequestResults({
               </button>
             </div>
           ) : (
-            <>
+            <div style={{ minHeight: virtualTotalHeight }}>
               {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
               {virtualRows.map((pr, offset) => {
                 const index = firstVirtualRow + offset;
@@ -391,7 +392,7 @@ export function PullRequestResults({
                 );
               })}
               {virtualBottomPadding > 0 ? <div style={{ height: virtualBottomPadding }} /> : null}
-            </>
+            </div>
           )}
           </div>
           </div>

@@ -123,6 +123,7 @@ export function InboxListPane({
             </div>
           ) : (
             <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+              <div style={{ minHeight: virtual.totalHeight }}>
               {virtual.topPadding > 0 ? <div style={{ height: virtual.topPadding }} /> : null}
               {virtualRows.map((entry, offset) => {
                 const rowIndex = virtual.firstRow + offset;
@@ -143,6 +144,7 @@ export function InboxListPane({
                 );
               })}
               {virtual.bottomPadding > 0 ? <div style={{ height: virtual.bottomPadding }} /> : null}
+              </div>
             </div>
           )}
         </div>

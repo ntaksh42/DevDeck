@@ -268,6 +268,7 @@ export function useMyReviewsGrid({
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight: virtualTotalHeight,
     scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: reviewRows.length,
@@ -447,7 +448,7 @@ export function useMyReviewsGrid({
     query, queryClient, staleThresholdDays, snoozeMutation,
     // grid layout
     COLS, gridMinWidth, columnResizeProps, autoColumnWidths, resetColumnWidths, gridRef, scrollerRef,
-    virtualTopPadding, virtualBottomPadding, virtualRows,
+    virtualTopPadding, virtualBottomPadding, virtualTotalHeight, virtualRows,
     maximized, setMaximized,
     columnMenuRect, setColumnMenuRect,
     // filter / sort state

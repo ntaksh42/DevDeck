@@ -69,6 +69,7 @@ export function WiGridBody({
     lastRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight,
   } = useVirtualRowWindow(scroller, {
     rowCount: displayed.length,
     rowHeight: WI_GRID_ROW_HEIGHT,
@@ -127,6 +128,7 @@ export function WiGridBody({
       aria-label="Work items"
       data-primary-grid="true"
       tabIndex={-1}
+      style={{ minHeight: totalHeight }}
     >
       {virtualTopPadding > 0 ? (
         <div style={{ height: virtualTopPadding }} />

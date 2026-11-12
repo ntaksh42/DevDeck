@@ -156,6 +156,7 @@ export function NotificationsView({
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight: virtualTotalHeight,
     scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: entries.length,
@@ -404,6 +405,7 @@ export function NotificationsView({
             onKeyDown={handleKeyDown}
           >
             <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+              <div style={{ minHeight: virtualTotalHeight }}>
               {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
               {virtualEntries.map((entry) => {
                 if (entry.type === "header") {
@@ -439,6 +441,7 @@ export function NotificationsView({
                 );
               })}
               {virtualBottomPadding > 0 ? <div style={{ height: virtualBottomPadding }} /> : null}
+              </div>
             </div>
             {listQuery.hasNextPage ? (
               <div className="flex shrink-0 justify-center border-t border-border py-2">
