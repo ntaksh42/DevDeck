@@ -15,11 +15,14 @@ export default {
       fontFamily: {
         sans: ['"Hanken Grotesk Variable"', ...defaultTheme.fontFamily.sans],
       },
-      // Compact text sizes. rem-based (11px / 10px at the 15px root) so they
-      // follow the root font-size tiers in index.css, unlike `text-[11px]`.
+      // Compact text sizes. rem-based (12.5px / 12px / 11px at the 15px root)
+      // so they follow the root font-size tiers in index.css, unlike
+      // `text-[11px]`. `xs` is a notch above Tailwind's 0.75rem so the bulk of
+      // list and preview text stays at 12px or more.
       fontSize: {
-        "2xs": "0.7333rem",
-        "3xs": "0.6667rem",
+        xs: ["0.8333rem", { lineHeight: "1rem" }],
+        "2xs": "0.8rem",
+        "3xs": "0.7333rem",
       },
       colors: {
         border: "hsl(var(--border))",

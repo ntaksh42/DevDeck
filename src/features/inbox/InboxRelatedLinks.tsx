@@ -62,7 +62,7 @@ export function InboxRelatedLinks({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpandedFor(expanded ? null : itemId)}
-        className="rounded px-1 text-2xs text-primary hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
+        className="rounded px-1 text-2xs text-link hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
       >
         {expanded ? "▾" : "▸"} {summary}
       </button>

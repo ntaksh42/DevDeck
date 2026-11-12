@@ -961,8 +961,8 @@ format!(
   10% 透過面の上で 4.5:1 以上) に調整してあり、ステータス表示は `border-warning/30
   bg-warning/10 text-warning` のように 1 トークン + 透過度で書く (`bg-red-50 dark:bg-red-950`
   のようなライト/ダークの手書きペアは新規に増やさない)。`primary` は塗り色 (白文字で 4.5:1 以上)、
-  `link` は小さな文字用の青。小さな文字は `text-[11px]` ではなく `text-2xs` (11px) /
-  `text-3xs` (10px) を使う。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
+  `link` は小さな文字用の青。小さな文字は `text-[11px]` ではなく `text-xs` (12.5px) /
+  `text-2xs` (12px) / `text-3xs` (11px) を使う (ルート 15px のときの値)。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
   `index.css` の `:focus-visible` フォールバックが、自前のフォーカス表示 (`focus:ring-*`) を
   持たないコントロールにもテーマ色のリングを出す。
   OS の「視覚効果を減らす」設定 (`prefers-reduced-motion`) ではトランジションと pulse/ping を止める
@@ -1001,10 +1001,13 @@ format!(
   Azure DevOps が挿入する添付ファイル名に生の空白を含む画像 markdown (`![alt](url with space.png)`)
   は、空白をパーセントエンコードした上で画像として描画する。ファイル名内の対応する丸括弧も URL の
   一部として保持する (strict CommonMark は生空白でリンク先を打ち切るため、無変換だと生テキストとして漏れる)。
-- 表示の視認性 (`src/index.css` のトークン): 補助テキスト `--muted-foreground` は白背景で 6.6:1
-  (ダークで 9.6:1) を確保し、文字色に `text-muted-foreground/NN` のような透明度を重ねない。
-  文字サイズの下限は 11px (`text-[9px]` / `text-[10px]` は使わない)。ID などのリンク文字は
-  `text-link` (`--link`、白背景で 5.4:1) を使い、`primary` はボタン等の塗りに限る。
+- 表示の視認性 (`src/index.css` のトークン): 補助テキスト `--muted-foreground` は白背景で 10.2:1
+  (ダークで 10.8:1) を確保し、文字色に `text-muted-foreground/NN` のような透明度を重ねない
+  (件数 0 の Done / Snoozed などを薄く見せる `ListStatusBar` の `/80` だけ例外で、4.5:1 以上を保つ)。
+  文字サイズの下限は 11px (`text-[9px]` / `text-[10px]` は使わない)。キー表記の `text-3xs` を除き、
+  一覧とプレビューの文字は 12px 以上にする。ドックのタブ帯の高さは 28px
+  (`COLLAPSED_GROUP_HEIGHT`)。ID などのリンク文字は
+  `text-link` (`--link`、白背景で 6.3:1) を使い、`primary` はボタン等の塗りに限る。
   グリッド行の選択・複数選択・stale の見た目は `src/lib/gridRowState.ts` の `gridRowStateClass`
   に集約する: 選択は primary の薄い背景 + 左端 3px の primary バー、stale は背景を塗らず左端の
   オレンジバー + 経過日数の文字色 (`STALE_TEXT_CLASS`) で示し、選択の表示を常に優先する。

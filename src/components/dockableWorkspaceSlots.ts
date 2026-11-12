@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
 
 /** Height of a collapsed group: just its tab strip (`--dv-tabs-and-actions-container-height`). */
-export const COLLAPSED_GROUP_HEIGHT = 20;
+export const COLLAPSED_GROUP_HEIGHT = 28;
 
 /**
  * Per-panel header content, read by the (frozen-at-mount) header actions
