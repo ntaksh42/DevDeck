@@ -51,7 +51,7 @@ describe("DockableWorkspace", () => {
 
     const dockview = document.querySelector(".dv-dockview");
     expect(getComputedStyle(dockview!).getPropertyValue("--dv-tabs-and-actions-container-height")).toBe(
-      "20px",
+      "28px",
     );
   });
 
@@ -61,7 +61,7 @@ describe("DockableWorkspace", () => {
 
     const dockview = document.querySelector(".dv-dockview");
     expect(getComputedStyle(dockview!).getPropertyValue("--dv-tabs-and-actions-container-height")).toBe(
-      "20px",
+      "28px",
     );
   });
 

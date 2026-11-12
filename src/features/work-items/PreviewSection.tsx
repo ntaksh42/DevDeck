@@ -38,7 +38,7 @@ export function PreviewControl({
     // rectangular outline overlapped this pill's border and label, so the
     // keyboard focus ring is drawn on the pill itself instead.
     <div className="group/pill inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-2 pr-1.5 has-[>div>*>button:focus-visible]:border-ring has-[>div>*>button:focus-visible]:ring-1 has-[>div>*>button:focus-visible]:ring-ring">
-      <span className="shrink-0 text-[11px] font-medium leading-4 text-muted-foreground">
+      <span className="shrink-0 text-2xs font-medium leading-4 text-muted-foreground">
         {label}
       </span>
       <div className="flex min-w-0 items-center leading-4 [&>*>button:focus-visible]:outline-none">{children}</div>
@@ -68,7 +68,7 @@ export function PreviewField({
         wide ? "w-full" : "min-w-0"
       }`}
     >
-      <dt className="shrink-0 text-[11px] font-medium leading-4 text-muted-foreground">
+      <dt className="shrink-0 text-2xs font-medium leading-4 text-muted-foreground">
         {label}
       </dt>
       <dd

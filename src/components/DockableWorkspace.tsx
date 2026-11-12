@@ -24,7 +24,7 @@ import "dockview-react/dist/styles/dockview.css";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
-import { createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
+import { COLLAPSED_GROUP_HEIGHT, createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
 import { balanceListAndPreview, DEFAULT_LIST_SHARE, minRowWidth } from "./dockableWorkspaceLayout";
 import { resizeAdjacentBoundary } from "./dockableWorkspaceResize";
 import { PanelContent, type PanelContentParams } from "./DockablePanelContent";
@@ -619,7 +619,7 @@ export function DockableWorkspace({
       setDockReady(true);
       dockviewElementRef.current
         ?.querySelector<HTMLElement>(".dv-dockview")
-        ?.style.setProperty("--dv-tabs-and-actions-container-height", "20px");
+        ?.style.setProperty("--dv-tabs-and-actions-container-height", `${COLLAPSED_GROUP_HEIGHT}px`);
       const initialPanels = panelsRef.current;
 
       const saved = readStoredJson<SerializedDockview | undefined>(

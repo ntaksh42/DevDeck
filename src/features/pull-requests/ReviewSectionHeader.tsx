@@ -61,7 +61,7 @@ export function ReviewSectionHeader({ label, count, collapsed, preview, section,
         <span className="sr-only">(</span>{count}<span className="sr-only">)</span>
       </span>
       {collapsed && preview ? (
-        <span aria-hidden="true" className="ml-2 min-w-0 truncate whitespace-nowrap font-normal opacity-70">
+        <span aria-hidden="true" className="ml-2 min-w-0 truncate whitespace-nowrap font-normal opacity-80">
           {preview}
         </span>
       ) : null}

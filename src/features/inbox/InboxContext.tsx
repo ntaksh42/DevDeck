@@ -30,7 +30,7 @@ function ExpandToggle({ expanded, onToggle, label }: { expanded: boolean; onTogg
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className="rounded px-1 text-2xs text-primary hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
+      className="rounded px-1 text-2xs text-link hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
     >
       {expanded ? "▾" : "▸"} {label} <Kbd>D</Kbd>
     </button>
