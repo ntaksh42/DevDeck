@@ -16,6 +16,7 @@ import {
 } from './workItemsGridHelpers';
 import { gridRowStateClass } from '@/lib/gridRowState';
 import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
+import { AgentResultMark } from '@/components/agent-notes/AgentResultMark';
 
 // Reactively reads the row color rules and refreshes when they change in
 // Settings or another tab (mirrors useKeybindings in App.tsx).
@@ -104,6 +105,7 @@ export const WorkItemGridRow = forwardRef<
               : undefined
           }
         >
+          {isTitle ? <AgentResultMark target="work-item" itemId={item.id} /> : null}
           {isTitle && unread ? (
             <span
               role="img"

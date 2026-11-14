@@ -171,6 +171,7 @@ pub fn run() {
             commands::settings::update_app_settings,
             commands::settings::get_review_result_preview,
             commands::settings::get_work_item_result_preview,
+            commands::settings::list_result_item_ids,
             commands::agent_notes::list_agent_notes,
             commands::agent_notes::create_agent_note,
             commands::agent_notes::delete_agent_note,

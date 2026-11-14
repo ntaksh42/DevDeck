@@ -246,6 +246,13 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     で依頼先のモデル・エージェント、さらに戻ると文脈チップへ (上記)。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
     フォーカスで広がる。`Ctrl+Enter` で送信し、空のまま `Esc` で畳むと、会話一覧なら選択中の行、会話なら本文の領域へ戻る。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
   - **通知**: `useAgentNoteWatcher` は `ask` の要約も監視し、依頼への返信をデスクトップ通知する (クリックでパネルを開く)。
+- **AI の結果がある行の印**: My Reviews と作業項目グリッド (My Work Items / Work Item Views / Work Item Search) は、
+  結果 HTML がある行の Title の先頭に ☑ アイコン (`AgentResultMark`、ツールチップは `AI review result available` /
+  `AI investigation result available`) を出す。判定は `list_result_item_ids` (`target` = `pull-request` / `work-item`) が返す ID の一覧で行う。
+  このコマンドは結果フォルダのファイル名を 1 回走査し、Result タブの照合 (`review_result_folder_path` /
+  `work_item_result_folder_path` の規則) と同じ規則で ID を取り出す。フォルダが未設定か存在しなければ空の一覧を返し、印を出さない。
+  結果ファイルはエージェントが DevDeck の外で書くため、一覧は 15 秒ごとに取り直す (対象ごとに 1 クエリを全行で共有し、
+  Azure DevOps の API は呼ばない)。印は有無だけを示し、未読や実行中・失敗は区別しない (実行状況は Agent Work で見る)。
 - **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
   PR (My Reviews / PR Search) の Result タブ (レビュー結果 HTML) に、調査・レビューを行う外部 AI
   エージェント向けのコメントを残せる (UI は共通の `AgentResultPanel`)。保存先はアプリデータフォルダ (SQLite と同じ

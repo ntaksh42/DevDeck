@@ -289,6 +289,14 @@ export async function getWorkItemResultPreview(
   return workItemResultPreviewSchema.nullable().parse(result);
 }
 
+export type ResultTarget = "pull-request" | "work-item";
+
+/** Ids of the pull requests / work items that have a result HTML file. */
+export async function listResultItemIds(target: ResultTarget): Promise<number[]> {
+  const result = await invokeCommand("list_result_item_ids", { input: { target } });
+  return z.array(z.number()).parse(result);
+}
+
 export async function addPatOrganization(
   input: AddPatOrganizationInput,
 ): Promise<Organization> {

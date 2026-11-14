@@ -18,6 +18,7 @@ import type {
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
   GetWorkItemResultPreviewInput,
+  ResultTarget,
   ListPullRequestChangesInput,
   ListWorkItemFieldAllowedValuesInput,
   ListWorkItemFieldsInput,
@@ -50,6 +51,7 @@ import {
   applyDemoSettingsUpdate,
   demoDiagnosticsExport,
   demoOrganization,
+  demoResultItemIds,
   demoReviewResultPreview,
   demoWorkItemResultPreview,
   DEMO_PREVIEW_IMAGE_DATA_URL,
@@ -166,6 +168,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         demoSettings.workItemResultFolderPath,
         input?.workItemId,
       );
+    }
+    case "list_result_item_ids": {
+      const target = (args as { input?: { target?: ResultTarget } } | undefined)?.input?.target;
+      const folder =
+        target === "pull-request"
+          ? demoSettings.reviewResultFolderPath
+          : demoSettings.workItemResultFolderPath;
+      return demoResultItemIds(folder, target);
     }
     case "export_diagnostics": {
       const input = (args as { input?: ExportDiagnosticsInput } | undefined)?.input;

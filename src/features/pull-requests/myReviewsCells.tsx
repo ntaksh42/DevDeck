@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { ReviewPullRequestSummary } from '@/lib/azdoCommands';
 import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
+import { AgentResultMark } from '@/components/agent-notes/AgentResultMark';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { STALE_TEXT_CLASS } from '@/lib/gridRowState';
@@ -124,6 +125,7 @@ export function renderPrCell(
     case 'title':
       return (
         <div className="flex min-w-0 items-center gap-1.5">
+          <AgentResultMark target="pull-request" itemId={pr.pullRequestId} />
           {returned ? (
             <span
               className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-2xs font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"

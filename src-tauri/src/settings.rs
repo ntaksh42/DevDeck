@@ -95,6 +95,19 @@ pub struct GetWorkItemResultPreviewInput {
     pub work_item_id: i64,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ResultTarget {
+    PullRequest,
+    WorkItem,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListResultItemIdsInput {
+    pub target: ResultTarget,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportDiagnosticsInput {
@@ -361,6 +374,23 @@ impl SettingsService {
             file_path: file_path.display().to_string(),
             content,
         }))
+    }
+
+    /// Ids of the items that have a result file, for the grid marks. A folder
+    /// that is not set or does not exist yields no ids rather than an error.
+    pub fn result_item_ids(&self, input: ListResultItemIdsInput) -> Result<Vec<i64>> {
+        let settings = self.db.get_app_settings()?;
+        let folder_path = match input.target {
+            ResultTarget::PullRequest => settings.review_result_folder_path,
+            ResultTarget::WorkItem => settings.work_item_result_folder_path,
+        };
+        let Some(folder) = folder_path.map(PathBuf::from).filter(|path| path.is_dir()) else {
+            return Ok(Vec::new());
+        };
+        match input.target {
+            ResultTarget::PullRequest => result_files::list_review_result_ids(&folder),
+            ResultTarget::WorkItem => result_files::list_work_item_result_ids(&folder),
+        }
     }
 
     pub fn work_item_result_preview(

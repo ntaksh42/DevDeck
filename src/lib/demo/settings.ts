@@ -352,6 +352,19 @@ export function demoDiagnosticsExport(
   };
 }
 
+const DEMO_REVIEW_RESULT_IDS = [101, 189];
+const DEMO_WORK_ITEM_RESULT_IDS = [118, 123];
+
+export function demoResultItemIds(
+  folderPath: string | null,
+  target: "pull-request" | "work-item" | undefined,
+): number[] {
+  if (!folderPath) {
+    return [];
+  }
+  return target === "pull-request" ? DEMO_REVIEW_RESULT_IDS : DEMO_WORK_ITEM_RESULT_IDS;
+}
+
 export function demoReviewResultPreview(
   folderPath: string | null,
   pullRequestId: number | undefined,
@@ -359,7 +372,7 @@ export function demoReviewResultPreview(
   if (!folderPath || !pullRequestId) {
     return null;
   }
-  if (pullRequestId !== 101 && pullRequestId !== 189) {
+  if (!DEMO_REVIEW_RESULT_IDS.includes(pullRequestId)) {
     return null;
   }
 
@@ -400,7 +413,7 @@ export function demoWorkItemResultPreview(
   if (!folderPath || !workItemId) {
     return null;
   }
-  if (workItemId !== 123 && workItemId !== 118) {
+  if (!DEMO_WORK_ITEM_RESULT_IDS.includes(workItemId)) {
     return null;
   }
 
