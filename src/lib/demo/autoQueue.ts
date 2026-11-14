@@ -1,5 +1,6 @@
 import type { AutoQueueItem, AutoQueuePreview, AutoQueueTarget } from "@/lib/azdoCommands";
 import { autoQueueKey } from "@/lib/azdoCommands";
+import { demoExcludedKeys } from "@/lib/demo/agentWork";
 
 // In-memory Auto queue for browser demo mode. Running only drops the picked
 // items from the list: there is no agent to start in the browser.
@@ -18,6 +19,7 @@ function item(
     id,
     title,
     scope,
+    scopeId: scope,
     webUrl: null,
     createdDate,
   };
@@ -32,7 +34,8 @@ let queue: AutoQueueItem[] = [
 ];
 
 export function demoListAutoQueue(): AutoQueueItem[] {
-  return queue.map((entry) => ({ ...entry }));
+  const excluded = demoExcludedKeys();
+  return queue.filter((entry) => !excluded.has(autoQueueKey(entry))).map((entry) => ({ ...entry }));
 }
 
 export function demoAutoQueuePreview(target: AutoQueueTarget): AutoQueuePreview {

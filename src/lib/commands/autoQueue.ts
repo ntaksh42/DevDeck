@@ -14,6 +14,7 @@ const autoQueueItemSchema = z.object({
   id: z.number().int(),
   title: z.string(),
   scope: z.string(),
+  scopeId: z.string().default(""),
   webUrl: z.string().nullable().default(null),
   createdDate: z.string().nullable().default(null),
 });

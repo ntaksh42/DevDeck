@@ -14,7 +14,7 @@ const VIEW_TITLES: Record<View, string> = {
   pipelines: "Pipelines",
   notifications: "Notifications",
   inbox: "Inbox",
-  autoQueue: "Agent Auto Queue",
+  autoQueue: "Agent Work",
   crossOrgSummary: "Cross-organization summary",
   settings: "Settings",
 };
@@ -42,7 +42,7 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   pipelines: "Azure DevOps build runs by project",
   notifications: "History of review requests, work item updates, and pipeline alerts",
   inbox: "Mentions and replies that need your response",
-  autoQueue: "Choose which reviews and investigations the agent runs",
+  autoQueue: "What the agent is reviewing and investigating, what failed, and its results",
   crossOrgSummary: "Reviews and work items totalled across every connection",
   settings: "Local Azure DevOps organization setup",
 };

@@ -46,9 +46,9 @@ export const InboxView = lazy(() =>
     default: m.InboxView,
   })),
 );
-export const AutoQueueView = lazy(() =>
-  import("@/features/auto-queue/AutoQueueView").then((m) => ({
-    default: m.AutoQueueView,
+export const AgentWorkView = lazy(() =>
+  import("@/features/auto-queue/AgentWorkView").then((m) => ({
+    default: m.AgentWorkView,
   })),
 );
 export const NotificationsView = lazy(() =>

@@ -398,7 +398,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             active={activeView === "autoQueue"}
             disabled={organizationsLength === 0}
             icon={<Bot className="h-4 w-4" aria-hidden="true" />}
-            label="Agent Auto Queue"
+            label="Agent Work"
             onClick={() => onNavigate("autoQueue")}
           />
         </div>

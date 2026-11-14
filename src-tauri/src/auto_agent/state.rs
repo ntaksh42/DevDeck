@@ -15,6 +15,9 @@ pub(super) const TIMEOUT_SECS: u64 = 30 * 60;
 pub(super) struct History {
     pub reviewed_commit: Option<String>,
     pub runs: Vec<Run>,
+    /// Set by "Retry now" in Agent Work: the next attempt skips the backoff.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retry_requested: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -69,18 +72,26 @@ impl History {
         };
         match last.status {
             Status::Running => now >= last.started_at + Duration::seconds(TIMEOUT_SECS as i64),
-            Status::Failed => {
-                let failures = self
-                    .runs
-                    .iter()
-                    .rev()
-                    .take_while(|r| r.status == Status::Failed)
-                    .count();
-                let seconds = (300_i64 * (1_i64 << failures.saturating_sub(1).min(4))).min(3600);
-                now >= last.finished_at.unwrap_or(last.started_at) + Duration::seconds(seconds)
-            }
+            Status::Failed => self.retry_requested || self.retry_at().is_none_or(|at| now >= at),
             _ => true,
         }
+    }
+
+    /// How many attempts in a row ended in failure, latest first.
+    pub fn failures(&self) -> usize {
+        self.runs
+            .iter()
+            .rev()
+            .take_while(|r| r.status == Status::Failed)
+            .count()
+    }
+
+    /// When a failed item may be tried again (5, 10, 20, 40, then 60 minutes).
+    pub fn retry_at(&self) -> Option<DateTime<Utc>> {
+        let last = self.runs.last().filter(|r| r.status == Status::Failed)?;
+        let failures = self.failures();
+        let seconds = (300_i64 * (1_i64 << failures.saturating_sub(1).min(4))).min(3600);
+        Some(last.finished_at.unwrap_or(last.started_at) + Duration::seconds(seconds))
     }
 
     pub fn needs_review(&self, head: &str) -> bool {
@@ -91,6 +102,7 @@ impl History {
     }
 
     pub fn begin(&mut self, base: Option<String>, head: Option<String>, now: DateTime<Utc>) {
+        self.retry_requested = false;
         // An app restart may have interrupted the previous run. Never advance
         // its reviewed commit merely because its lease expired.
         if let Some(last) = self.runs.last_mut().filter(|r| r.status == Status::Running) {

@@ -11,16 +11,19 @@ const item = (id: number, title: string) => ({
   id,
   title,
   scope: "repo",
+  scopeId: "repo-id",
   webUrl: null,
   createdDate: null,
 });
 
 const runAutoQueue = vi.fn();
+const setAgentWorkExcluded = vi.fn();
 vi.mock("@/lib/azdoCommands", async (original) => ({
   ...(await original<typeof import("@/lib/azdoCommands")>()),
   listAutoQueue: async () => [item(1, "First change"), item(2, "Second change")],
   getAutoQueuePreview: async () => ({ document: "## Changes", chars: 30000, estimatedTokens: 10000, unavailable: null }),
   runAutoQueue: (targets: unknown) => runAutoQueue(targets),
+  setAgentWorkExcluded: (target: unknown, excluded: boolean) => setAgentWorkExcluded(target, excluded),
 }));
 
 function mount() {
@@ -34,7 +37,8 @@ function mount() {
 beforeEach(() => {
   runAutoQueue.mockReset();
   runAutoQueue.mockResolvedValue(1);
-  window.localStorage.clear();
+  setAgentWorkExcluded.mockReset();
+  setAgentWorkExcluded.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
 
@@ -53,7 +57,7 @@ describe("AutoQueueView", () => {
     fireEvent.keyDown(list, { key: " " });
     fireEvent.keyDown(list, { key: "Enter", ctrlKey: true });
     await waitFor(() =>
-      expect(runAutoQueue).toHaveBeenCalledWith([{ organizationId: "org", target: "pull-request", id: 2, title: "Second change", scope: "repo", webUrl: null, createdDate: null, organizationName: "contoso" }]),
+      expect(runAutoQueue).toHaveBeenCalledWith([item(2, "Second change")]),
     );
   });
 
@@ -66,11 +70,12 @@ describe("AutoQueueView", () => {
     expect(screen.getByRole("option", { name: /Second change/ })).toBeTruthy();
   });
 
-  it("hides a skipped candidate and keeps focus on the list", async () => {
+  it("excludes a candidate from automatic runs and keeps focus on the list", async () => {
     mount();
     const list = await screen.findByRole("listbox", { name: "Auto queue candidates" });
-    fireEvent.keyDown(list, { key: "s" });
+    fireEvent.keyDown(list, { key: "x" });
     await waitFor(() => expect(screen.queryByRole("option", { name: /First change/ })).toBeNull());
+    expect(setAgentWorkExcluded).toHaveBeenCalledWith(item(1, "First change"), true);
     expect(screen.getByRole("option", { name: /Second change/ })).toBeTruthy();
     expect(document.activeElement).toBe(list);
   });

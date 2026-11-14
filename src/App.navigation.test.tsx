@@ -86,8 +86,8 @@ describe("App — Navigation", () => {
     fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
     expect(await main.findByRole("heading", { name: "Work Items Search" })).toBeTruthy();
 
-    fireEvent.click(nav.getByRole("button", { name: "Agent Auto Queue" }));
-    expect(await main.findByRole("heading", { name: "Agent Auto Queue" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Agent Work" }));
+    expect(await main.findByRole("heading", { name: "Agent Work" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
@@ -170,10 +170,10 @@ describe("App — Navigation", () => {
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
-    fireEvent.click(nav.getByRole("button", { name: "Agent Auto Queue" }));
-    expect(await main.findByRole("heading", { name: "Agent Auto Queue" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Agent Work" }));
+    expect(await main.findByRole("heading", { name: "Agent Work" })).toBeTruthy();
 
-    // Back: Agent Auto Queue -> Work Item Views -> My Reviews.
+    // Back: Agent Work -> Work Item Views -> My Reviews.
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
@@ -226,7 +226,7 @@ describe("App — Navigation", () => {
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "a" });
-    expect(await main.findByRole("heading", { name: "Agent Auto Queue" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Agent Work" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "r" });

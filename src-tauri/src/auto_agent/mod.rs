@@ -18,6 +18,7 @@ mod diffs;
 pub(crate) mod queue;
 mod runner;
 mod state;
+pub(crate) mod work;
 
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, HashSet};
@@ -280,6 +281,9 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
         folder_path(&settings.work_item_result_folder_path),
     );
     let mut items = batch_items(db, org, prs, work_items, handled);
+    // Items excluded in Agent Work are never started automatically.
+    let excluded = work::excluded_keys(db);
+    items.retain(|item| !excluded.contains(&work::key(&org.id, item.target(), item.id())));
     // Never-attempted and least-recently-attempted items get their turn before
     // repeatedly failing entries can consume the same first slots forever.
     items.sort_by_key(|item| {
@@ -296,6 +300,7 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
         if !db.get_app_settings()?.auto_agent_enabled {
             break;
         }
+        work::remember(db, org, &item);
         match runner::process_item(db, settings, org, &item, None, None).await {
             Ok(true) => attempted += 1,
             Ok(false) => (),

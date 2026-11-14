@@ -35,7 +35,7 @@ describe("keybindings registry", () => {
     expect(resolveKeybindings()).toEqual(defaultKeybindingMap());
   });
 
-  it("uses A for Agent Auto Queue and ignores retired Analyze overrides", () => {
+  it("uses A for Agent Work and ignores retired Analyze overrides", () => {
     window.localStorage.setItem(KEYBINDINGS_STORAGE_KEY, JSON.stringify({ gotoAnalyze: "Z" }));
     expect(resolveKeybindings().gotoAutoQueue).toBe("A");
     expect(loadKeybindingOverrides()).toEqual({});

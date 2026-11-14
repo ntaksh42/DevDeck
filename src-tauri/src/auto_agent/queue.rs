@@ -30,6 +30,8 @@ pub struct AutoQueueItem {
     pub title: String,
     /// Repository of a pull request, project of a work item.
     pub scope: String,
+    /// Repository ID of a pull request, project ID of a work item.
+    pub scope_id: String,
     pub web_url: Option<String>,
     pub created_date: Option<String>,
 }
@@ -98,19 +100,22 @@ pub(super) fn candidates(
         None => Vec::new(),
     };
     let handled = handled_check(&root, review_folder, work_item_folder);
+    let excluded = super::work::excluded_keys(db);
     Ok(pick(prs, work_items, usize::MAX, Utc::now(), handled)
         .into_iter()
         .filter(|item| !item.history_path(db, org).exists())
+        .filter(|item| !excluded.contains(&super::work::key(&org.id, item.target(), item.id())))
         .collect())
 }
 
 fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
-    let (target, id, title, scope, web_url, created_date) = match item {
+    let (target, id, title, scope, scope_id, web_url, created_date) = match item {
         AutoItem::PullRequest(pr) => (
             "pull-request",
             pr.pull_request_id,
             pr.title,
             pr.repository_name,
+            pr.repository_id,
             pr.web_url,
             Some(pr.creation_date),
         ),
@@ -119,6 +124,7 @@ fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
             wi.id,
             wi.title,
             wi.project_name,
+            wi.project_id,
             wi.web_url,
             wi.changed_date,
         ),
@@ -130,6 +136,7 @@ fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
         id,
         title,
         scope,
+        scope_id,
         web_url,
         created_date,
     }
@@ -153,7 +160,7 @@ pub(super) fn ensure_unique_number(
 }
 
 /// Finds the cached item behind a target; it may be gone since the list was drawn.
-fn find(db: &AppDatabase, target: &AutoQueueTarget) -> Result<(Organization, AutoItem)> {
+pub(super) fn find(db: &AppDatabase, target: &AutoQueueTarget) -> Result<(Organization, AutoItem)> {
     let org = db
         .get_organization(&target.organization_id)?
         .ok_or_else(|| AppError::InvalidInput("organization not found".to_string()))?;
@@ -298,7 +305,7 @@ pub fn run_work_items(
     Ok(count)
 }
 
-fn spawn_runs(
+pub(super) fn spawn_runs(
     db: &AppDatabase,
     settings: AppSettings,
     picked: Vec<(Organization, AutoItem)>,
@@ -307,6 +314,10 @@ fn spawn_runs(
     focus: Option<String>,
 ) {
     let db = db.clone();
+    // Agent Work lists the picks as waiting until their turn comes.
+    for (org, item) in &picked {
+        super::work::enqueue(org, item);
+    }
     tauri::async_runtime::spawn(async move {
         let Ok(_slot) = BATCH_SLOT.acquire().await else {
             return;
@@ -321,9 +332,12 @@ fn spawn_runs(
             let (db, settings, focus) = (db.clone(), settings.clone(), focus.clone());
             handles.push(tauri::async_runtime::spawn(async move {
                 let _permit = permit;
+                super::work::mark_started(&org, &item);
+                super::work::remember(&db, &org, &item);
                 if let Err(e) = runner::process_item(&db, &settings, &org, &item, agent, focus).await {
                     tracing::warn!(org = %org.name, id = item.id(), error = ?e, "auto queue: failed to start");
                 }
+                super::work::dequeue(&org, &item);
             }));
         }
         for handle in handles {

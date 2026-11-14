@@ -6,6 +6,7 @@ import {
   getAutoQueuePreview,
   listAutoQueue,
   runAutoQueue,
+  setAgentWorkExcluded,
   type AutoQueueItem,
   type AutoQueueTarget,
 } from "@/lib/azdoCommands";
@@ -13,7 +14,6 @@ import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { pushToast } from "@/lib/toast";
 import { clamp } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
-import { addSkipped, clearSkipped, loadSkipped } from "./autoQueueSkipped";
 
 const QUEUE_KEY = ["autoQueue"];
 
@@ -30,7 +30,6 @@ function ageLabel(createdDate: string | null): string {
 
 export function AutoQueueView() {
   const queryClient = useQueryClient();
-  const [skipped, setSkipped] = useState<string[]>(loadSkipped);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -52,11 +51,8 @@ export function AutoQueueView() {
 
   const items = useMemo(
     () =>
-      (queueQuery.data ?? []).filter((item) => {
-        const key = autoQueueKey(item);
-        return !skipped.includes(key) && !started.includes(key);
-      }),
-    [queueQuery.data, skipped, started],
+      (queueQuery.data ?? []).filter((item) => !started.includes(autoQueueKey(item))),
+    [queueQuery.data, started],
   );
   const focused = items.find((item) => autoQueueKey(item) === focusKey) ?? items[0] ?? null;
   const focusedIndex = focused ? items.indexOf(focused) : -1;
@@ -89,13 +85,25 @@ export function AutoQueueView() {
     if (selected.length > 0 && !runMutation.isPending) runMutation.mutate(selected);
   }, [selected, runMutation]);
 
-  const skip = useCallback(() => {
+  // Excluded items leave this list and are never started automatically; the
+  // Excluded tab of Agent Work includes them again.
+  const excludeMutation = useMutation({
+    mutationFn: (targets: AutoQueueItem[]) => Promise.all(targets.map((item) => setAgentWorkExcluded(item, true))),
+    onSuccess: (_, targets) => {
+      pushToast(`${targets.length} excluded from automatic runs.`);
+      setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
+      setChecked(new Set());
+      void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["agentWork"] });
+    },
+    onError: (error) => pushToast(commandErrorMessage(error)),
+  });
+
+  const exclude = useCallback(() => {
     listRef.current?.focus();
     const targets = selected.length > 0 ? selected : focused ? [focused] : [];
-    if (targets.length === 0) return;
-    setSkipped((current) => addSkipped(current, targets));
-    setChecked(new Set());
-  }, [selected, focused]);
+    if (targets.length > 0 && !excludeMutation.isPending) excludeMutation.mutate(targets);
+  }, [selected, focused, excludeMutation]);
 
   const toggle = useCallback((item: AutoQueueItem) => {
     setChecked((current) => {
@@ -139,9 +147,9 @@ export function AutoQueueView() {
       case "A":
         setChecked(selected.length === items.length ? new Set() : new Set(items.map(autoQueueKey)));
         break;
-      case "s":
-      case "S":
-        skip();
+      case "x":
+      case "X":
+        exclude();
         break;
       default:
         return;
@@ -158,30 +166,22 @@ export function AutoQueueView() {
   return (
     <div className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-3 py-1.5 text-sm">
-        <h1 className="font-semibold">Auto queue</h1>
+        <h1 className="font-semibold">Candidates</h1>
         <span className="text-muted-foreground">
-          {items.length} waiting · {selected.length} selected
+          {items.length} not run yet · {selected.length} selected
           {totalTokens !== null && ` · focused ≈ ${formatTokens(totalTokens)}`}
         </span>
         <span className="text-xs text-muted-foreground">
-          Run candidates manually here. Eligible items also run automatically when enabled in Settings. Skipping only hides items from this list.
+          Run candidates manually here. Eligible items also run automatically when enabled in Settings.
         </span>
         <span className="flex-1" />
         <button
           type="button"
           className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
-          onClick={() => setSkipped(clearSkipped())}
-          disabled={skipped.length === 0}
+          onClick={exclude}
+          disabled={items.length === 0 || excludeMutation.isPending}
         >
-          Show skipped ({skipped.length})
-        </button>
-        <button
-          type="button"
-          className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
-          onClick={skip}
-          disabled={items.length === 0}
-        >
-          Skip <kbd className="text-muted-foreground">S</kbd>
+          Exclude <kbd className="text-muted-foreground">X</kbd>
         </button>
         <button
           type="button"
@@ -275,7 +275,7 @@ export function AutoQueueView() {
         <span>↑↓ move</span>
         <span>Space select</span>
         <span>A select all</span>
-        <span>S skip</span>
+        <span>X exclude from automatic runs</span>
         <span>Ctrl+Enter run selected</span>
       </div>
     </div>

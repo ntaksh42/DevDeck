@@ -68,7 +68,7 @@ async fn failed_process_keeps_baseline_and_records_error_and_log() {
     let path = root.path().join("runs/pr-7.json");
     let mut history = History {
         reviewed_commit: Some("a".into()),
-        runs: Vec::new(),
+        ..History::default()
     };
     assert!(execute(
         &db,
