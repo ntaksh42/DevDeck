@@ -1,4 +1,4 @@
-use super::proposals::{prepare_post_in, record_posted_in, signature};
+use super::proposals::{prepare_post_in, record_posted_in};
 use super::*;
 use chrono::TimeZone;
 
@@ -48,14 +48,11 @@ fn proposals_are_parsed_as_post_replies() {
 }
 
 #[test]
-fn posting_signs_the_comment_and_records_it_once() {
+fn posting_keeps_the_text_and_records_it_once() {
     let temp = tempfile::tempdir().unwrap();
     setup(temp.path(), &["ここを直して", "もう一件"]);
     let prepared = prepare_post_in(temp.path(), input(1, false), false, at(0)).unwrap();
-    assert_eq!(
-        prepared.body,
-        format!("ここを直して\n\n{}", signature("Claude"))
-    );
+    assert_eq!(prepared.body, "ここを直して");
     assert!(prepare_post_in(temp.path(), input(1, false), false, at(0)).is_err());
     record_posted_in(temp.path(), prepared, "thread-9", at(1)).unwrap();
 
@@ -67,15 +64,6 @@ fn posting_signs_the_comment_and_records_it_once() {
     assert!(prepare_post_in(temp.path(), input(1, false), false, at(2)).is_err());
     // The other proposal is still postable.
     assert!(prepare_post_in(temp.path(), input(2, false), false, at(2)).is_ok());
-}
-
-#[test]
-fn a_signature_written_by_the_agent_is_not_doubled() {
-    let temp = tempfile::tempdir().unwrap();
-    let own = signature("Codex");
-    setup(temp.path(), &[&format!("本文\n\n{own}")]);
-    let prepared = prepare_post_in(temp.path(), input(1, false), false, at(0)).unwrap();
-    assert_eq!(prepared.body, format!("本文\n\n{}", signature("Claude")));
 }
 
 #[test]
