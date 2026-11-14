@@ -48,6 +48,20 @@ describe("AgentWorkView", () => {
     expect(within(active).getByRole("option", { name: /!99/ })).toBeTruthy();
   });
 
+  it("switches tabs with the arrows in the tab-strip segments and returns to the list with Enter", async () => {
+    mount();
+    await list("Needs attention");
+    const attentionTab = await screen.findByRole("tab", { name: /Needs attention/ });
+    attentionTab.focus();
+    fireEvent.keyDown(attentionTab, { key: "ArrowRight" });
+    const activeTab = await screen.findByRole("tab", { name: /^Active/, selected: true });
+    await waitFor(() => expect(document.activeElement).toBe(activeTab));
+    expect(within(await screen.findByRole("listbox", { name: "Active agent work" })).getByRole("option", { name: /!42/ })).toBeTruthy();
+
+    fireEvent.keyDown(activeTab, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Active agent work" })));
+  });
+
   it("retries a failed item with R", async () => {
     mount();
     const attention = await list("Needs attention");

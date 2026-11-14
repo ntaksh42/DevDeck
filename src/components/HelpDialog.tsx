@@ -226,6 +226,15 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Open the nth related link</span><kbd className={kbd}>1-9</kbd></div>
           <div className={row}><span>Filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
 
+          <p {...sectionProps("agent-work")}>Agent Work</p>
+          <div className={row}><span>Needs attention / Active / Results / Excluded / Candidates (or Tab to the segments in the tab strip and use the arrows; Enter returns to items)</span><kbd className={kbd}>1-5</kbd></div>
+          <div className={row}><span>Move row · show Result</span><kbd className={kbd}>↑ ↓ · Enter</kbd></div>
+          <div className={row}><span>Open in DevDeck / in Azure DevOps</span><kbd className={kbd}>O / Shift+O</kbd></div>
+          <div className={row}><span>Retry a failed item now</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Exclude from / include in automatic runs</span><kbd className={kbd}>X / U</kbd></div>
+          <div className={row}><span>Ask the agent (opens the Agent panel) · show the log</span><kbd className={kbd}>Q · L</kbd></div>
+          <div className={row}><span>Candidates: select / select all / exclude / run selected</span><kbd className={kbd}>Space / A / X / Ctrl+Enter</kbd></div>
+
           <p className={section}>Notifications</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Open / jump to item (marks read)</span><kbd className={kbd}>Enter</kbd></div>

@@ -7,8 +7,10 @@ import {
   Eye,
   EyeOff,
   MoreHorizontal,
+  Pencil,
   Pin,
   PinOff,
+  Play,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -26,6 +28,10 @@ export type ViewMenuActions = {
   onPreviewToggle: () => void;
   onMoveLeft: () => void;
   onMoveRight: () => void;
+  /** Edit and Run sit in the menu in the chip display so the header row stays short. */
+  canRun: boolean;
+  onEdit: () => void;
+  onRun: () => void;
 };
 
 type WorkItemViewsOverflowMenuProps = {
@@ -40,8 +46,9 @@ type WorkItemViewsOverflowMenuProps = {
 };
 
 // Low-frequency view actions (share/export/import/delete) collapsed behind a
-// "⋯" trigger so the toolbar leads with the controls used every time (layout,
-// pin, move, preview, edit, run, add). Keyboard-operable end to end: opens
+// "⋯" trigger so the toolbar leads with the controls used every time. In the
+// chip display Edit and Run join them (E / R still work from the list) so the
+// header row keeps only the chips, layout and Add. Keyboard-operable end to end: opens
 // focused on the first item, arrows move between items, Enter/Space activate,
 // Esc closes, and focus returns to the trigger on close.
 export function WorkItemViewsOverflowMenu({
@@ -205,7 +212,7 @@ function OverflowMenuPopup({
     "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
   const bottom = anchorRect ? anchorRect.bottom + 2 : 40;
   const right = anchorRect ? anchorRect.right : 240;
-  const top = Math.min(bottom, window.innerHeight - (viewActions ? 320 : 180));
+  const top = Math.min(bottom, window.innerHeight - (viewActions ? 380 : 180));
   const left = Math.max(8, Math.min(right - 224, window.innerWidth - 232));
 
   return (
@@ -219,6 +226,31 @@ function OverflowMenuPopup({
     >
       {viewActions ? (
         <>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!hasSelectedView}
+            aria-keyshortcuts="E"
+            onClick={() => runAndClose(viewActions.onEdit)}
+            className={itemClass}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            Edit view (E)
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!viewActions.canRun}
+            aria-keyshortcuts="R"
+            onClick={() => runAndClose(viewActions.onRun)}
+            className={itemClass}
+          >
+            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            Run all views (R)
+          </button>
+          <div className="my-1 border-t border-border" />
           <button
             type="button"
             role="menuitem"

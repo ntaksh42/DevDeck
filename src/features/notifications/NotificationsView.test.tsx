@@ -164,11 +164,11 @@ describe("NotificationsView toolbar and sections", () => {
     const group = screen.getByRole("group", { name: "Filter by notification category" });
     const buttons = within(group).getAllByRole("button");
     expect(buttons.map((button) => button.textContent)).toEqual([
-      "All10",
-      "PR3",
-      "Work item3",
-      "Pipeline3",
-      "Sync1",
+      "All 10",
+      "PR 3",
+      "Work item 3",
+      "Pipeline 3",
+      "Sync 1",
     ]);
 
     fireEvent.click(within(group).getByRole("button", { name: /^Sync/ }));

@@ -3,7 +3,7 @@
 export const OPEN_HELP_EVENT = "azdodeck:help:open";
 
 /** Help dialog sections a view can ask to be scrolled to. */
-export type HelpSection = "reviews" | "pr-search" | "work-items" | "pipelines" | "inbox";
+export type HelpSection = "reviews" | "pr-search" | "work-items" | "pipelines" | "inbox" | "agent-work";
 
 export function requestHelp(section?: HelpSection): void {
   window.dispatchEvent(new CustomEvent(OPEN_HELP_EVENT, { detail: { section } }));

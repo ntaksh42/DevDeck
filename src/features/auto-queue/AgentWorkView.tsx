@@ -13,10 +13,12 @@ import { pushToast } from "@/lib/toast";
 import { clamp, isEditableTarget } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
 import { AutoQueueView } from "./AutoQueueView";
 import { AgentWorkPreview, AgentWorkResult } from "./AgentWorkPreview";
 import { openEntryInApp, openEntryInBrowser } from "./AgentWorkLinks";
 import { agentWorkSubject, StatusBadge, TABS, timeLabel, type AgentWorkTab } from "./agentWorkStatus";
+import { AgentWorkTabs } from "./AgentWorkTabs";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { addSeen, loadSeen, seenKey } from "./agentWorkSeen";
 
@@ -91,6 +93,8 @@ export function AgentWorkView() {
     }
   }, []);
   useEffect(() => {
+    // Arrowing through the tab segments keeps focus there; 1-5 and clicks land on the list.
+    if (document.activeElement?.closest('[role="tablist"][aria-label="Agent work"]')) return;
     if (listRef.current) listRef.current.focus();
     else wantsFocusRef.current = true;
   }, [workQuery.isLoading, activeTab.id]);
@@ -163,92 +167,76 @@ export function AgentWorkView() {
   }
 
   const listPane = (
-    <div
-      ref={attachList}
-      data-primary-grid="true"
-      role="listbox"
-      aria-label={`${activeTab.label} agent work`}
-      tabIndex={0}
-      onKeyDown={onListKeyDown}
-      className="h-full min-h-0 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-primary"
-    >
-      {items.length === 0 && <PreviewEmptyState message="Nothing here." />}
-      {items.map((item) => {
-        const key = agentWorkKey(item);
-        const isFocused = focused !== null && key === agentWorkKey(focused);
-        const isUnread = item.status === "succeeded" && !seen.includes(seenKey(item));
-        return (
-          <div
-            key={key}
-            role="option"
-            aria-selected={isFocused}
-            onClick={() => {
-              setFocusKey(key);
-              focusList();
-            }}
-            className={`grid cursor-default grid-cols-[64px_24px_1fr_auto_64px] items-center gap-2 border-b border-border px-3 py-1 text-sm ${
-              isFocused ? "bg-primary/10 outline outline-2 -outline-offset-2 outline-primary" : ""
-            }`}
-          >
-            <StatusBadge status={item.status} />
-            <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
-              {item.target === "pull-request" ? "PR" : "WI"}
-            </span>
-            <span className={`truncate ${isUnread ? "font-semibold" : ""}`}>
-              <span className="text-muted-foreground tabular-nums">
-                {item.target === "pull-request" ? "!" : "#"}
-                {item.id}
-              </span>{" "}
-              {item.title}
-            </span>
-            <span className="max-w-32 truncate text-xs text-muted-foreground">{item.scope}</span>
-            <span className="text-right text-xs tabular-nums text-muted-foreground">
-              {item.status === "failed" && item.failures > 1
-                ? `${item.failures} tries`
-                : timeLabel(item.finishedAt ?? item.startedAt)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  const count = (tab: AgentWorkTab) => entries.filter(tab.matches).length;
-  return (
-    <div className="flex h-full min-h-0 flex-col" onKeyDown={onRootKeyDown}>
-      <div role="tablist" aria-label="Agent work" className="flex h-7 shrink-0 items-end gap-0.5 border-b border-border px-2">
-        {TABS.map((tab, index) => {
-          const selected = tab.id === activeTab.id;
-          const n = count(tab);
+    <div className="flex h-full min-h-0 flex-col">
+      <div
+        ref={attachList}
+        data-primary-grid="true"
+        role="listbox"
+        aria-label={`${activeTab.label} agent work`}
+        tabIndex={0}
+        onKeyDown={onListKeyDown}
+        className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      >
+        {items.length === 0 && <PreviewEmptyState message="Nothing here." />}
+        {items.map((item) => {
+          const key = agentWorkKey(item);
+          const isFocused = focused !== null && key === agentWorkKey(focused);
+          const isUnread = item.status === "succeeded" && !seen.includes(seenKey(item));
           return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-keyshortcuts={String(index + 1)}
-              title={`${tab.label} (${index + 1})`}
-              tabIndex={-1}
-              onClick={() => selectTab(index)}
-              className={`h-full border-b-2 px-2.5 text-xs ${
-                selected ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+            <div
+              key={key}
+              role="option"
+              aria-selected={isFocused}
+              onClick={() => {
+                setFocusKey(key);
+                focusList();
+              }}
+              className={`grid cursor-default grid-cols-[64px_24px_1fr_auto_64px] items-center gap-2 border-b border-border px-3 py-1 text-sm ${
+                isFocused ? "bg-primary/10 outline outline-2 -outline-offset-2 outline-primary" : ""
               }`}
             >
-              {tab.label}
-              {tab.id !== "candidates" ? (
-                <span className={`ml-1 tabular-nums ${tab.id === "attention" && n > 0 ? "font-bold text-destructive" : ""}`}>
-                  {n}
-                  {tab.id === "results" && unread > 0 ? ` (${unread} new)` : ""}
-                </span>
-              ) : null}
-            </button>
+              <StatusBadge status={item.status} />
+              <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
+                {item.target === "pull-request" ? "PR" : "WI"}
+              </span>
+              <span className={`truncate ${isUnread ? "font-semibold" : ""}`}>
+                <span className="text-muted-foreground tabular-nums">
+                  {item.target === "pull-request" ? "!" : "#"}
+                  {item.id}
+                </span>{" "}
+                {item.title}
+              </span>
+              <span className="max-w-32 truncate text-xs text-muted-foreground">{item.scope}</span>
+              <span className="text-right text-xs tabular-nums text-muted-foreground">
+                {item.status === "failed" && item.failures > 1
+                  ? `${item.failures} tries`
+                  : timeLabel(item.finishedAt ?? item.startedAt)}
+              </span>
+            </div>
           );
         })}
       </div>
+      <ListStatusBar
+        summary={[itemCount(items.length), activeTab.id === "results" && unread > 0 && `${unread} new`]}
+        helpSection="agent-work"
+      />
+    </div>
+  );
 
+  const tabs = (
+    <AgentWorkTabs
+      activeId={activeTab.id}
+      entries={entries}
+      unread={unread}
+      onSelect={selectTab}
+      onFocusList={focusList}
+    />
+  );
+  return (
+    <div className="flex h-full min-h-0 flex-col" onKeyDown={onRootKeyDown}>
       {activeTab.id === "candidates" ? (
         <div className="min-h-0 flex-1">
-          <AutoQueueView />
+          <AutoQueueView tabs={tabs} />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -256,7 +244,7 @@ export function AgentWorkView() {
             storageKey="azdodeck:agentWork:dockview:v1"
             activatePanel={resultRequest > 0 ? { id: "result", key: resultRequest } : undefined}
             panels={[
-              { id: "list", title: "Items", content: listPane, minWidth: 360 },
+              { id: "list", title: "Items", headerActions: tabs, content: listPane, minWidth: 420 },
               {
                 id: "details",
                 title: "Details",
@@ -277,22 +265,6 @@ export function AgentWorkView() {
           />
         </div>
       )}
-
-      <div className="flex shrink-0 flex-wrap gap-4 border-t border-border px-3 py-1 text-xs text-muted-foreground">
-        <span>1–5 tabs</span>
-        {activeTab.id === "candidates" ? null : (
-          <>
-            <span>↑↓ move</span>
-            <span>O open in DevDeck</span>
-            <span>Shift+O open in Azure DevOps</span>
-            <span>R retry failed</span>
-            <span>X exclude / U include</span>
-            <span>Q ask the agent</span>
-            <span>L log</span>
-            <span>Enter show Result</span>
-          </>
-        )}
-      </div>
     </div>
   );
 }

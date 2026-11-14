@@ -302,6 +302,9 @@ export function ViewsListPanel({
                   onPreviewToggle,
                   onMoveLeft,
                   onMoveRight,
+                  canRun: views.length > 0,
+                  onEdit: onEditOpen,
+                  onRun,
                 }
               : undefined
           }
@@ -313,25 +316,29 @@ export function ViewsListPanel({
           onImport={onImport}
           onDelete={onDelete}
         />
-        <button
-          type="button"
-          disabled={!selectedView}
-          onClick={onEditOpen}
-          aria-keyshortcuts="E"
-          title="Edit selected view (E)"
-          className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          disabled={views.length === 0}
-          onClick={onRun}
-          title="Run all views (R)"
-          className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
-        >
-          <Play className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
+        {chips ? null : (
+          <>
+            <button
+              type="button"
+              disabled={!selectedView}
+              onClick={onEditOpen}
+              aria-keyshortcuts="E"
+              title="Edit selected view (E)"
+              className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              disabled={views.length === 0}
+              onClick={onRun}
+              title="Run all views (R)"
+              className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </>
+        )}
         <button
           type="button"
           aria-keyshortcuts="N"

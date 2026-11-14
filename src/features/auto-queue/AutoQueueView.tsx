@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   autoQueueKey,
@@ -14,6 +14,7 @@ import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { pushToast } from "@/lib/toast";
 import { clamp } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
+import { ListStatusBar } from "@/components/ListStatusBar";
 
 const QUEUE_KEY = ["autoQueue"];
 
@@ -28,7 +29,8 @@ function ageLabel(createdDate: string | null): string {
   return days <= 0 ? "today" : `${days}d`;
 }
 
-export function AutoQueueView() {
+/** `tabs`: Agent Work's tab segments, shown at the start of the header row. */
+export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [focusKey, setFocusKey] = useState<string | null>(null);
@@ -166,12 +168,8 @@ export function AutoQueueView() {
   return (
     <div className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-3 py-1.5 text-sm">
-        <h1 className="font-semibold">Candidates</h1>
-        <span className="text-muted-foreground">
-          {items.length} not run yet · {selected.length} selected
-          {totalTokens !== null && ` · focused ≈ ${formatTokens(totalTokens)}`}
-        </span>
-        <span className="text-xs text-muted-foreground">
+        {tabs ?? <h1 className="font-semibold">Candidates</h1>}
+        <span className="truncate text-xs text-muted-foreground">
           Run candidates manually here. Eligible items also run automatically when enabled in Settings.
         </span>
         <span className="flex-1" />
@@ -271,13 +269,14 @@ export function AutoQueueView() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-4 border-t border-border px-3 py-1 text-xs text-muted-foreground">
-        <span>↑↓ move</span>
-        <span>Space select</span>
-        <span>A select all</span>
-        <span>X exclude from automatic runs</span>
-        <span>Ctrl+Enter run selected</span>
-      </div>
+      <ListStatusBar
+        summary={[
+          `${items.length} not run yet`,
+          `${selected.length} selected`,
+          totalTokens !== null && `focused ≈ ${formatTokens(totalTokens)}`,
+        ]}
+        helpSection="agent-work"
+      />
     </div>
   );
 }

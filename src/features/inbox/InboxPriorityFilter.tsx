@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { nextSegmentIndex, SEGMENT_GROUP, segmentClass } from "@/components/segmentedFilter";
 import type { InboxPriority } from "./inboxPresentation";
 
 const OPTIONS = [
@@ -17,7 +18,7 @@ export function InboxPriorityFilter({ value, counts, onChange, onFocusList }: {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
   return (
-    <div role="radiogroup" aria-label="Inbox priority" className="flex shrink-0 items-center overflow-hidden rounded border border-border">
+    <div role="radiogroup" aria-label="Inbox priority" className={SEGMENT_GROUP}>
       {OPTIONS.map((option, index) => (
         <button
           key={option.value}
@@ -30,23 +31,20 @@ export function InboxPriorityFilter({ value, counts, onChange, onFocusList }: {
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => {
             if (event.altKey || event.ctrlKey || event.metaKey) return;
-            let next: number;
-            if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % OPTIONS.length;
-            else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + OPTIONS.length - 1) % OPTIONS.length;
-            else if (event.key === "Home") next = 0;
-            else if (event.key === "End") next = OPTIONS.length - 1;
-            else if (event.key === "Enter" || event.key === "Escape") {
+            if (event.key === "Enter" || event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
               onFocusList();
               return;
-            } else return;
+            }
+            const next = nextSegmentIndex(event.key, index, OPTIONS.length);
+            if (next === null) return;
             event.preventDefault();
             event.stopPropagation();
             onChange(OPTIONS[next].value);
             buttons.current[next]?.focus();
           }}
-          className={`border-l border-border px-2 text-2xs leading-4 first:border-l-0 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring ${value === option.value ? "bg-primary font-semibold text-primary-foreground" : "bg-card text-muted-foreground hover:bg-secondary"}`}
+          className={segmentClass(value === option.value)}
         >
           {option.label} <span className="tabular-nums">{counts[option.value]}</span>
         </button>
