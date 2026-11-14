@@ -1,9 +1,8 @@
 //! Comments an agent proposes to leave on a work item or pull request. The
 //! agent has no Azure DevOps access, so it appends the text to the note after
 //! a `<!-- post {agent} {time} -->` marker and DevDeck posts it, either when
-//! the user approves it or, if Settings allows, on its own. Every posted
-//! comment ends with a signature naming the agent that wrote it, added here
-//! and never taken from the agent's text. DevDeck then records the result as
+//! the user approves it or, if Settings allows, on its own. The text is posted
+//! as written. DevDeck then records the result as
 //! `<!-- posted {time} {reference} -->` under the proposal, so it can only be
 //! posted once, and appends it to `post-log.jsonl` in the notes root, which
 //! limits how fast automatic posts may follow each other.
@@ -28,7 +27,6 @@ const MAX_COMMENT_CHARS: usize = 10_000;
 /// Automatic posts allowed per hour, on one item and in total.
 const AUTO_PER_ITEM_PER_HOUR: usize = 3;
 const AUTO_PER_HOUR: usize = 10;
-const SIGNATURE_PREFIX: &str = "— 🤖 Posted by ";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,7 +61,7 @@ impl Drop for PostGuard {
 
 /// A proposal that passed every check, ready to post.
 pub(crate) struct PreparedPost {
-    /// The comment with the agent's signature appended.
+    /// The comment to post.
     pub body: String,
     /// For a pull request line comment: the file and the 1-based line on the new side.
     pub location: Option<(String, i64)>,
@@ -71,27 +69,6 @@ pub(crate) struct PreparedPost {
     agent: String,
     hash: u64,
     _guard: PostGuard,
-}
-
-pub(crate) fn agent_label(agent: &str) -> Option<&'static str> {
-    match agent {
-        "claude" => Some("Claude"),
-        "codex" => Some("Codex"),
-        _ => None,
-    }
-}
-
-pub(crate) fn signature(label: &str) -> String {
-    format!("{SIGNATURE_PREFIX}{label} (via DevDeck)")
-}
-
-/// The proposal text without a signature the agent may have written itself.
-fn strip_signature(body: &str) -> &str {
-    let body = body.trim();
-    match body.rsplit_once('\n') {
-        Some((rest, last)) if last.trim().starts_with(SIGNATURE_PREFIX) => rest.trim_end(),
-        _ => body,
-    }
 }
 
 /// FNV-1a: only compares texts within the log, so it needs no stability
@@ -194,7 +171,7 @@ fn find_note(root: &Path, input: &PostAgentProposalInput) -> Result<PathBuf> {
 }
 
 impl AgentNoteService {
-    /// Checks a proposal and signs it. Fails when the note or proposal is not
+    /// Checks a proposal. Fails when the note or proposal is not
     /// what the request says, it was posted already, or (for `auto`) Settings
     /// or the limits do not allow it.
     pub(crate) fn prepare_post(&self, input: PostAgentProposalInput) -> Result<PreparedPost> {
@@ -240,19 +217,19 @@ pub(super) fn prepare_post_in(
             "this comment was already posted".to_string(),
         ));
     }
-    let label = agent_label(&reply.author).ok_or_else(|| {
-        AppError::InvalidInput(format!(
+    if !matches!(reply.author.as_str(), "claude" | "codex") {
+        return Err(AppError::InvalidInput(format!(
             "unknown agent for a proposed comment: {}",
             reply.author
-        ))
-    })?;
+        )));
+    }
     let location = proposal_location(
         input.target,
         input.auto,
         reply.file_path.as_deref(),
         reply.line,
     )?;
-    let text = strip_signature(&reply.body);
+    let text = reply.body.trim();
     if text.is_empty() {
         return Err(AppError::InvalidInput(
             "the proposed comment is empty".to_string(),
@@ -310,7 +287,7 @@ pub(super) fn prepare_post_in(
         ));
     }
     Ok(PreparedPost {
-        body: format!("{text}\n\n{}", signature(label)),
+        body: text.to_string(),
         location,
         agent: reply.author.clone(),
         hash,

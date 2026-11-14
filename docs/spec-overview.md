@@ -199,16 +199,15 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     `url.devdeck-push-blocked://.pushInsteadOf` (`https://` / `ssh://` / `git@`) を与えて push 先を無効にする。
     既定コマンドは加えて `--disallowedTools "Bash(az:*)" "Bash(git push:*)"` を付ける。Windows 資格情報マネージャーの PAT は OS 上の
     読み取りまでは防げない。エージェントは WI / PR に直接投稿しない。投稿したい文面は下の「コメントの提案」で DevDeck に頼み、
-    DevDeck が署名を付けて投稿する。
-  - **コメントの提案と署名投稿**: エージェントは WI / PR のメモ (`ask` を除く) の末尾に `<!-- post {claude|codex} {時刻} -->`
+    DevDeck が投稿する。
+  - **コメントの提案と投稿**: エージェントは WI / PR のメモ (`ask` を除く) の末尾に `<!-- post {claude|codex} {時刻} -->`
     とその文面を追記して投稿を提案できる (`reply` マーカーの兄弟。`NoteReply.kind` = `post`)。Agent パネルは提案を破線枠の
-    「Proposed comment」として署名のプレビュー付きで出し、会話選択中の `C` (または `Post (C)` ボタン) で投稿する
+    「Proposed comment」として出し、会話選択中の `C` (または `Post (C)` ボタン) で投稿する
     (Read-only 検証モードでは投稿しない)。投稿は `post_agent_comment` (PR は `post_pull_request_comment` 相当、WI は
     `add_work_item_comment` 相当をプロバイダー経由で呼ぶ)。投稿先 (組織・プロジェクト・リポジトリ) はパネルが表示中の
     対象から渡し、メモの対象 (種別と id) と一致するものにだけ投稿できる (一致しなければ「対象を選んで」と拒否)。
-    - **署名は DevDeck が必ず付ける**: 本文末尾に `— 🤖 Posted by Claude (via DevDeck)` / `… Codex …` を付与する。
-      署名の名前は提案マーカーの作者 (`claude` / `codex`) で決まり、それ以外 (`user` など) の提案は投稿されない。
-      エージェントが自分で書いた同じ署名は除いてから付け直す (二重にならない)。
+    - **文面はそのまま投稿する**: 署名は付けない。提案マーカーの作者が `claude` / `codex` 以外 (`user` など) の提案は
+      投稿されない。
     - **一度だけ投稿**: 投稿後、提案の直後に `<!-- posted {時刻} {thread-N|comment-N} -->` を DevDeck が書き (`postedAt` /
       `postedRef`)、`app-data/agent-notes/post-log.jsonl` に 1 行追記する。投稿済み、または同じ対象に同じ本文を投稿済みの提案は
       再投稿しない。投稿中の二重実行は拒否する。マーカー行 (`reply` / `post` / `posted`) を含む人の入力は拒否する。
@@ -260,7 +259,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     (本文編集はエージェントの返信前のみ、`anchor` で引用の付け替え) / `set_agent_note_status` (ユーザーによる Resolve /
     Reopen、Resolve は `resolved: Resolved in DevDeck`) / `submit_agent_note_drafts` / `summarize_agent_notes`
     (項目ごとの open / needsYou / drafts / done 件数と最終更新) / `run_agent` (`agent` が `codex` なら設定 `codex_command`、それ以外は `agent_command`。未設定なら各既定コマンドをシェルで起動 (Windows ではコンソールウィンドウを出さずバックグラウンドで実行)。`model` か設定のモデルがあればモデル指定を末尾に足す)。
-    / `list_agent_asks` (依頼の会話一覧) / `post_agent_comment` (提案されたコメントを署名付きで投稿。下記)。入力は `target` (`work-item` / `pull-request` / `ask`) と `itemId` で、
+    / `list_agent_asks` (依頼の会話一覧) / `post_agent_comment` (提案されたコメントを投稿。下記)。入力は `target` (`work-item` / `pull-request` / `ask`) と `itemId` で、
     `pull-request` は `agent-notes/pr-{id}/` を使う (前提は `review_result_folder_path` の設定)。`ask` は結果フォルダ不要で、
     ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
     `investigate` / `summarize`。
@@ -569,7 +568,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 | `review_result_folder_path` | レビュー結果 HTML を格納するフォルダ。My Reviews のプレビューが語頭の `PR<番号>` (ゼロ埋め可、`apr12` のように英字が前に付くものは除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `work_item_result_folder_path` | 作業項目の調査結果 HTML を格納するフォルダ。Work Item Views のプレビューが作業項目 ID の数字列 (先頭・区切り文字の後・`WIT`/`WI`/`WORKITEM` の後。`YYYY-MM-DD` の日付や `v2` のような語中の数字は除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `show_window_hotkey` | ウィンドウを前面化するグローバルホットキー。起動時に登録できない場合 (対話型のデスクトップが無いセッションなど) は警告を出して起動を続ける (ホットキーだけが無効になる)。Settings から保存したときの登録失敗はエラーとして返す。 |
-| `agent_auto_post_enabled` | エージェントが提案したコメントを承認なしで署名付き投稿するか。既定 false。 |
+| `agent_auto_post_enabled` | エージェントが提案したコメントを承認なしで投稿するか。既定 false。 |
 | `default_agent` | Agent パネルの依頼先エージェントの初期値。`codex` か未設定 (Claude Code)。 |
 | `claude_model` / `codex_model` | 各エージェントを起動するときのモデル。コマンドの末尾に `--model "<名前>"` (Claude Code) / `-m "<名前>"` (Codex) を足す。未設定ならモデルを指定せず、各 CLI 自身の設定 (`~/.claude/settings.json` / `~/.codex/config.toml`) に任せる。シェルに渡すため、英数字と `._:/[]-` 以外を含む名前は起動時にエラーにする。 |
 | `claude_model_choices` / `codex_model_choices` | Agent パネルのモデル選択に足す候補 (カンマ / 空白区切り)。 |

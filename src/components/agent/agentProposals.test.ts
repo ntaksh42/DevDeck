@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentNote, NoteReply } from "@/lib/azdoCommands";
-import { approvalReason, isLineProposal, needsApproval, pendingProposals, proposalSignature } from "./agentProposals";
+import { approvalReason, isLineProposal, needsApproval, pendingProposals } from "./agentProposals";
 
 const reply = (over: Partial<NoteReply> = {}): NoteReply => ({
   author: "claude",
@@ -33,12 +33,6 @@ const note = (replies: NoteReply[], status: AgentNote["status"] = "open"): Agent
 });
 
 describe("agent comment proposals", () => {
-  it("signs for Claude and Codex only", () => {
-    expect(proposalSignature("claude")).toBe("— 🤖 Posted by Claude (via DevDeck)");
-    expect(proposalSignature("codex")).toBe("— 🤖 Posted by Codex (via DevDeck)");
-    expect(proposalSignature("user")).toBeNull();
-  });
-
   it("lists unposted proposals by their index among the replies", () => {
     const n = note([
       reply({ kind: "reply" }),

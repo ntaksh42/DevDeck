@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Loader2 } from 'lucide-react';
 import {
@@ -32,6 +32,21 @@ const MODEL_FIELDS = [
 ] as const;
 type ModelKey = (typeof MODEL_FIELDS)[number]["key"];
 import { SettingsRow } from './SettingsRow';
+
+/** One line of help; the rest stays folded behind "Details". */
+function Help({ summary, children }: { summary: ReactNode; children: ReactNode }) {
+  return (
+    <div className="text-xs text-muted-foreground">
+      <p>{summary}</p>
+      <details>
+        <summary className="w-fit cursor-pointer rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Details
+        </summary>
+        <p className="mt-1">{children}</p>
+      </details>
+    </div>
+  );
+}
 
 export function AgentCommandSettings() {
   const queryClient = useQueryClient();
@@ -134,7 +149,7 @@ export function AgentCommandSettings() {
   return (
     <SettingsRow
       title="Agent command"
-      description={<>Started by a request in the Agent panel (Ctrl+J), in the repository's clone inside the workspace folder (else the result folder). The panel can switch the agent for each request.</>}
+      description={<>Runs requests from the Agent panel (Ctrl+J). The panel can switch the agent for each request.</>}
     >
       <form className="grid max-w-xl gap-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
@@ -167,17 +182,17 @@ export function AgentCommandSettings() {
             placeholder={DEFAULT_CODEX_COMMAND}
             className={INPUT_CLASS}
           />
-          <span className="text-xs text-muted-foreground">
-            Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
-            <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
-            <code>{"{repo}"}</code> (the pull request's repository), <code>{"{results}"}</code> (the result folder), <code>{"{guide}"}</code> (the
-            agent guide). Notes are kept in the app data folder, outside the folder the agent
-            starts in, so allow the agent to use it (e.g. <code>--add-dir {"{notes}"}</code>).
-            Leave a command empty to use the default shown in it: Claude Code runs in the
-            background without permission prompts; Codex runs sandboxed to the folder it starts
-            in and the notes folder.
-          </span>
         </label>
+
+        <Help summary="Leave a command empty to use the default shown in it.">
+          Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
+          <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
+          <code>{"{repo}"}</code> (the pull request's repository), <code>{"{results}"}</code> (the result folder),{" "}
+          <code>{"{guide}"}</code> (the agent guide). Notes are kept in the app data folder, outside the folder the
+          agent starts in, so allow the agent to use it (e.g. <code>--add-dir {"{notes}"}</code>). By default
+          Claude Code runs in the background without permission prompts; Codex runs sandboxed to the folder it
+          starts in and the notes folder.
+        </Help>
 
         <div className="grid gap-2">
           <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -193,30 +208,29 @@ export function AgentCommandSettings() {
               </label>
             ))}
           </div>
-          <span className="text-xs text-muted-foreground">
-            The model each agent starts with, passed as <code>--model</code> (Claude Code) or{" "}
-            <code>-m</code> (Codex) after the command; empty leaves it to the agent's own setting.
-            The Agent panel can pick another model for each request from these, the more models
-            (comma-separated) and, for Claude Code, opus / sonnet / haiku.
-          </span>
+          <Help summary="Empty uses the agent's own model. More models are comma-separated choices for the Agent panel.">
+            The model is passed as <code>--model</code> (Claude Code) or <code>-m</code> (Codex) after the
+            command. The Agent panel can pick another model for each request from these and, for Claude Code,
+            opus / sonnet / haiku.
+          </Help>
         </div>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Workspace folder</span>
-          <input
-            value={workspace}
-            onChange={(event) => setWorkspace(event.target.value)}
-            placeholder="D:\src\workspace"
-            className={INPUT_CLASS}
-          />
-          <span className="text-xs text-muted-foreground">
-            One folder that holds your repository clones, one subfolder per repository name. The
-            agent starts in the clone of the pull request's repository, or here when there is
-            none. DevDeck only clones for automatic reviews: a missing clone is made shallow, and
-            moved to the PR's latest commit before each run. A folder you cloned yourself is never
-            touched. Leave empty to start in the result folder.
-          </span>
-        </label>
+        <div className="grid gap-2">
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">Workspace folder</span>
+            <input
+              value={workspace}
+              onChange={(event) => setWorkspace(event.target.value)}
+              placeholder="D:\src\workspace"
+              className={INPUT_CLASS}
+            />
+          </label>
+          <Help summary="Holds your repository clones, one subfolder per repository name. Empty starts in the result folder.">
+            The agent starts in the clone of the pull request's repository, or here when there is none.
+            DevDeck only clones for automatic reviews: a missing clone is made shallow, and moved to the PR's
+            latest commit before each run. A folder you cloned yourself is never touched.
+          </Help>
+        </div>
 
         <div className="grid gap-2">
           <label className="flex items-center gap-2 text-sm font-medium">
@@ -228,15 +242,12 @@ export function AgentCommandSettings() {
             />
             Post the comments agents propose without asking each time
           </label>
-          <span className="text-xs text-muted-foreground">
-            An agent has no Azure DevOps access; it writes a proposed comment into the note and
-            DevDeck posts it with your account. Every posted comment ends with a signature naming
-            the agent ("— 🤖 Posted by Claude (via DevDeck)"), added by DevDeck. Off: you post
-            each one with C in the Agent panel. On: comments are posted as they appear for the
-            work item / pull request the panel is showing, at most 3 per item and 10 per hour,
-            never the same text twice; a comment with a link or @mention still waits for you.
-            Read-only validation mode never posts.
-          </span>
+          <Help summary="Off: you post each one with C in the Agent panel. A comment with a link or @mention always waits for you.">
+            An agent has no Azure DevOps access; it writes a proposed comment into the note and DevDeck posts
+            it with your account. On: comments are posted as they appear for the work item / pull request the
+            panel is showing, at most 3 per item and 10 per hour, never the same text twice. Read-only
+            validation mode never posts.
+          </Help>
         </div>
 
         <div className="grid gap-2">
@@ -269,14 +280,12 @@ export function AgentCommandSettings() {
               className={`${INPUT_CLASS} w-24`}
             />
           </label>
-          <span className="text-xs text-muted-foreground">
-            After each sync, <code>claude -p</code> reads up to {insightMax} new mentions / replies and writes
-            notes at the top of the Inbox preview: a verdict (reply / fix first / no action) with
-            its reason, the evidence, and a reply draft (Shift+R puts it in the reply box). With a
-            clone of the PR's repository in the workspace folder, it checks the code read-only and
-            cites file:line. The comment thread is sent to the model. Nothing is replied or
-            resolved for you.
-          </span>
+          <Help summary="After each sync, a verdict and a reply draft appear at the top of the Inbox preview. Nothing is replied or resolved for you.">
+            <code>claude -p</code> reads up to {insightMax} new mentions / replies and writes a verdict (reply /
+            fix first / no action) with its reason, the evidence, and a reply draft (Shift+R puts it in the
+            reply box). With a clone of the PR's repository in the workspace folder, it checks the code
+            read-only and cites file:line. The comment thread is sent to the model.
+          </Help>
         </div>
 
         <div className="grid gap-2">
@@ -317,16 +326,15 @@ export function AgentCommandSettings() {
               className={`${INPUT_CLASS} w-24`}
             />
           </label>
-          <span className="text-xs text-muted-foreground">
-            Every {autoAgentInterval} minutes (on the next sync), up to {autoAgentMax} attempts run one at a time. First reviews cover
-            the full PR, skipping drafts, voted PRs and PRs over 30 days old. Tracked PRs continue
-            reviewing later pushes, except while in draft, using only changes since the last
-            fully completed review, including force pushes. Failed runs retry after a delay;
-            partial coverage keeps the previous reviewed commit. Open human requests pause
-            automatic work. Assigned work items (New or Active, changed within 30 days) are investigated if they have no prior result.
-            A result folder is required for each type. Fields, comments and code changes are sent
-            to the default agent; code is not changed and comments are not proposed.
-          </span>
+          <Help summary={<>Every {autoAgentInterval} minutes, up to {autoAgentMax} run one at a time. Needs a result folder for each type; code is not changed and comments are not proposed.</>}>
+            The check runs on the next sync after the interval. First reviews cover the full PR, skipping
+            drafts, voted PRs and PRs over 30 days old. Tracked PRs continue reviewing later pushes, except
+            while in draft, using only changes since the last fully completed review, including force pushes.
+            Failed runs retry after a delay; partial coverage keeps the previous reviewed commit. Open human
+            requests pause automatic work. Assigned work items (New or Active, changed within 30 days) are
+            investigated if they have no prior result. Fields, comments and code changes are sent to the
+            default agent.
+          </Help>
         </div>
 
         <div className="grid gap-2">
@@ -339,13 +347,12 @@ export function AgentCommandSettings() {
             />
             Investigate failed watched pipelines automatically
           </label>
-          <span className="text-xs text-muted-foreground">
-            When the latest run of a pipeline you watch fails, the default agent starts an
-            Investigate request about it in the Agent panel: why it failed, and whether a retry is
-            enough (flaky tests), the code needs a fix, or the environment broke. Each run is
-            investigated once, at most 5 per hour. The run's timeline, the tail of its failed logs
-            and its failed tests are sent to the agent. Not started in read-only validation mode.
-          </span>
+          <Help summary="When the latest run of a pipeline you watch fails, the default agent investigates it in the Agent panel.">
+            It reports why the run failed, and whether a retry is enough (flaky tests), the code needs a fix,
+            or the environment broke. Each run is investigated once, at most 5 per hour. The run's timeline,
+            the tail of its failed logs and its failed tests are sent to the agent. Not started in read-only
+            validation mode.
+          </Help>
         </div>
 
         {settingsQuery.isError ? (
