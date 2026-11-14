@@ -163,7 +163,7 @@ test("Pipelines skips the read-only Preview while tree arrows stay local", async
   await expect.poll(() => tree.evaluate((element) => element.contains(document.activeElement))).toBe(true);
 });
 
-test("reply inputs and Agent conversation folding keep their arrow behavior", async ({ page }) => {
+test("reply inputs and Agent conversation rows keep their arrow behavior", async ({ page }) => {
   await start(page, "r");
   await openAgent(page);
   const preview = page.locator("[data-focus-pane='review']");
@@ -173,13 +173,15 @@ test("reply inputs and Agent conversation folding keep their arrow behavior", as
   await reply.press("ArrowLeft");
   await expect(reply).toBeFocused();
   expect(await reply.evaluate((element: HTMLTextAreaElement) => element.selectionStart)).toBe(2);
-  const conversation = page.getByRole("complementary", { name: "Agent", exact: true }).locator("button[aria-expanded]").first();
+  const agent = page.getByRole("complementary", { name: "Agent", exact: true });
+  const conversation = agent.locator("button[data-agent-conversation]").first();
   await conversation.focus();
   await page.keyboard.press("ArrowLeft");
   await expect(conversation).toBeFocused();
-  await expect(conversation).toHaveAttribute("aria-expanded", "false");
-  await page.keyboard.press("ArrowRight");
-  await expect(conversation).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Enter");
+  await expect(agent.locator("[data-agent-chat]")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(conversation).toBeFocused();
 });
 
 test("Settings body can reach the Agent drawer without stealing control arrows", async ({ page }) => {

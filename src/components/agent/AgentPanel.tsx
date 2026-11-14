@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Bot, X } from "lucide-react";
 import { commandErrorMessage, noteNeedsYou } from "@/lib/azdoCommands";
-import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { RowShortcutHints } from "@/components/RowShortcutHints";
-import { AgentConversation, lastActivity } from "./AgentConversation";
+import { AgentChat } from "./AgentChat";
+import { AgentComposerFooter } from "./AgentComposerFooter";
+import { AgentConversationList } from "./AgentConversationList";
 import { AgentContextChips } from "./AgentContextChips";
 import { AgentPicker } from "./AgentPicker";
+import { AgentProposalTray } from "./AgentProposalTray";
 import { useAgentListScope } from "./agentListScope";
 import { handlePaneFocusKey } from "@/lib/paneFocus";
 import { focusPrimaryGrid } from "@/lib/utils";
@@ -22,14 +24,38 @@ import {
 import { consumeAgentFocusRequest, focusAgentComposer, type SubjectOverride } from "./agentPanelStore";
 import { useAgentPanelData, type AgentChoice, type Conversation } from "./useAgentPanelData";
 import { pendingProposals } from "./agentProposals";
-import { useAgentProposals } from "./useAgentProposals";
+import { proposalCodeContext, useAgentProposals } from "./useAgentProposals";
+
+const LIST_KEYS = [
+  { keys: "↑↓", label: "move" },
+  { keys: "Enter", label: "open" },
+  { keys: "R", label: "reply" },
+  { keys: "M", label: "ask" },
+  { keys: "X", label: "resolve" },
+  { keys: "C", label: "post comment" },
+  { keys: "⇧Enter", label: "run now" },
+  { keys: "P", label: "pin" },
+  { keys: "⇧Tab", label: "agent / context (from the input)" },
+  { keys: "Esc", label: "close" },
+];
+const CHAT_KEYS = [
+  { keys: "Esc", label: "back to the list" },
+  { keys: "R", label: "reply" },
+  { keys: "C", label: "post comment" },
+  { keys: "X", label: "resolve" },
+  { keys: "Enter", label: "show in result" },
+  { keys: "⇧Enter", label: "run now" },
+  { keys: "M", label: "ask something new" },
+];
 
 /**
  * The app-wide Agent panel (Ctrl+J): asks the external agent to investigate,
  * summarize or answer something about the item selected in any view, or about
- * nothing in particular. Each conversation folds to one line. Only the
- * conversations, the context chips and one input are always shown; the drafts
- * banner and quote appear when they apply, and `?` lists the keys.
+ * nothing in particular. It shows either the list of conversations or one
+ * conversation over its whole height, like a chat (Enter opens one, Esc goes
+ * back). One input sits at the bottom: on the list it asks something new, in a
+ * conversation it replies there. Comments the agent proposes wait in a tray
+ * above the input until they are posted.
  */
 export function AgentPanel({
   docked = false,
@@ -51,13 +77,13 @@ export function AgentPanel({
   /** Id of the view list attached as context, if any. */
   listAttached: string | null;
   onListAttachedChange: (next: string | null) => void;
-  /** Expand and select this request when it appears. */
+  /** Open this request when it appears. */
   focusAskId: number | null;
   /** Bumped to start replying to the selected (or waiting) conversation. */
   replyRequest: number;
   /** Result text the next new note quotes (from the Result panel). */
   quote: AgentQuote | null;
-  /** Note of the subject item to select (a pin clicked in the result). */
+  /** Note of the subject item to open (a pin clicked in the result). */
   focusNoteId: string | null;
   onClearQuote: () => void;
   onClose: () => void;
@@ -74,94 +100,73 @@ export function AgentPanel({
   const proposals = useAgentProposals(subject, conversations, { autoPost: data.autoPost, readOnly: data.readOnly });
 
   const [help, setHelp] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const headerRefs = useRef(new Map<string, HTMLButtonElement>());
-  const replyRefs = useRef(new Map<string, HTMLDivElement>());
-  const composerRef = useRef<HTMLDivElement>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const chatRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Needs you and the most recent conversation start open; the rest fold.
-  const latestKey = useMemo(
-    () =>
-      conversations.reduce<Conversation | null>(
-        (best, c) => (!best || lastActivity(c.note) > lastActivity(best.note) ? c : best),
-        null,
-      )?.key ?? null,
-    [conversations],
-  );
-  const isExpanded = (c: Conversation) =>
-    expanded[c.key] ?? (c.note.status !== "done" && (noteNeedsYou(c.note) || c.key === latestKey));
-  const toggle = (c: Conversation, value = !isExpanded(c)) => setExpanded((prev) => ({ ...prev, [c.key]: value }));
-
-  const selected = conversations.find((c) => c.key === selectedKey) ?? null;
-  // Run now: the selected conversation's notes, else the subject's.
+  // A conversation that left the list (deleted, another subject) shows the list again.
+  const open = conversations.find((c) => c.key === openKey) ?? null;
+  const selected = open ?? conversations.find((c) => c.key === selectedKey) ?? conversations[0] ?? null;
+  // Run now: the open or selected conversation's notes, else the subject's.
   const runTarget = selected?.item ?? noteItemOf(subject);
   const pinned = override !== null;
   const togglePin = () => onOverrideChange(pinned ? null : subject ? { subject } : null);
 
-  const focusComposer = focusAgentComposer;
-  function focusList(): void {
-    const key = selectedKey ?? conversations[0]?.key;
-    const header = key ? headerRefs.current.get(key) : undefined;
-    if (header) header.focus();
-    else listRef.current?.focus();
-  }
+  // Focus moves after the render that shows its target.
+  const [focusTarget, setFocusTarget] = useState<{ to: "list" | "chat" | "composer"; n: number }>({ to: "list", n: 0 });
+  const focusLater = (to: "list" | "chat" | "composer") => setFocusTarget((prev) => ({ to, n: prev.n + 1 }));
+  useEffect(() => {
+    if (!focusTarget.n) return;
+    if (focusTarget.to === "composer") focusAgentComposer();
+    else if (focusTarget.to === "chat") chatRef.current?.focus();
+    else {
+      const row = selected && !open ? rowRefs.current.get(selected.key) : undefined;
+      (row ?? listRef.current)?.focus();
+    }
+  }, [focusTarget]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Focus after the render: replying swaps in a fresh composer. A panel that
-  // was already open when it remounts (moved to another view) leaves the focus where it is.
-  const [composerFocus, setComposerFocus] = useState(0);
+  // A panel that was already open when it remounts (moved to another view) leaves the focus where it is.
   useEffect(() => {
-    if (composerFocus) focusComposer();
-  }, [composerFocus]);
-  const requestComposerFocus = () => setComposerFocus((n) => n + 1);
-  useEffect(() => {
-    if (consumeAgentFocusRequest()) requestComposerFocus();
+    if (consumeAgentFocusRequest()) focusLater("composer");
   }, []);
 
-  // A conversation's own reply box: unfold the conversation, then focus the box
-  // once it is rendered (it unfolds from its one-line button on focus).
-  const [replyFocus, setReplyFocus] = useState<{ key: string; n: number }>({ key: "", n: 0 });
-  function requestReplyFocus(key: string): void {
-    setExpanded((prev) => ({ ...prev, [key]: true }));
-    setSelectedKey(key);
-    setReplyFocus((prev) => ({ key, n: prev.n + 1 }));
+  function openConversation(c: Conversation, reply = false): void {
+    setSelectedKey(c.key);
+    setOpenKey(c.key);
+    focusLater(reply ? "composer" : "chat");
   }
-  useEffect(() => {
-    if (!replyFocus.n) return;
-    const box = replyRefs.current.get(replyFocus.key);
-    const textarea = box?.querySelector("textarea");
-    if (textarea) textarea.focus();
-    else box?.querySelector("button")?.click();
-  }, [replyFocus]);
+  function backToList(): void {
+    setOpenKey(null);
+    focusLater("list");
+  }
+  /** A new request: the list with its input. */
+  function askNew(): void {
+    setOpenKey(null);
+    focusLater("composer");
+  }
 
   // Opened on a request (e.g. from the Inbox): show it and answer it.
   useEffect(() => {
     if (focusAskId === null) return;
     const match = conversations.find((c) => c.section === "ask" && c.item.itemId === focusAskId);
-    if (!match) return;
-    setSelectedKey(match.key);
-    toggle(match, true);
-    if (noteNeedsYou(match.note)) requestReplyFocus(match.key);
+    if (match) openConversation(match, noteNeedsYou(match.note));
   }, [focusAskId, conversations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A quote from the Result panel starts a note about it.
   useEffect(() => {
-    if (!quote) return;
-    requestComposerFocus();
+    if (quote) askNew();
   }, [quote]);
 
-  // A pin clicked in the result selects its note here.
+  // A pin clicked in the result opens its note.
   useEffect(() => {
     if (!focusNoteId) return;
     const match = conversations.find((c) => c.section === "item" && c.note.id === focusNoteId);
-    if (!match) return;
-    setSelectedKey(match.key);
-    toggle(match, true);
-    window.setTimeout(() => headerRefs.current.get(match.key)?.focus(), 0);
+    if (match) openConversation(match);
   }, [focusNoteId, conversations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** What can be done to a conversation; the list keys mirror these. */
+  /** What can be done to a conversation; the keys mirror these. */
   function actionsOf(c: Conversation) {
     const request = { ...c.item, noteId: c.note.id };
     const inResult = c.section === "item" && (!!c.note.quote || c.note.status === "done");
@@ -180,19 +185,20 @@ export function AgentPanel({
     ];
   }
 
-  // After a delete, focus moves to the neighbouring header (or the composer
-  // when none is left) once the deleted conversation has left the list.
+  // After a delete, the list shows again with focus on the neighbouring row
+  // (or the input when none is left) once the conversation has left it.
   const afterDelete = useRef<{ gone: string; next: string | null } | null>(null);
   useEffect(() => {
     const pending = afterDelete.current;
     if (!pending || conversations.some((c) => c.key === pending.gone)) return;
     afterDelete.current = null;
+    setOpenKey(null);
     const target = pending.next ?? conversations[0]?.key ?? null;
     if (target) {
       setSelectedKey(target);
-      headerRefs.current.get(target)?.focus();
+      focusLater("list");
     } else {
-      focusComposer();
+      focusLater("composer");
     }
   }, [conversations]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -206,101 +212,63 @@ export function AgentPanel({
     });
   }
 
-  // Answer the waiting conversation once it has loaded.
+  // Answer the selected (or waiting) conversation once it has loaded.
   const handledReply = useRef(0);
   useEffect(() => {
     if (!replyRequest || handledReply.current === replyRequest) return;
-    const target = selected ?? conversations.find((c) => noteNeedsYou(c.note)) ?? null;
+    const target = open ?? conversations.find((c) => c.key === selectedKey) ?? conversations.find((c) => noteNeedsYou(c.note));
     if (!target) return;
     handledReply.current = replyRequest;
-    requestReplyFocus(target.key);
+    openConversation(target, true);
   }, [replyRequest, conversations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function onListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
-    // Keys typed into a conversation's reply box belong to the box.
-    if (event.target instanceof HTMLElement && event.target.closest("textarea, input, [contenteditable='true']")) return;
-    // The focused header decides, even before its focus has re-rendered.
-    const focusedKey = conversations.find((c) => headerRefs.current.get(c.key) === event.target)?.key;
-    const index = conversations.findIndex((c) => c.key === (focusedKey ?? selectedKey));
-    const move = (next: number) => {
-      const c = conversations[Math.max(0, Math.min(conversations.length - 1, next))];
-      if (!c) return;
-      setSelectedKey(c.key);
-      headerRefs.current.get(c.key)?.focus();
-    };
-    const current = conversations[index];
+  /** Keys shared by the list (on a row) and an open conversation; true when handled. */
+  function conversationKey(event: ReactKeyboardEvent<HTMLElement>, current: Conversation | null): boolean {
     const plain = !event.ctrlKey && !event.metaKey && !event.altKey;
-    const action = (label: string) => (current ? actionsOf(current).find((a) => a.label === label) : undefined);
     const lower = event.key.toLowerCase();
-    if ((event.ctrlKey || event.metaKey) && lower === "z" && data.deleted) {
-      event.preventDefault();
-      event.stopPropagation();
-      data.undoDelete.mutate();
-      return;
-    }
-    if (event.key === "Enter" && event.shiftKey) {
+    const action = (label: string) => (current ? actionsOf(current).find((a) => a.label === label) : undefined);
+    let run: (() => void) | undefined;
+    if ((event.ctrlKey || event.metaKey) && lower === "z" && data.deleted) run = () => data.undoDelete.mutate();
+    else if (event.key === "Enter" && event.shiftKey) {
       // Shift+Enter: run the agent now on the open notes, without a new request.
-      event.preventDefault();
-      event.stopPropagation();
-      if (runTarget && !data.readOnly) data.runNow.mutate(runTarget);
-      return;
-    }
-    const keyed =
-      event.key === "Enter" && current && event.target === headerRefs.current.get(current.key)
-        ? action("Show in result")
-        : plain && lower === "l"
-          ? action("Re-attach")
-          : plain && lower === "c"
-            ? action("Post comment")
-          : plain && lower === "x"
-            ? (action("Resolve") ?? action("Reopen"))
-            : event.key === "Delete"
-              ? action("Delete")
-              : undefined;
-    if (keyed) {
-      event.preventDefault();
-      event.stopPropagation();
-      keyed.run();
-      return;
-    }
+      run = () => {
+        if (runTarget && !data.readOnly) data.runNow.mutate(runTarget);
+      };
+    } else if (plain && lower === "l") run = action("Re-attach")?.run;
+    else if (plain && lower === "c") run = action("Post comment")?.run;
+    else if (plain && lower === "x") run = (action("Resolve") ?? action("Reopen"))?.run;
+    else if (event.key === "Delete") run = action("Delete")?.run;
+    else if (plain && lower === "m") run = askNew;
+    else if (plain && lower === "r" && current) run = () => openConversation(current, true);
+    else if (event.key === "?") run = () => setHelp((value) => !value);
+    else if (plain && lower === "p" && (subject || pinned)) run = togglePin;
+    if (!run) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    run();
+    return true;
+  }
+
+  function onListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    // The focused row decides, even before its focus has re-rendered.
+    const focusedKey = conversations.find((c) => rowRefs.current.get(c.key) === event.target)?.key;
+    const index = conversations.findIndex((c) => c.key === (focusedKey ?? selected?.key));
+    const current = conversations[index] ?? null;
+    if (conversationKey(event, current)) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       event.stopPropagation();
-      move(index + (event.key === "ArrowDown" ? 1 : -1));
-    } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && current) {
+      const next = conversations[Math.max(0, Math.min(conversations.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))];
+      if (!next) return;
+      setSelectedKey(next.key);
+      rowRefs.current.get(next.key)?.focus();
+    } else if (event.key === "Enter" && current) {
       event.preventDefault();
       event.stopPropagation();
-      toggle(current, event.key === "ArrowRight");
-    } else if ((event.key === "m" || event.key === "M") && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      // M: a new request, as M focuses the comment box elsewhere.
-      event.preventDefault();
-      event.stopPropagation();
-      requestComposerFocus();
-    } else if (event.key === "?") {
-      event.preventDefault();
-      event.stopPropagation();
-      setHelp((open) => !open);
-    } else if (plain && lower === "p" && (subject || pinned)) {
-      // P: pin the subject (or follow the selection again).
-      event.preventDefault();
-      event.stopPropagation();
-      togglePin();
-    } else if ((event.key === "r" || event.key === "R") && current && !event.ctrlKey && !event.metaKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      requestReplyFocus(current.key);
+      openConversation(current);
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      // The collapsed reply button: back to its conversation header.
-      const ownHeader =
-        event.target instanceof HTMLElement && event.target.closest("[data-agent-reply]")
-          ? event.target.closest("[data-agent-conversation]")?.querySelector<HTMLElement>(":scope > button")
-          : null;
-      if (ownHeader) {
-        ownHeader.focus();
-        return;
-      }
       onClose();
       // Closing hands focus back to where the panel was opened from. When that
       // place is gone (or was <body>), land on the view's grid, not <body>.
@@ -308,6 +276,21 @@ export function AgentPanel({
         const active = document.activeElement;
         if (!active || active === document.body) focusPrimaryGrid();
       }, 0);
+    }
+  }
+
+  function onChatKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (!open || conversationKey(event, open)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      backToList();
+    } else if (event.key === "Enter") {
+      const reveal = actionsOf(open).find((a) => a.label === "Show in result");
+      if (!reveal) return;
+      event.preventDefault();
+      event.stopPropagation();
+      reveal.run();
     }
   }
 
@@ -333,7 +316,7 @@ export function AgentPanel({
       }}
     >
       {/* Docked, the tab already names the panel and closes it. */}
-      {docked ? null : (
+      {docked || open ? null : (
         <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1">
           <Bot className="h-4 w-4" aria-hidden="true" />
           <span className="text-sm font-semibold">Agent</span>
@@ -345,155 +328,114 @@ export function AgentPanel({
         </div>
       )}
 
-      <div
-        ref={listRef}
-        tabIndex={-1}
-        aria-label="Agent conversations"
-        data-pane-focus-target="true"
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-1 outline-none"
-        onKeyDown={onListKeyDown}
-      >
-        {data.loading ? <LoadingState /> : null}
-        {error ? <ErrorState message={error} /> : null}
-        {conversations.map((c) => (
-          <AgentConversation
-            key={c.key}
-            ref={(el) => {
-              if (el) headerRefs.current.set(c.key, el);
-              else headerRefs.current.delete(c.key);
+      {open ? (
+        <AgentChat
+          ref={chatRef}
+          conversation={open}
+          onBack={backToList}
+          actions={actionsOf(open)}
+          onKeyDown={onChatKeyDown}
+          codeContext={proposalCodeContext(subject, open.item)}
+        />
+      ) : (
+        <div
+          ref={listRef}
+          tabIndex={-1}
+          aria-label="Agent conversations"
+          data-pane-focus-target="true"
+          className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1 outline-none"
+          onKeyDown={onListKeyDown}
+        >
+          {data.loading ? <LoadingState /> : null}
+          <AgentConversationList
+            conversations={conversations}
+            selectedKey={selected?.key ?? null}
+            rowRef={(key, el) => {
+              if (el) rowRefs.current.set(key, el);
+              else rowRefs.current.delete(key);
             }}
-            note={c.note}
-            expanded={isExpanded(c)}
-            selected={c.key === (selectedKey ?? conversations[0]?.key)}
-            onToggle={() => toggle(c)}
-            onFocus={() => setSelectedKey(c.key)}
-            actions={actionsOf(c)}
-            replyRef={(el) => {
-              if (el) replyRefs.current.set(c.key, el);
-              else replyRefs.current.delete(c.key);
-            }}
-            replyBusy={data.send.isPending && data.send.variables?.replyTo?.key === c.key}
-            onReply={async (body) => {
-              await data.send.mutateAsync({ body, replyTo: c, quote: null });
-              resetChoice();
-            }}
-            onReplyCollapse={() => headerRefs.current.get(c.key)?.focus()}
-            onPostProposal={c.section === "item" ? (replyIndex) => proposals.post(c, replyIndex) : null}
-            {...proposals.viewProps(c)}
-            autoPost={data.autoPost}
+            onOpen={(c) => openConversation(c)}
+            onFocusRow={(c) => setSelectedKey(c.key)}
           />
-        ))}
-        {data.deleted ? (
-          <p className="text-2xs text-muted-foreground">
-            Deleted.{" "}
-            <button type="button" onClick={() => data.undoDelete.mutate()} className="text-primary underline">
-              Undo (Ctrl+Z)
-            </button>
-          </p>
-        ) : null}
-        {!data.loading && !conversations.length ? (
-          <p className="py-2 text-muted-foreground">No conversations yet. Ask below; the agent replies here.</p>
-        ) : null}
-      </div>
+          {!data.loading && !conversations.length ? (
+            <p className="px-1 py-2 text-muted-foreground">No conversations yet. Ask below; the agent replies here.</p>
+          ) : null}
+        </div>
+      )}
+      {error ? <ErrorState message={error} /> : null}
+      {data.deleted ? (
+        <p className="shrink-0 px-2 py-0.5 text-2xs text-muted-foreground">
+          Deleted.{" "}
+          <button type="button" onClick={() => data.undoDelete.mutate()} className="text-primary underline">
+            Undo (Ctrl+Z)
+          </button>
+        </p>
+      ) : null}
+      {open ? (
+        <AgentProposalTray
+          note={open.note}
+          onPost={open.section === "item" ? (replyIndex) => proposals.post(open, replyIndex) : null}
+          busy={proposals.busy}
+          error={proposals.errorFor(open.key)}
+          autoPost={data.autoPost}
+          codeContext={proposalCodeContext(subject, open.item)}
+        />
+      ) : null}
       {help || starting ? (
         <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-2xs text-muted-foreground">
-          {help ? (
-            <RowShortcutHints
-              hints={[
-                { keys: "↑↓", label: "move" },
-                { keys: "→←", label: "fold" },
-                { keys: "R", label: "reply" },
-                { keys: "M", label: "ask" },
-                { keys: "X", label: "resolve" },
-                { keys: "C", label: "post comment" },
-                { keys: "⇧Enter", label: "run now" },
-                { keys: "P", label: "pin" },
-                { keys: "⇧Tab", label: "agent / context (from the input)" },
-                { keys: "Esc", label: "close" },
-              ]}
-            />
-          ) : null}
+          {help ? <RowShortcutHints hints={open ? CHAT_KEYS : LIST_KEYS} /> : null}
           {starting ? <span>Starting…</span> : null}
         </div>
       ) : null}
 
-      {/* The keys toggle sits in the composer's corner instead of taking a row of its own. */}
-      <div className="relative shrink-0 border-t border-border py-1.5 pl-2 pr-6">
-        <button
-          type="button"
-          onClick={() => setHelp((open) => !open)}
-          aria-expanded={help}
-          aria-label="Show keys and subject options"
-          title="Keys and subject options (?)"
-          className="absolute right-1 top-1 rounded px-1 text-2xs text-muted-foreground hover:bg-accent"
-        >
-          ?
-        </button>
-        {drafts ? (
-          <p className="mb-1 flex items-center gap-1 rounded bg-warning/10 px-2 py-0.5 text-2xs text-warning">
-            <span className="flex-1">{drafts} {drafts === 1 ? "draft" : "drafts"} not sent</span>
-            <button
-              type="button"
-              onClick={() => data.submitDrafts.mutate()}
-              disabled={data.submitDrafts.isPending}
-              title="Send the drafts of this item to the agent"
-              className="rounded border border-warning/40 px-1.5 hover:bg-warning/20"
-            >
-              Send
-            </button>
-          </p>
-        ) : null}
-        {quote ? (
-          <p className="mb-1 flex items-center gap-1 text-2xs text-muted-foreground">
-            Quoting
-            <span className="min-w-0 flex-1 truncate border-l-2 border-warning pl-1 text-foreground" title={quote.quote}>
-              {quote.quote}
-            </span>
-            <button type="button" onClick={onClearQuote} aria-label="Drop the quote" className="rounded hover:bg-accent">
-              <X className="h-3 w-3" />
-            </button>
-          </p>
-        ) : null}
-        {data.readOnly ? (
-          <p className="mb-1 text-2xs text-muted-foreground">Read-only validation mode: the request is saved but the agent is not started.</p>
-        ) : null}
-        <AgentContextChips
-          subject={subject}
-          offered={override && !override.subject ? live : null}
-          pinned={!!override?.subject}
-          list={liveList}
-          listAttached={!!attachedList}
-          onTogglePin={togglePin}
-          onSubjectChange={(attach) => onOverrideChange(attach ? null : { subject: null })}
-          onListAttachedChange={(attach) => onListAttachedChange(attach && liveList ? liveList.id : null)}
-          onEscape={focusComposer}
-        />
-        {data.readOnly ? null : (
-          <AgentPicker
-            value={data.agent}
-            defaultAgent={data.defaultAgent}
-            onChange={(agent) => setChoice({ agent, model: null })}
-            model={data.model}
-            models={data.modelChoices}
-            onModelChange={(model) => setChoice((prev) => ({ ...prev, model }))}
-            onEscape={focusComposer}
-          />
-        )}
-        <div ref={composerRef} data-agent-composer="true">
-          <CommentComposer
-            placeholder={subject ? `Ask about ${subjectLabel(subject)}… (M)` : "Ask the agent… (M)"}
-            submitLabel="Ask"
-            busy={data.send.isPending && !data.send.variables?.replyTo}
-            collapsible
-            onCollapse={focusList}
-            onSubmit={async (body) => {
-              await data.send.mutateAsync({ body, replyTo: null, quote });
-              onClearQuote();
-              resetChoice();
-            }}
-          />
-        </div>
-      </div>
+      <AgentComposerFooter
+        composerKey={open?.key ?? "new"}
+        placeholder={open ? "Reply… (R)" : subject ? `Ask about ${subjectLabel(subject)}… (M)` : "Ask the agent… (M)"}
+        submitLabel={open ? "Reply" : "Ask"}
+        busy={data.send.isPending}
+        onSubmit={async (body) => {
+          await data.send.mutateAsync({ body, replyTo: open, quote: open ? null : quote });
+          if (!open) onClearQuote();
+          resetChoice();
+        }}
+        onCollapse={() => (open ? chatRef.current?.focus() : focusLater("list"))}
+        help={help}
+        onToggleHelp={() => setHelp((value) => !value)}
+        drafts={drafts}
+        onSendDrafts={() => data.submitDrafts.mutate()}
+        sendingDrafts={data.submitDrafts.isPending}
+        quote={open ? null : quote}
+        onClearQuote={onClearQuote}
+        readOnly={data.readOnly}
+        chips={
+          open ? null : (
+            <AgentContextChips
+              subject={subject}
+              offered={override && !override.subject ? live : null}
+              pinned={!!override?.subject}
+              list={liveList}
+              listAttached={!!attachedList}
+              onTogglePin={togglePin}
+              onSubjectChange={(attach) => onOverrideChange(attach ? null : { subject: null })}
+              onListAttachedChange={(attach) => onListAttachedChange(attach && liveList ? liveList.id : null)}
+              onEscape={focusAgentComposer}
+            />
+          )
+        }
+        picker={
+          data.readOnly ? null : (
+            <AgentPicker
+              value={data.agent}
+              defaultAgent={data.defaultAgent}
+              onChange={(agent) => setChoice({ agent, model: null })}
+              model={data.model}
+              models={data.modelChoices}
+              onModelChange={(model) => setChoice((prev) => ({ ...prev, model }))}
+              onEscape={focusAgentComposer}
+            />
+          )
+        }
+      />
     </aside>
   );
 }

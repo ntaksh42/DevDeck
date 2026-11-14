@@ -248,26 +248,28 @@ test("replies to, deletes and resolves notes from the Agent panel keyboard", asy
   await page.keyboard.press("Control+j");
   const panel = page.getByRole("complementary", { name: "Agent" });
   await expect(panel).toBeVisible();
-  // An expanded conversation's header shows who/when, not the note text, so find it via its card.
-  const header = (text: string) =>
-    panel.locator("[data-agent-conversation]").filter({ hasText: text }).locator("button[aria-expanded]").first();
+  // Each conversation is one row of the list; Enter opens it over the panel and Esc goes back.
+  const row = (text: string) => panel.locator("button[data-agent-conversation]").filter({ hasText: text });
+  const chat = panel.locator("[data-agent-chat]");
 
-  // Fold and unfold one conversation.
-  const open = header("Include the batch tenants too");
+  const open = row("Include the batch tenants too");
   await open.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(open).toHaveAttribute("aria-expanded", "false");
-  await page.keyboard.press("ArrowRight");
-  await expect(open).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Enter");
+  await expect(chat).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(open).toBeFocused();
 
   // A reply on a done note reopens it.
-  const done = header("Check the rollout against the main branch");
+  const done = row("Check the rollout against the main branch");
   await done.focus();
   await page.keyboard.press("r");
   const reply = panel.getByPlaceholder(/^Reply…/);
   await expect(reply).toBeFocused();
   await reply.fill("Please also check release.");
   await page.keyboard.press("Control+Enter");
+  await expect(chat.getByText("Please also check release.")).toBeVisible();
+  await chat.focus();
+  await page.keyboard.press("Escape");
   await expect(done.getByText("Open", { exact: true })).toBeVisible();
 
   // Delete, then undo.

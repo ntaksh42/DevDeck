@@ -93,11 +93,5 @@ export function useAgentProposals(
     busy: isPending,
     /** The last failure of a post in this conversation, as text. */
     errorFor,
-    /** What a conversation shows about posting: busy, its last error, and the PR its line comments are on. */
-    viewProps: (conversation: Conversation) => ({
-      postBusy: isPending,
-      postError: errorFor(conversation.key),
-      codeContext: proposalCodeContext(subject, conversation.item),
-    }),
   };
 }
