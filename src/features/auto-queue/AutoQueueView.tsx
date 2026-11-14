@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   autoQueueKey,
   commandErrorMessage,
-  getAppSettings,
   getAutoQueuePreview,
   listAutoQueue,
   runAutoQueue,
@@ -29,22 +28,13 @@ function ageLabel(createdDate: string | null): string {
   return days <= 0 ? "today" : `${days}d`;
 }
 
-/**
- * `onDecided` receives the items the user just ran or skipped. With `sessionOnly`
- * (the startup dialog) skips are kept in memory for this launch instead of
- * localStorage, so an item skipped there asks again at the next start.
- */
-export function AutoQueueView({
-  onDecided,
-  sessionOnly = false,
-}: { onDecided?: (targets: AutoQueueTarget[]) => void; sessionOnly?: boolean } = {}) {
+export function AutoQueueView() {
   const queryClient = useQueryClient();
-  const [skipped, setSkipped] = useState<string[]>(sessionOnly ? [] : loadSkipped);
+  const [skipped, setSkipped] = useState<string[]>(loadSkipped);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings });
   const queueQuery = useQuery({ queryKey: QUEUE_KEY, queryFn: listAutoQueue });
 
   // Items just handed to the agent stay hidden until the next sync: their notes
@@ -84,7 +74,6 @@ export function AutoQueueView({
     onSuccess: (count, targets) => {
       pushToast(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
-      onDecided?.(targets);
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
     },
@@ -104,12 +93,9 @@ export function AutoQueueView({
     listRef.current?.focus();
     const targets = selected.length > 0 ? selected : focused ? [focused] : [];
     if (targets.length === 0) return;
-    setSkipped((current) =>
-      sessionOnly ? [...new Set([...current, ...targets.map(autoQueueKey)])] : addSkipped(current, targets),
-    );
+    setSkipped((current) => addSkipped(current, targets));
     setChecked(new Set());
-    onDecided?.(targets);
-  }, [selected, focused, onDecided, sessionOnly]);
+  }, [selected, focused]);
 
   const toggle = useCallback((item: AutoQueueItem) => {
     setChecked((current) => {
@@ -165,7 +151,6 @@ export function AutoQueueView({
   }
 
   const totalTokens = previewQuery.data && focused && checked.size <= 1 ? previewQuery.data.estimatedTokens : null;
-  const approval = settingsQuery.data?.autoAgentApprovalEnabled ?? false;
 
   if (queueQuery.isLoading) return <LoadingState />;
   if (queueQuery.isError) return <ErrorState message={commandErrorMessage(queueQuery.error)} onRetry={() => void queueQuery.refetch()} />;
@@ -178,16 +163,14 @@ export function AutoQueueView({
           {items.length} waiting · {selected.length} selected
           {totalTokens !== null && ` · focused ≈ ${formatTokens(totalTokens)}`}
         </span>
-        {!approval && (
-          <span className="text-xs text-amber-700 dark:text-amber-400">
-            Items found at app start wait here for a pick; later ones run automatically. Turn on “Choose what to run in Auto queue first” (Settings → Agent command) to pick every time.
-          </span>
-        )}
+        <span className="text-xs text-muted-foreground">
+          Run candidates manually here. Eligible items also run automatically when enabled in Settings. Skipping only hides items from this list.
+        </span>
         <span className="flex-1" />
         <button
           type="button"
           className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
-          onClick={() => setSkipped(sessionOnly ? [] : clearSkipped())}
+          onClick={() => setSkipped(clearSkipped())}
           disabled={skipped.length === 0}
         >
           Show skipped ({skipped.length})

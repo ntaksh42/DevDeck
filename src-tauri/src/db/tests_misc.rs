@@ -178,7 +178,6 @@ fn app_settings_can_be_saved_and_cleared() {
             auto_agent_max_per_sync: 99,
             auto_agent_interval_minutes: 99999,
             auto_agent_pipelines_enabled: true,
-            auto_agent_approval_enabled: true,
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,
             notification_content_preview_enabled: false,
@@ -231,7 +230,6 @@ fn app_settings_can_be_saved_and_cleared() {
     assert_eq!(saved.auto_agent_max_per_sync, 10);
     assert_eq!(saved.auto_agent_interval_minutes, 1440);
     assert!(saved.auto_agent_pipelines_enabled);
-    assert!(saved.auto_agent_approval_enabled);
     assert!(saved.desktop_notifications_enabled);
     assert!(!saved.notification_content_preview_enabled);
     assert!(saved.notify_work_item_assignments);
@@ -253,6 +251,44 @@ fn app_settings_can_be_saved_and_cleared() {
     )
     .unwrap();
     assert_eq!(cleared, AppSettings::default());
+}
+
+#[test]
+fn legacy_approval_setting_does_not_disable_automation_and_is_removed_on_save() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+    for (key, value) in [
+        ("auto_agent_enabled", "true"),
+        ("auto_agent_approval_enabled", "true"),
+        ("auto_agent_max_per_sync", "4"),
+        ("auto_agent_interval_minutes", "30"),
+    ] {
+        conn.execute(
+            "INSERT INTO app_settings(key, value, updated_at) VALUES (?1, ?2, '')",
+            params![key, value],
+        )
+        .unwrap();
+    }
+
+    let settings = get_app_settings(&conn).unwrap();
+    assert!(settings.auto_agent_enabled);
+    assert_eq!(settings.auto_agent_max_per_sync, 4);
+    assert_eq!(settings.auto_agent_interval_minutes, 30);
+    assert!(serde_json::to_value(&settings)
+        .unwrap()
+        .get("autoAgentApprovalEnabled")
+        .is_none());
+
+    let saved = update_app_settings(&conn, settings.clone()).unwrap();
+    assert_eq!(saved, settings);
+    let legacy_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM app_settings WHERE key = 'auto_agent_approval_enabled'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(legacy_rows, 0);
 }
 
 #[test]

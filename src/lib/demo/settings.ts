@@ -85,7 +85,6 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   autoAgentMaxPerSync: DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
   autoAgentIntervalMinutes: 15,
   autoAgentPipelinesEnabled: false,
-  autoAgentApprovalEnabled: false,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
@@ -212,10 +211,6 @@ export function applyDemoSettingsUpdate(
       input && "autoAgentPipelinesEnabled" in input
         ? input.autoAgentPipelinesEnabled === true
         : current.autoAgentPipelinesEnabled,
-    autoAgentApprovalEnabled:
-      input && "autoAgentApprovalEnabled" in input
-        ? input.autoAgentApprovalEnabled === true
-        : current.autoAgentApprovalEnabled,
     readOnlyValidationModeEnabled:
       input && "readOnlyValidationModeEnabled" in input
         ? Boolean(input.readOnlyValidationModeEnabled)

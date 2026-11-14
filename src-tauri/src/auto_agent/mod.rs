@@ -9,9 +9,8 @@
 //! not to change code or propose comments. With an agent workspace folder set,
 //! a pull request's repository is shallow-cloned there first ([`clone`]) so the
 //! agent can read the code around the diff. Every batch runs new items and
-//! follows pushes by itself. With `auto_agent_approval_enabled`
-//! nothing starts by itself: [`queue`] lists the candidates and starts only the
-//! ones picked in Auto queue, through the same runner.
+//! follows pushes by itself. [`queue`] also lets the user preview candidates
+//! and start picked items manually through the same runner.
 
 mod clone;
 mod context;
@@ -194,7 +193,7 @@ impl Drop for BatchGuard {
 }
 
 pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
-    if !settings.auto_agent_enabled || settings.auto_agent_approval_enabled {
+    if !settings.auto_agent_enabled {
         return;
     }
     let key = format!("{}|{}", db.cache_key(), org.id);
@@ -212,7 +211,6 @@ pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization
         let outcome = match db.get_app_settings() {
             Ok(settings)
                 if settings.auto_agent_enabled
-                    && !settings.auto_agent_approval_enabled
                     && claim_check(&key, settings.auto_agent_interval_minutes, Instant::now()) =>
             {
                 run_batch(&db, &settings, &org).await

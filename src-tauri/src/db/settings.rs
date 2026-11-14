@@ -84,9 +84,6 @@ pub struct AppSettings {
     /// `investigate` request about it (the frontend watches pipelines and
     /// starts it). Off by default.
     pub auto_agent_pipelines_enabled: bool,
-    /// Holds the automatic run back: candidates are listed in Auto queue and the
-    /// agent starts only on the ones I pick. Off by default.
-    pub auto_agent_approval_enabled: bool,
     pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
@@ -151,7 +148,6 @@ impl Default for AppSettings {
             auto_agent_max_per_sync: DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
             auto_agent_interval_minutes: DEFAULT_AUTO_AGENT_INTERVAL_MINUTES,
             auto_agent_pipelines_enabled: false,
-            auto_agent_approval_enabled: false,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
@@ -234,7 +230,6 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
             "auto_agent_pipelines_enabled",
             false,
         )?,
-        auto_agent_approval_enabled: get_bool_setting(conn, "auto_agent_approval_enabled", false)?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
             "read_only_validation_mode_enabled",
@@ -404,11 +399,7 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         "auto_agent_pipelines_enabled",
         settings.auto_agent_pipelines_enabled,
     )?;
-    set_bool_setting(
-        conn,
-        "auto_agent_approval_enabled",
-        settings.auto_agent_approval_enabled,
-    )?;
+    set_setting(conn, "auto_agent_approval_enabled", None)?;
     set_bool_setting(
         conn,
         "read_only_validation_mode_enabled",

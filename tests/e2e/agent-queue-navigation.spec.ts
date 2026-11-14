@@ -1,5 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("automatic review has no approval step and manual queue execution remains keyboard accessible", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const automatic = page.getByLabel("Review pull requests and investigate work items automatically");
+  await expect(automatic).toBeVisible();
+  await expect(page.getByLabel("Choose what to run in Auto queue first")).toHaveCount(0);
+  await automatic.focus();
+  await page.keyboard.press("Space");
+  await expect(automatic).toBeChecked();
+  await automatic.locator("xpath=ancestor::form").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Agent command saved.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Choose what the agent handles" })).toHaveCount(0);
+
+  await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("button", { name: "Agent Auto Queue" }).click();
+  const list = page.getByRole("listbox", { name: "Auto queue candidates" });
+  await expect(list).toBeFocused();
+  const first = list.getByRole("option").first();
+  const firstText = await first.innerText();
+  const count = await list.getByRole("option").count();
+  await page.keyboard.press("Space");
+  await expect(first).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+Enter");
+  await expect(list.getByRole("option")).toHaveCount(count - 1);
+  await expect(list.getByRole("option").filter({ hasText: firstText })).toHaveCount(0);
+  await expect(list).toBeFocused();
+});
+
 test("G then A opens Agent Auto Queue and Analyze is absent", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("azdodeck:keybindings:v1", JSON.stringify({ gotoAnalyze: "Z" }));

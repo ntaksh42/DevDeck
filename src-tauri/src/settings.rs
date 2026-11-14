@@ -61,8 +61,6 @@ pub struct UpdateAppSettingsInput {
     pub auto_agent_interval_minutes: Option<i64>,
     #[serde(default)]
     pub auto_agent_pipelines_enabled: Option<bool>,
-    #[serde(default)]
-    pub auto_agent_approval_enabled: Option<bool>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
     pub notification_content_preview_enabled: Option<bool>,
@@ -268,7 +266,6 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .map(clamp_auto_agent_interval_minutes)
             .unwrap_or(DEFAULT_AUTO_AGENT_INTERVAL_MINUTES),
         auto_agent_pipelines_enabled: input.auto_agent_pipelines_enabled.unwrap_or(false),
-        auto_agent_approval_enabled: input.auto_agent_approval_enabled.unwrap_or(false),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
         notification_content_preview_enabled: input

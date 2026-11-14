@@ -30,7 +30,6 @@ export function settingsInput(
     autoAgentMaxPerSync: settings?.autoAgentMaxPerSync ?? DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
     autoAgentIntervalMinutes: settings?.autoAgentIntervalMinutes ?? 15,
     autoAgentPipelinesEnabled: settings?.autoAgentPipelinesEnabled ?? false,
-    autoAgentApprovalEnabled: settings?.autoAgentApprovalEnabled ?? false,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,

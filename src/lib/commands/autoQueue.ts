@@ -2,9 +2,8 @@ import { z } from "zod";
 import { invokeCommand } from "./runtime";
 import type { AgentKind } from "./agentNotes";
 
-// Auto queue: the pull requests awaiting my review and the work items assigned
-// to me that the automatic run would hand to the agent, listed so that only
-// the ones I pick are started (setting `autoAgentApprovalEnabled`).
+// Auto queue lists review and investigation candidates for manual execution,
+// independently of the automatic review setting.
 
 export type AutoQueueTargetKind = "pull-request" | "work-item";
 
@@ -17,8 +16,6 @@ const autoQueueItemSchema = z.object({
   scope: z.string(),
   webUrl: z.string().nullable().default(null),
   createdDate: z.string().nullable().default(null),
-  /** Held back from the automatic run until I pick (first scan after startup). */
-  held: z.boolean().default(false),
 });
 
 export type AutoQueueItem = z.infer<typeof autoQueueItemSchema>;

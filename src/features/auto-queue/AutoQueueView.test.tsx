@@ -18,7 +18,6 @@ const item = (id: number, title: string) => ({
 const runAutoQueue = vi.fn();
 vi.mock("@/lib/azdoCommands", async (original) => ({
   ...(await original<typeof import("@/lib/azdoCommands")>()),
-  getAppSettings: async () => ({ autoAgentApprovalEnabled: true }),
   listAutoQueue: async () => [item(1, "First change"), item(2, "Second change")],
   getAutoQueuePreview: async () => ({ document: "## Changes", chars: 30000, estimatedTokens: 10000, unavailable: null }),
   runAutoQueue: (targets: unknown) => runAutoQueue(targets),

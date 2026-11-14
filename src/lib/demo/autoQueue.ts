@@ -20,7 +20,6 @@ function item(
     scope,
     webUrl: null,
     createdDate,
-    held: false,
   };
 }
 

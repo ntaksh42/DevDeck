@@ -1,6 +1,5 @@
-//! Auto queue (setting `auto_agent_approval_enabled`): the candidates of the
-//! automatic run are listed instead of started, with the material the agent
-//! would get, and only the ones picked are handed to the agent.
+//! Auto queue: preview automatic-run candidates and start picked items
+//! manually, independently of whether automatic reviews are enabled.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -9,8 +8,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
-use super::state::{History, Status};
-use super::{awaits_investigation, handled_check, pick, runner, AutoItem, BATCH_SLOT};
+use super::{handled_check, pick, runner, AutoItem, BATCH_SLOT};
 use crate::agent_notes::launch::AgentKind;
 use crate::agent_notes::{self, NoteTarget};
 use crate::db::{AppDatabase, AppSettings, CachedWorkItem, Organization};
@@ -34,8 +32,6 @@ pub struct AutoQueueItem {
     pub scope: String,
     pub web_url: Option<String>,
     pub created_date: Option<String>,
-    /// Held back from the automatic run, so it waits for a pick.
-    pub held: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -67,10 +63,7 @@ pub fn list(db: &AppDatabase) -> Result<Vec<AutoQueueItem>> {
     let mut queue = Vec::new();
     for org in db.list_organizations()? {
         let items = candidates(db, &settings, &org)?;
-        queue.extend(items.into_iter().map(|item| {
-            let held = settings.auto_agent_approval_enabled;
-            to_queue_item(&org, item, held)
-        }));
+        queue.extend(items.into_iter().map(|item| to_queue_item(&org, item)));
     }
     Ok(queue)
 }
@@ -104,35 +97,14 @@ pub(super) fn candidates(
         Some(_) => db.list_my_work_items(&org.id)?,
         None => Vec::new(),
     };
-    // Automatic runs retry what an attempt already tracks on their own
-    // schedule. With approval on nothing runs by itself, so a tracked item
-    // whose last attempt failed is listed again for a pick.
-    let now = Utc::now();
-    let retry: Vec<AutoItem> = if settings.auto_agent_approval_enabled {
-        let prs = prs.iter().filter(|pr| !pr.is_draft).cloned();
-        let work_items = work_items
-            .iter()
-            .filter(|wi| awaits_investigation(wi, now))
-            .cloned();
-        prs.map(AutoItem::PullRequest)
-            .chain(work_items.map(AutoItem::WorkItem))
-            .filter(|item| {
-                History::read(&item.history_path(db, org))
-                    .is_ok_and(|h| h.runs.last().is_some_and(|r| r.status == Status::Failed))
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
     let handled = handled_check(&root, review_folder, work_item_folder);
-    Ok(pick(prs, work_items, usize::MAX, now, handled)
+    Ok(pick(prs, work_items, usize::MAX, Utc::now(), handled)
         .into_iter()
         .filter(|item| !item.history_path(db, org).exists())
-        .chain(retry)
         .collect())
 }
 
-fn to_queue_item(org: &Organization, item: AutoItem, held: bool) -> AutoQueueItem {
+fn to_queue_item(org: &Organization, item: AutoItem) -> AutoQueueItem {
     let (target, id, title, scope, web_url, created_date) = match item {
         AutoItem::PullRequest(pr) => (
             "pull-request",
@@ -160,7 +132,6 @@ fn to_queue_item(org: &Organization, item: AutoItem, held: bool) -> AutoQueueIte
         scope,
         web_url,
         created_date,
-        held,
     }
 }
 
