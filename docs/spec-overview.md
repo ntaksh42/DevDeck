@@ -960,8 +960,8 @@ format!(
   10% 透過面の上で 4.5:1 以上) に調整してあり、ステータス表示は `border-warning/30
   bg-warning/10 text-warning` のように 1 トークン + 透過度で書く (`bg-red-50 dark:bg-red-950`
   のようなライト/ダークの手書きペアは新規に増やさない)。`primary` は塗り色 (白文字で 4.5:1 以上)、
-  `link` は小さな文字用の青。小さな文字は `text-[11px]` ではなく `text-2xs` (11px) /
-  `text-3xs` (10px) を使う。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
+  `link` は小さな文字用の青。小さな文字は `text-[11px]` ではなく `text-xs` (12.5px) /
+  `text-2xs` (12px) / `text-3xs` (11px) を使う (ルート 15px のときの値)。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
   `index.css` の `:focus-visible` フォールバックが、自前のフォーカス表示 (`focus:ring-*`) を
   持たないコントロールにもテーマ色のリングを出す。
   OS の「視覚効果を減らす」設定 (`prefers-reduced-motion`) ではトランジションと pulse/ping を止める
@@ -1000,10 +1000,13 @@ format!(
   Azure DevOps が挿入する添付ファイル名に生の空白を含む画像 markdown (`![alt](url with space.png)`)
   は、空白をパーセントエンコードした上で画像として描画する。ファイル名内の対応する丸括弧も URL の
   一部として保持する (strict CommonMark は生空白でリンク先を打ち切るため、無変換だと生テキストとして漏れる)。
-- 表示の視認性 (`src/index.css` のトークン): 補助テキスト `--muted-foreground` は白背景で 6.6:1
-  (ダークで 9.6:1) を確保し、文字色に `text-muted-foreground/NN` のような透明度を重ねない。
-  文字サイズの下限は 11px (`text-[9px]` / `text-[10px]` は使わない)。ID などのリンク文字は
-  `text-link` (`--link`、白背景で 5.4:1) を使い、`primary` はボタン等の塗りに限る。
+- 表示の視認性 (`src/index.css` のトークン): 補助テキスト `--muted-foreground` は白背景で 10.2:1
+  (ダークで 10.8:1) を確保し、文字色に `text-muted-foreground/NN` のような透明度を重ねない
+  (件数 0 の Done / Snoozed などを薄く見せる `ListStatusBar` の `/80` だけ例外で、4.5:1 以上を保つ)。
+  文字サイズの下限は 11px (`text-[9px]` / `text-[10px]` は使わない)。キー表記の `text-3xs` を除き、
+  一覧とプレビューの文字は 12px 以上にする。ドックのタブ帯の高さは 28px
+  (`COLLAPSED_GROUP_HEIGHT`)。ID などのリンク文字は
+  `text-link` (`--link`、白背景で 6.3:1) を使い、`primary` はボタン等の塗りに限る。
   グリッド行の選択・複数選択・stale の見た目は `src/lib/gridRowState.ts` の `gridRowStateClass`
   に集約する: 選択は primary の薄い背景 + 左端 3px の primary バー、stale は背景を塗らず左端の
   オレンジバー + 経過日数の文字色 (`STALE_TEXT_CLASS`) で示し、選択の表示を常に優先する。
@@ -1029,6 +1032,7 @@ format!(
 - サーバ状態は TanStack Query 経由。ミューテーションで画面表示が変わる場合は該当クエリキーを更新/無効化する。
 - 長いリストは既存のローカル windowing で仮想化する。スクロール位置の state は行を描くコンポーネントに持たせる (`useVirtualRowWindow`。Work Items グリッドは `WiGridBody`)。グリッドの親に持たせると、1 行スクロールするたびにヘッダー・ステータスバー・プレビュー・ドックの全パネルまで再描画される。
   通常のスクロール更新は非同期にまとめる。最後に描画が完了した位置からの移動が予備描画の範囲 (overscan − 1 行) を超える場合だけ、scroll イベント内で viewport の state を同期更新し、高速スクロールやスクロールバーの大移動で古い行の範囲が描画されるのを防ぐ。スクロール位置が同じ行内にある間は再描画しない。初期計測とリサイズは同期更新の対象にしない。
+  スペーサーと行を入れる要素には全行分の高さ (`totalHeight`) を `minHeight` で指定する。フォーカス中の行が外れる更新では Chromium が DOM の差し替え途中でレイアウトし、下側スペーサーが入る前の短い高さでスクロール位置を切り詰めるため (末尾付近から速く上へスクロールすると余分に戻り、同じ量を戻しても末尾に届かない)。
 - 広範なリファクタは要求された変更に必要な場合のみ行う。
 - テキスト入力の Enter / Escape / Tab は IME 変換中 (`isImeComposing`: `isComposing` または `key === "Process"`) は無視する。変換の確定・取り消しで検索実行・候補確定・メンション挿入・フォーカス移動が起きないようにするため、コマンドパレット、Code 検索、設定フィルタ、フィルタ候補、コメント入力、各種インライン編集欄、グローバルの Escape が共通で従う。
 - 破壊的・不可逆な操作の確認 (組織削除、PR コメント削除、レビュアー削除、PR の Complete / Abandon など) はネイティブの `window.confirm` ではなく `ConfirmDialog` (`role="alertdialog"`、初期フォーカスは Cancel、Esc でキャンセル、閉じたら起点要素へフォーカス復帰) を使う。パイプラインの Re-run / Cancel はインライン確認バー。

@@ -227,7 +227,7 @@ export function AutoQueueView() {
                   onChange={() => toggle(item)}
                   className="h-3.5 w-3.5"
                 />
-                <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-primary" : "text-green-700"}`}>
+                <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
                   {item.target === "pull-request" ? "PR" : "WI"}
                 </span>
                 <span className="truncate">
@@ -254,7 +254,7 @@ export function AutoQueueView() {
               </p>
               {previewQuery.isLoading && <LoadingState />}
               {previewQuery.isError && <p className="text-destructive">{commandErrorMessage(previewQuery.error)}</p>}
-              {previewQuery.data?.unavailable && <p className="text-amber-700 dark:text-amber-400">{previewQuery.data.unavailable}</p>}
+              {previewQuery.data?.unavailable && <p className="text-warning">{previewQuery.data.unavailable}</p>}
               {previewQuery.data && !previewQuery.data.unavailable && (
                 <>
                   <p className="mb-1 text-xs text-muted-foreground">

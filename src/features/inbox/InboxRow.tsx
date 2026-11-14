@@ -61,7 +61,7 @@ export const InboxRow = forwardRef<
       className={`group flex cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection: checked })}`}
     >
       {checked ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Marked" /> : null}
-      <span className={`w-16 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
+      <span className={`w-20 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
         {inboxKindLabel(item.kind)}
       </span>
       <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">

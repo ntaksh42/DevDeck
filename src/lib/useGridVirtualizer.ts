@@ -23,10 +23,11 @@ export function useGridVirtualizer({
   lastRow: number;
   topPadding: number;
   bottomPadding: number;
+  totalHeight: number;
   scrollRowIntoView: (index: number) => void;
 } {
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
-  const { firstRow, lastRow, topPadding, bottomPadding } = useVirtualRowWindow(scrollerEl, {
+  const { firstRow, lastRow, topPadding, bottomPadding, totalHeight } = useVirtualRowWindow(scrollerEl, {
     rowCount,
     rowHeight,
     overscan,
@@ -47,6 +48,7 @@ export function useGridVirtualizer({
     lastRow,
     topPadding,
     bottomPadding,
+    totalHeight,
     scrollRowIntoView,
   };
 }
@@ -69,6 +71,13 @@ export function useVirtualRowWindow(
   lastRow: number;
   topPadding: number;
   bottomPadding: number;
+  /**
+   * Height of all rows. Set it as `minHeight` on the element holding the
+   * spacers and rows, so the scroll height never dips while React swaps the
+   * window. Chromium lays out mid-commit when the focused row is removed, and
+   * with the bottom spacer not yet in place it clamps the scroll position.
+   */
+  totalHeight: number;
 } {
   const [viewport, setViewport] = useState({ width: 0, height: 0, scrollTop: 0 });
   const renderedViewport = useRef(viewport);
@@ -131,6 +140,7 @@ export function useVirtualRowWindow(
     lastRow,
     topPadding: firstRow * rowHeight,
     bottomPadding: Math.max(0, rowCount - lastRow) * rowHeight,
+    totalHeight: rowCount * rowHeight,
   };
 }
 

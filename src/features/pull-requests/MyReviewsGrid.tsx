@@ -351,7 +351,7 @@ export function MyReviewsGrid({
                     ) : null}
                   </div>
                 ) : (
-                  <div role="grid" aria-label="My review pull requests" data-primary-grid="true" tabIndex={-1}>
+                  <div role="grid" aria-label="My review pull requests" data-primary-grid="true" tabIndex={-1} style={{ minHeight: g.virtualTotalHeight }}>
                     {g.virtualTopPadding > 0 ? <div style={{ height: g.virtualTopPadding }} /> : null}
                     {g.virtualRows.map((row) => {
                       if (row.kind === 'header') {

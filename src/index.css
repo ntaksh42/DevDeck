@@ -15,18 +15,18 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215 20% 38%;
+    --muted-foreground: 215 25% 27%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 72% 45%;
+    --destructive: 0 72% 41%;
     --destructive-foreground: 0 0% 100%;
     --border: 214 20% 84%;
     --input: 214 28% 80%;
     --ring: 210 84% 57%;
     /* Text-only link blue. primary is the fill color for buttons (white text on
        it is 4.6:1); link is a notch darker for small text on tinted rows
-       (5.38:1 on white). */
-    --link: 210 80% 42%;
+       (6.27:1 on white, 4.5:1 or more on a selected row). */
+    --link: 210 80% 38%;
     /* Status tones. Like --link they are text-safe (>= 4.5:1 on the page and
        on their own 10% tint), so one token serves as text, border (/30) and
        surface (/10) -- no per-site light/dark palette pairs. */
@@ -49,10 +49,10 @@
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 22% 72%;
+    --muted-foreground: 215 25% 82%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 68%;
+    --destructive: 0 90% 80%;
     --destructive-foreground: 222.2 47% 11%;
     --border: 222 24% 22%;
     --input: 217 28% 28%;
@@ -160,6 +160,16 @@
 /* Agent owns its conversation scroll area; the dock frame must not scroll. */
 .dv-dockview .dv-view:has([data-agent-panel]) {
   overflow: hidden;
+}
+
+/* Tab strip: tall enough (28px, set in DockableWorkspace) that the tab label
+   and the inline controls do not touch the lines above and below. */
+.dv-dockview .dv-tabs-and-actions-container {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.dv-dockview .dv-tab {
+  padding: 0 10px;
 }
 
 .dv-tab.dv-active-tab {
