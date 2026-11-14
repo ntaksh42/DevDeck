@@ -145,9 +145,10 @@
 
 /* A pane that scrolls itself would carry an absolutely positioned frame away
    with its content, so it sits directly inside a non-scrolling
-   [data-focus-frame] wrapper that paints the frame instead. */
-[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within)):not([data-focus-frame] > *)::after,
-[data-focus-frame]:has(> [data-focus-pane]:focus-within):not(:has(> [data-focus-pane] [data-focus-pane]:focus-within))::after {
+   [data-focus-frame] wrapper that paints the frame instead. Grids show focus
+   on the row itself, so a pane holding a grid skips the frame. */
+[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within)):not(:has([data-primary-grid])):not([data-focus-frame] > *)::after,
+[data-focus-frame]:has(> [data-focus-pane]:focus-within):not(:has(> [data-focus-pane] [data-focus-pane]:focus-within)):not(:has(> [data-focus-pane] [data-primary-grid]))::after {
   content: "";
   position: absolute;
   inset: 0;
