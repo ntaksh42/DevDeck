@@ -13,7 +13,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Atkinson Hyperlegible Next Variable"', '"BIZ UDPGothic"', ...defaultTheme.fontFamily.sans],
+        // --font-ui is set in index.css and switched by Settings > Appearance.
+        sans: ["var(--font-ui)"],
         mono: ['"Atkinson Hyperlegible Mono Variable"', '"BIZ UDPGothic"', ...defaultTheme.fontFamily.mono],
       },
       // Compact text sizes. rem-based (12.5px / 12px / 12px at the 15px root)
