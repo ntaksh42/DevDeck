@@ -141,6 +141,49 @@
   }
 }
 
+/* Frame color presets (Settings > Appearance). The default teal is defined in
+   :root / .dark above; these override only the --frame* tokens. */
+[data-frame="white"] {
+  --frame: 0 0% 100%;
+  --frame-foreground: 222 47% 11%;
+  --frame-muted: 215 25% 32%;
+  --frame-hover: 210 40% 94%;
+  --frame-border: 214 20% 82%;
+  --frame-ring: 210 84% 46%;
+}
+.dark[data-frame="white"] {
+  --frame: 222 30% 11%;
+  --frame-foreground: 210 40% 96%;
+  --frame-muted: 215 20% 74%;
+  --frame-hover: 222 28% 18%;
+  --frame-border: 222 24% 20%;
+  --frame-ring: 210 90% 70%;
+}
+[data-frame="slate"] {
+  --frame: 215 25% 27%;
+  --frame-foreground: 210 40% 96%;
+  --frame-muted: 214 20% 78%;
+  --frame-hover: 215 22% 36%;
+  --frame-border: 215 28% 20%;
+  --frame-ring: 210 90% 70%;
+}
+[data-frame="navy"] {
+  --frame: 215 52% 24%;
+  --frame-foreground: 210 40% 96%;
+  --frame-muted: 213 30% 78%;
+  --frame-hover: 214 45% 32%;
+  --frame-border: 215 55% 16%;
+  --frame-ring: 205 90% 70%;
+}
+[data-frame="graphite"] {
+  --frame: 240 6% 16%;
+  --frame-foreground: 0 0% 96%;
+  --frame-muted: 240 5% 75%;
+  --frame-hover: 240 5% 24%;
+  --frame-border: 240 6% 10%;
+  --frame-ring: 210 90% 70%;
+}
+
 /* App frame: the sidebar and header take the frame colors by swapping the
    surface tokens, so their existing bg-secondary / text-muted-foreground /
    border-border classes follow without per-element edits. Anything that

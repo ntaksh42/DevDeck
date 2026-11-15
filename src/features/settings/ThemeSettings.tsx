@@ -13,6 +13,12 @@ import {
   UI_SCALE_LEVELS,
   type UiScale,
 } from "@/lib/uiScale";
+import {
+  FRAME_COLORS,
+  loadFrameColor,
+  setFrameColor,
+  type FrameColor,
+} from "@/lib/frameColor";
 import { SettingsRow } from './SettingsRow';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
@@ -43,6 +49,12 @@ export function ThemeSettings() {
     window.addEventListener(UI_SCALE_CHANGED_EVENT, onScaleChanged);
     return () => window.removeEventListener(UI_SCALE_CHANGED_EVENT, onScaleChanged);
   }, []);
+
+  const [frame, setFrame] = useState<FrameColor>(loadFrameColor);
+  function selectFrame(next: FrameColor) {
+    setFrame(next);
+    setFrameColor(next);
+  }
 
   function selectTheme(next: ThemePreference) {
     setPreference(next);
@@ -81,6 +93,37 @@ export function ThemeSettings() {
             );
           })}
         </div>
+
+        <div
+          role="radiogroup"
+          aria-label="Navigation color"
+          className="mt-3 flex w-fit gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {FRAME_COLORS.map(({ value, label, swatch }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={frame === value}
+              onClick={() => selectFrame(value)}
+              className={`inline-flex h-8 items-center gap-1.5 rounded px-3 text-sm font-medium ${
+                frame === value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className="h-3.5 w-3.5 rounded-sm border border-border"
+                style={{ backgroundColor: swatch }}
+              />
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Navigation color: sidebar and header.
+        </p>
 
         <div
           role="radiogroup"

@@ -12,11 +12,13 @@ import "@fontsource/biz-udpgothic/400.css";
 import "@fontsource/biz-udpgothic/700.css";
 import "./index.css";
 import { applyTheme, loadThemePreference } from "./lib/theme";
+import { applyFrameColor, loadFrameColor } from "./lib/frameColor";
 import { applyUiScale, loadUiScale } from "./lib/uiScale";
 
 // Apply the stored theme synchronously before React renders so the first paint
 // already has the correct .dark class (no light-to-dark flash on startup).
 applyTheme(loadThemePreference());
+applyFrameColor(loadFrameColor());
 applyUiScale(loadUiScale());
 
 const queryClient = new QueryClient({
