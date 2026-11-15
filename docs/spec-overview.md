@@ -247,7 +247,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     フォーカスで広がる。`Ctrl+Enter` で送信し、空のまま `Esc` で畳むと、会話一覧なら選択中の行、会話なら本文の領域へ戻る。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
   - **通知**: `useAgentNoteWatcher` は `ask` の要約も監視し、依頼への返信をデスクトップ通知する (クリックでパネルを開く)。
 - **AI の結果がある行の印**: My Reviews と作業項目グリッド (My Work Items / Work Item Views / Work Item Search) は、
-  結果 HTML がある行の Title の先頭に ☑ アイコン (`AgentResultMark`、ツールチップは `AI review result available` /
+  結果 HTML がある行の Title の先頭に ✦ アイコン (星 1 つ) (`AgentResultMark`、ツールチップは `AI review result available` /
   `AI investigation result available`) を出す。判定は `list_result_item_ids` (`target` = `pull-request` / `work-item`) が返す ID の一覧で行う。
   このコマンドは結果フォルダのファイル名を 1 回走査し、Result タブの照合 (`review_result_folder_path` /
   `work_item_result_folder_path` の規則) と同じ規則で ID を取り出す。フォルダが未設定か存在しなければ空の一覧を返し、印を出さない。

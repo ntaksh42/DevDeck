@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { SquareCheck } from "lucide-react";
+import { Sparkle } from "lucide-react";
 import { listResultItemIds, type ResultTarget } from "@/lib/azdoCommands";
 
 // The result files are written outside DevDeck (by the agent), so the id list
@@ -34,7 +34,7 @@ export function AgentResultMark({ target, itemId }: { target: ResultTarget; item
   const label = target === "pull-request" ? "AI review result available" : "AI investigation result available";
   return (
     <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 text-info">
-      <SquareCheck className="h-3.5 w-3.5" aria-hidden="true" />
+      <Sparkle className="h-3.5 w-3.5" aria-hidden="true" />
     </span>
   );
 }
