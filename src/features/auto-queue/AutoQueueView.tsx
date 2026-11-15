@@ -16,6 +16,8 @@ import { clamp, focusFilterInput } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { ListStatusBar } from "@/components/ListStatusBar";
 import { DockFilterBar, DockFilterInput, useDockFilter } from "@/components/DockFilterBar";
+import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { HeaderToolbarPortal } from "@/components/HeaderToolbarSlot";
 
 const QUEUE_KEY = ["autoQueue"];
 
@@ -30,7 +32,7 @@ function ageLabel(createdDate: string | null): string {
   return days <= 0 ? "today" : `${days}d`;
 }
 
-/** `tabs`: Agent Work's tab segments, shown at the start of the header row. */
+/** `tabs`: Agent Work's tab segments, shown at the start of the list tab band. */
 export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -99,11 +101,21 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   });
 
   // The list owns the keyboard: it takes focus on open and gets it back after
-  // a button was used, so arrow navigation resumes.
+  // a button was used, so arrow navigation resumes. It lives in a dock panel
+  // that mounts after this view, so it takes focus when it attaches.
+  const wantsFocusRef = useRef(true);
+  const attachList = useCallback((element: HTMLDivElement | null) => {
+    listRef.current = element;
+    if (element && wantsFocusRef.current) {
+      wantsFocusRef.current = false;
+      // Arrowing between tabs hands focus to the tab segment; keep it there.
+      if (!document.activeElement?.closest('[role="tablist"][aria-label="Agent work"]')) element.focus();
+    }
+  }, []);
   useEffect(() => {
-    // Arrowing between tabs hands focus to the tab segment; keep it there.
     if (document.activeElement?.closest('[role="tablist"][aria-label="Agent work"]')) return;
-    listRef.current?.focus();
+    if (listRef.current) listRef.current.focus();
+    else wantsFocusRef.current = true;
   }, [queueQuery.isLoading]);
 
   const run = useCallback(() => {
@@ -202,124 +214,148 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   if (queueQuery.isLoading) return <LoadingState />;
   if (queueQuery.isError) return <ErrorState message={commandErrorMessage(queueQuery.error)} onRetry={() => void queueQuery.refetch()} />;
 
+  const listPane = (
+    <div className="flex h-full min-h-0 flex-col">
+      <label className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-0.5 text-xs text-muted-foreground">
+        <input
+          ref={selectAllRef}
+          type="checkbox"
+          tabIndex={-1}
+          aria-label="Select all shown"
+          checked={allSelected}
+          disabled={items.length === 0}
+          onChange={() => {
+            toggleAll();
+            listRef.current?.focus();
+          }}
+          className="h-3.5 w-3.5"
+        />
+        Select all shown <kbd>A</kbd>
+      </label>
+      <div
+        ref={attachList}
+        data-primary-grid="true"
+        role="listbox"
+        aria-label="Auto queue candidates"
+        aria-multiselectable="true"
+        tabIndex={0}
+        className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      >
+        {items.length === 0 && (
+          allItems.length > 0 ? (
+            <PreviewEmptyState message="No candidates match the filter." />
+          ) : (
+            <PreviewEmptyState message="Nothing is waiting." hint="New pull requests and work items appear here after a sync." />
+          )
+        )}
+        {items.map((item) => {
+          const key = autoQueueKey(item);
+          const isFocused = focused !== null && key === autoQueueKey(focused);
+          return (
+            <div
+              key={key}
+              role="option"
+              aria-selected={checked.has(key)}
+              onClick={() => setFocusKey(key)}
+              className={`grid cursor-default grid-cols-[22px_34px_1fr_auto_auto] items-center gap-2 border-b border-border px-3 py-1 text-sm ${
+                isFocused ? "bg-primary/10 outline outline-2 -outline-offset-2 outline-primary" : ""
+              }`}
+            >
+              <input
+                type="checkbox"
+                tabIndex={-1}
+                aria-label={`Select ${item.title}`}
+                checked={checked.has(key)}
+                onChange={() => toggle(item)}
+                className="h-3.5 w-3.5"
+              />
+              <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
+                {item.target === "pull-request" ? "PR" : "WI"}
+              </span>
+              <span className="truncate">
+                <span className="text-muted-foreground">{item.target === "pull-request" ? "!" : "#"}{item.id}</span> {item.title}
+              </span>
+              <span className="max-w-32 truncate text-xs text-muted-foreground">{item.scope}</span>
+              <span className="w-10 text-right text-xs text-muted-foreground">{ageLabel(item.createdDate)}</span>
+            </div>
+          );
+        })}
+      </div>
+      <ListStatusBar
+        summary={[
+          query.trim() ? `${items.length} of ${allItems.length} not run yet` : `${items.length} not run yet`,
+          `${selected.length} selected`,
+          totalTokens !== null && `focused ≈ ${formatTokens(totalTokens)}`,
+        ]}
+        helpSection="agent-work"
+      />
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
-      <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-3 py-1.5 text-sm">
-        {tabs ?? <h1 className="font-semibold">Candidates</h1>}
-        <DockFilterBar
-          label="Filter candidates"
-          open={filter.open}
-          onOpen={filter.onOpen}
-          onClose={filter.onClose}
-          inputRef={filterInputRef}
-          hasValue={query.trim() !== ""}
-          chips={query.trim() ? [{ label: query.trim(), onClear: () => setQuery("") }] : []}
-        >
-          <DockFilterInput
-            inputRef={filterInputRef}
-            value={query}
-            onChange={setQuery}
-            placeholder="Filter by number, title, repository…"
-            ariaLabel="Filter candidates"
-          />
-        </DockFilterBar>
-        <span className="truncate text-xs text-muted-foreground">
-          Run candidates manually here. Eligible items also run automatically when enabled in Settings.
-        </span>
-        <span className="flex-1" />
+      <HeaderToolbarPortal>
         <button
           type="button"
-          className="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs hover:bg-secondary disabled:opacity-50"
           onClick={exclude}
           disabled={items.length === 0 || excludeMutation.isPending}
+          title="Exclude the focused candidate from automatic runs (X)"
         >
           Exclude <kbd className="text-muted-foreground">X</kbd>
         </button>
         <button
           type="button"
-          className="rounded bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
           onClick={run}
           disabled={selected.length === 0 || runMutation.isPending}
+          title="Run the checked candidates now. Eligible items also run automatically when enabled in Settings."
         >
           Run selected <kbd className="opacity-80">Ctrl+Enter</kbd>
         </button>
-      </div>
-
-      <div className="grid min-h-0 flex-1 grid-cols-2">
-        <div className="flex min-h-0 flex-col border-r border-border">
-        <label className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-0.5 text-xs text-muted-foreground">
-          <input
-            ref={selectAllRef}
-            type="checkbox"
-            tabIndex={-1}
-            aria-label="Select all shown"
-            checked={allSelected}
-            disabled={items.length === 0}
-            onChange={() => {
-              toggleAll();
-              listRef.current?.focus();
-            }}
-            className="h-3.5 w-3.5"
-          />
-          Select all shown <kbd>A</kbd>
-        </label>
-        <div
-          ref={listRef}
-          data-primary-grid="true"
-          role="listbox"
-          aria-label="Auto queue candidates"
-          aria-multiselectable="true"
-          tabIndex={0}
-          className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-primary"
-        >
-          {items.length === 0 && (
-            allItems.length > 0 ? (
-              <PreviewEmptyState message="No candidates match the filter." />
-            ) : (
-              <PreviewEmptyState message="Nothing is waiting." hint="New pull requests and work items appear here after a sync." />
-            )
-          )}
-          {items.map((item) => {
-            const key = autoQueueKey(item);
-            const isFocused = focused !== null && key === autoQueueKey(focused);
-            return (
-              <div
-                key={key}
-                role="option"
-                aria-selected={checked.has(key)}
-                onClick={() => setFocusKey(key)}
-                className={`grid cursor-default grid-cols-[22px_34px_1fr_auto_auto] items-center gap-2 border-b border-border px-3 py-1 text-sm ${
-                  isFocused ? "bg-primary/10 outline outline-2 -outline-offset-2 outline-primary" : ""
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  tabIndex={-1}
-                  aria-label={`Select ${item.title}`}
-                  checked={checked.has(key)}
-                  onChange={() => toggle(item)}
-                  className="h-3.5 w-3.5"
-                />
-                <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
-                  {item.target === "pull-request" ? "PR" : "WI"}
-                </span>
-                <span className="truncate">
-                  <span className="text-muted-foreground">{item.target === "pull-request" ? "!" : "#"}{item.id}</span> {item.title}
-                </span>
-                <span className="max-w-32 truncate text-xs text-muted-foreground">{item.scope}</span>
-                <span className="w-10 text-right text-xs text-muted-foreground">{ageLabel(item.createdDate)}</span>
-              </div>
-            );
-          })}
-        </div>
-        </div>
-
-        <div className="min-h-0 overflow-auto p-3 text-sm">
+      </HeaderToolbarPortal>
+      <div className="flex min-h-0 flex-1">
+        <DockableWorkspace
+          storageKey="azdodeck:agentWorkCandidates:dockview:v1"
+          panels={[
+            {
+              id: "list",
+              title: "Items",
+              headerActions: (
+                <>
+                  {tabs}
+                  <DockFilterBar
+                    label="Filter candidates"
+                    open={filter.open}
+                    onOpen={filter.onOpen}
+                    onClose={filter.onClose}
+                    inputRef={filterInputRef}
+                    hasValue={query.trim() !== ""}
+                    chips={query.trim() ? [{ label: query.trim(), onClear: () => setQuery("") }] : []}
+                  >
+                    <DockFilterInput
+                      inputRef={filterInputRef}
+                      value={query}
+                      onChange={setQuery}
+                      placeholder="Filter by number, title, repository…"
+                      ariaLabel="Filter candidates"
+                    />
+                  </DockFilterBar>
+                </>
+              ),
+              content: listPane,
+              minWidth: 420,
+            },
+            {
+              id: "preview",
+              title: "Preview",
+              content: (
+                <div className="h-full min-h-0 overflow-auto p-3 text-sm">
           {focused === null ? (
             <PreviewEmptyState message="Pick a candidate to see what the agent would get." />
           ) : (
             <>
-              <h2 className="font-semibold">
+              <h2 className="text-base font-semibold leading-snug">
                 {focused.target === "pull-request" ? "!" : "#"}
                 {focused.id} {focused.title}
               </h2>
@@ -331,10 +367,13 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
               {previewQuery.data?.unavailable && <p className="text-warning">{previewQuery.data.unavailable}</p>}
               {previewQuery.data && !previewQuery.data.unavailable && (
                 <>
-                  <p className="mb-1 text-xs text-muted-foreground">
-                    Material: {previewQuery.data.chars.toLocaleString()} chars ≈ {formatTokens(previewQuery.data.estimatedTokens)}
-                    {previewQuery.data.chars > previewQuery.data.document.length && " (start shown)"}
-                  </p>
+                  <h3 className="mb-1 flex items-baseline gap-2 rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
+                    Material
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {previewQuery.data.chars.toLocaleString()} chars ≈ {formatTokens(previewQuery.data.estimatedTokens)}
+                      {previewQuery.data.chars > previewQuery.data.document.length && " (start shown)"}
+                    </span>
+                  </h3>
                   <pre className="whitespace-pre-wrap break-words rounded border border-border bg-muted/40 p-2 text-xs">
                     {previewQuery.data.document}
                   </pre>
@@ -342,17 +381,14 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
               )}
             </>
           )}
-        </div>
+                </div>
+              ),
+              position: { relativeTo: "list", direction: "right" },
+              minWidth: 320,
+            },
+          ] satisfies DockablePanelSpec[]}
+        />
       </div>
-
-      <ListStatusBar
-        summary={[
-          query.trim() ? `${items.length} of ${allItems.length} not run yet` : `${items.length} not run yet`,
-          `${selected.length} selected`,
-          totalTokens !== null && `focused ≈ ${formatTokens(totalTokens)}`,
-        ]}
-        helpSection="agent-work"
-      />
     </div>
   );
 }

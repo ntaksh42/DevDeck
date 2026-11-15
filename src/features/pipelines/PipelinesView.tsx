@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { HeaderToolbarPortal } from "@/components/HeaderToolbarSlot";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Plus } from "lucide-react";
 import {
@@ -215,10 +216,12 @@ export function PipelinesView() {
   }, [selectedOrganizationId]);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="relative shrink-0">
-        {/* One borderless row, same height as the PR / WI Search rows. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-64">
+      {/* The project / pipeline pickers live in the header next to the
+          breadcrumb, so the list starts at the same height as other views. */}
+      <HeaderToolbarPortal>
+      <div className="relative flex min-w-0 flex-1 items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="w-64 shrink">
             <FilterableSelect
               ariaLabel="Project"
               value={projectId}
@@ -232,7 +235,7 @@ export function PipelinesView() {
             />
           </div>
 
-          <div className="w-64">
+          <div className="w-64 shrink">
             <FilterableSelect
               ariaLabel="Pipeline"
               value={definitionId == null ? "" : String(definitionId)}
@@ -243,7 +246,7 @@ export function PipelinesView() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={handleSubscribe}
@@ -258,7 +261,7 @@ export function PipelinesView() {
               aria-pressed={selectedIsSubscribed}
               className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedIsSubscribed
-                  ? "border-success bg-success/10 text-success"
+                  ? "border-success bg-card text-success"
                   : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >
@@ -284,7 +287,7 @@ export function PipelinesView() {
             </button>
           </div>
 
-          <div className="min-w-[16rem] flex-1">
+          <div className="min-w-0 flex-1">
           {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (
             <PipelineApprovalsPanel
               approvals={approvalsQuery.data ?? []}
@@ -314,10 +317,11 @@ export function PipelinesView() {
             onClose={() => setQueueOpen(false)}
           />
         ) : null}
-        {queueNotice ? (
-          <p className="mt-2 text-xs text-success">{queueNotice}</p>
-        ) : null}
       </div>
+      </HeaderToolbarPortal>
+      {queueNotice ? (
+        <p role="status" className="shrink-0 text-xs text-success">{queueNotice}</p>
+      ) : null}
 
       <DockableWorkspace
         storageKey={`${PIPELINE_PREVIEW_WIDTH_STORAGE_KEY}:dockview:v1`}

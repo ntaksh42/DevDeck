@@ -13,7 +13,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Hanken Grotesk Variable"', ...defaultTheme.fontFamily.sans],
+        sans: ['"Atkinson Hyperlegible Next Variable"', '"BIZ UDPGothic"', ...defaultTheme.fontFamily.sans],
+        mono: ['"Atkinson Hyperlegible Mono Variable"', '"BIZ UDPGothic"', ...defaultTheme.fontFamily.mono],
       },
       // Compact text sizes. rem-based (12.5px / 12px / 12px at the 15px root)
       // so they follow the root font-size tiers in index.css, unlike

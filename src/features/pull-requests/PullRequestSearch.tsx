@@ -6,6 +6,7 @@ import { handleSearchInputEscape, isImeComposing } from '@/lib/utils';
 import { parsePrSearchQuery } from '@/lib/prSearchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { SearchInput, SearchSubmitButton } from '@/components/SearchBar';
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { useSearchHistory } from '@/lib/searchHistory';
 import { PullRequestResults } from './PrSearchResults';
 import { PrSearchHistory } from './PrSearchHistory';
@@ -97,24 +98,24 @@ export function PullRequestSearch({ externalSearch, onExternalSearchHandled }: {
     onContinue: () => search.continueSearch(), onRetry: () => search.continueSearch(true), onStop: () => void search.stop() };
 
   return <div className="flex min-h-0 flex-1 flex-col gap-2">
-    <form className="grid shrink-0 gap-1.5 pr-1.5" onSubmit={submit}>
-      <div className="flex items-center gap-2">
+    {/* The search row lives in the header next to the breadcrumb, so the
+        list starts at the same height as every other view. */}
+    <HeaderToolbarPortal>
+      <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={submit}>
         <SearchInput value={query} onChange={(value) => { setQuery(value); setValidationError(null); }} placeholder="Search pull requests…" autoFocus
           onKeyDown={(event) => {
             if (isImeComposing(event.nativeEvent) && event.key === 'Enter') { event.preventDefault(); return; }
             handleSearchInputEscape(event);
           }} />
+        <PrSearchFilterChips filters={filters} onOpen={(owner) => setFilterAnchor(owner.getBoundingClientRect())} onChange={(next) => runSearch(query, next)} />
+        {dirty && search.searched ? <span role="status" className="shrink-0 text-2xs text-warning">Press Enter to search</span> : null}
         <button type="button" onClick={(event) => setFilterAnchor(event.currentTarget.getBoundingClientRect())} aria-expanded={!!filterAnchor}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring">
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-input bg-card px-2.5 text-sm text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring">
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />Filters
         </button>
         <SearchSubmitButton pending={search.pending} disabled={!organizationId} />
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PrSearchFilterChips filters={filters} onOpen={(owner) => setFilterAnchor(owner.getBoundingClientRect())} onChange={(next) => runSearch(query, next)} />
-        {dirty && search.searched ? <span role="status" className="text-2xs text-warning">Press Enter to search</span> : null}
-      </div>
-    </form>
+      </form>
+    </HeaderToolbarPortal>
     {validationError ? <p role="alert" className="text-xs text-destructive">{validationError}</p> : null}
     {search.error ? <ErrorState message={search.error} /> : null}
     {search.result?.warnings.length ? <p role="status" className="shrink-0 text-xs text-warning">Incomplete results: {search.result.warnings.join('; ')}</p> : null}

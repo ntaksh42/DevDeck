@@ -91,7 +91,7 @@ export function TitleEditor({
           }
         }}
         aria-label="Edit title"
-        className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-[17px] font-bold leading-snug text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+        className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-base font-semibold leading-snug text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
       />
     );
   }
@@ -103,7 +103,7 @@ export function TitleEditor({
       onClick={open}
       aria-label="Edit title"
       title={current}
-      className="mt-0.5 line-clamp-2 w-full rounded px-1 text-left text-[17px] font-bold leading-snug text-foreground hover:bg-secondary"
+      className="mt-0.5 line-clamp-2 w-full rounded px-1 text-left text-base font-semibold leading-snug text-foreground hover:bg-secondary"
     >
       {current}
     </button>

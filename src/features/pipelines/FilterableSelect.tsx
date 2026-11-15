@@ -143,7 +143,7 @@ export function FilterableSelect({
 
   return (
     <div ref={containerRef} className="relative min-w-0 flex-1" onBlur={handleBlur}>
-      <div className="relative">
+      <div className="frame-surface relative">
         <input
           type="text"
           role="combobox"

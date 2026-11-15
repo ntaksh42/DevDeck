@@ -374,7 +374,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 flex-col border-r border-border bg-background ${
+      className={`app-frame fixed inset-y-0 left-0 flex-col border-r border-border bg-background ${
         sidebarCollapsed ? "hidden" : "hidden lg:flex"
       }`}
       style={{ width: sidebarWidth }}
