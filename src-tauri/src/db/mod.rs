@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use rusqlite::Connection;
 
@@ -66,11 +68,17 @@ pub(crate) const SCHEMA_VERSION: i64 = 31;
 #[derive(Debug, Clone)]
 pub struct AppDatabase {
     path: PathBuf,
+    /// Set once WAL has been confirmed for this file. The journal mode is
+    /// stored in the database file, so later opens skip the pragma.
+    wal_ready: Arc<AtomicBool>,
 }
 
 impl AppDatabase {
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            wal_ready: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     /// The folder holding the database file, where other app-private files
@@ -101,10 +109,14 @@ impl AppDatabase {
         // Wait instead of failing with SQLITE_BUSY when a sync write overlaps
         // a UI read; NORMAL is durable enough under WAL and much faster.
         conn.busy_timeout(std::time::Duration::from_secs(3))?;
-        // Ensure WAL is applied on every open, not just first-run migration, so
-        // a pre-existing non-WAL DB is upgraded rather than left on a rollback
-        // journal where synchronous=NORMAL weakens crash durability.
-        conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+        // Ensure WAL is applied, not just on first-run migration, so a
+        // pre-existing non-WAL DB is upgraded rather than left on a rollback
+        // journal where synchronous=NORMAL weakens crash durability. The mode
+        // persists in the file, so confirm it once per process, not per open.
+        if !self.wal_ready.load(Ordering::Relaxed) {
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+            self.wal_ready.store(true, Ordering::Relaxed);
+        }
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         Ok(conn)
     }

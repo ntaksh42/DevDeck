@@ -158,6 +158,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
         </div>
         <div className={group}>
           <p {...sectionProps("work-items")}>Work Items</p>
+          <div className={row}><span>Investigate selected rows or the focused work item</span><kbd className={kbd}>I</kbd></div>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter / O</kbd></div>

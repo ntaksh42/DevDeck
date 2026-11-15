@@ -25,7 +25,8 @@ import {
   type WiSortState,
 } from './workItemsGridHelpers';
 import { BulkActionBar, BulkFailurePanel } from './BulkActionBar';
-import { BulkInvestigateButton } from './BulkInvestigateButton';
+import { useWorkItemInvestigation } from './useWorkItemInvestigation';
+import { InvestigateSplitButton } from './InvestigateSplitButton';
 import { WiGridHeader } from './WiGridHeader';
 import { useExtraColumnLabel } from './useWorkItemFields';
 import { WiGridBody } from './WiGridBody';
@@ -38,16 +39,13 @@ import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { usePublishAgentListScope } from '@/components/agent/agentListScope';
 import { usePublishAgentSubject } from '@/components/agent/agentSubject';
 import { wiAgentList, wiFilterNotes, type WiAgentListInfo } from './wiAgentList';
-
 // Re-export so existing importers (e.g. bulkSelectionSummary.test.ts) keep working.
 export { summarizeBy } from './BulkActionBar';
-
 // Stable empty array for the `extraColumns` default: a fresh `[]` on every
 // render would flow down into the memoized MemoWiRow and defeat its memo,
 // since callers that omit this prop would otherwise pass a new reference
 // every render.
 const EMPTY_EXTRA_COLUMNS: string[] = [];
-
 export function WorkItemsGrid({
   results,
   loading,
@@ -113,7 +111,6 @@ export function WorkItemsGrid({
     state.setColumnFilters({});
     state.setStaleOnly(false);
   }, [filterResetKey]);
-
   const extraColumnLabel = useExtraColumnLabel(fieldColumnsSource?.organizationId);
   const g = useWiGridLogic(
     { results, loading, triageScope, extraColumns, extraColumnLabel, activeExternalFilterCount, onClearExternalFilters, autoFocus },
@@ -124,6 +121,8 @@ export function WorkItemsGrid({
       ? wiAgentList(agentList, g.displayed, () => wiFilterNotes(state.columnFilters, state.staleOnly))
       : undefined,
   );
+  const investigation = useWorkItemInvestigation(g.checkedItems.length ? g.checkedItems : g.selectedItem ? [g.selectedItem] : []);
+  const investigateButton = <InvestigateSplitButton {...investigation} title="Investigate selected work items (I)" />;
   const selectedForAgent = g.selectedItem;
   usePublishAgentSubject(
     selectedForAgent
@@ -137,11 +136,9 @@ export function WorkItemsGrid({
         }
       : null,
   );
-
   // Duplicate flow: the preview panel hands over a prefilled draft (D key or
   // the header button) and the create dialog finishes the job.
   const [duplicateDraft, setDuplicateDraft] = useState<CreateWorkItemDraft | null>(null);
-
   const snoozeFallbackItems = useMemo(
     () =>
       new Map(
@@ -315,7 +312,11 @@ export function WorkItemsGrid({
       ref={state.containerRef}
       className="flex min-h-0 flex-1 flex-col outline-none"
       tabIndex={-1}
-      onKeyDown={g.handleKeyDown}
+      onKeyDown={(event) => {
+        if (!event.defaultPrevented && !isEditableTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'i') {
+          event.preventDefault(); investigation.onRun();
+        } else g.handleKeyDown(event);
+      }}
       onFocusCapture={g.handleGridFocusCapture}
       onBlurCapture={g.handleGridBlurCapture}
     >
@@ -373,7 +374,7 @@ export function WorkItemsGrid({
           onPrioritySelect={(priority) => g.bulk.bulkPriorityMutation.mutate(priority)}
           tagsPending={g.bulk.bulkTagsMutation.isPending}
           onTagsApply={(tag, mode) => g.bulk.bulkTagsMutation.mutate({ tag, mode })}
-          extraActions={<BulkInvestigateButton items={g.checkedItems} />}
+          extraActions={investigateButton}
           snoozePending={state.snoozeMutation.isPending}
           onSnoozeOpen={(anchorRect) => {
             state.snoozeTargetRef.current = [...g.checkedItems];
@@ -395,6 +396,7 @@ export function WorkItemsGrid({
               <div className="flex h-full min-w-0 items-center gap-1">
                 {stateView ? <ListStateChip label={stateView} onClear={leaveStateView} /> : null}
                 {filterBar}
+                {!g.checkedItems.length && g.selectedItem ? investigateButton : null}
               </div>
             ) },
             {
@@ -427,7 +429,7 @@ export function WorkItemsGrid({
         />
       ) : (
         <>
-          {filterBar ? <div className="flex h-5 shrink-0 justify-end">{filterBar}</div> : null}
+          <div className="flex shrink-0 justify-end">{filterBar}{!g.checkedItems.length && g.selectedItem ? investigateButton : null}</div>
           {gridPane}
         </>
       )}
