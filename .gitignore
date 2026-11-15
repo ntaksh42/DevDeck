@@ -29,11 +29,13 @@ test-results/
 *.sln
 *.sw?
 
-# Local tooling and artifacts (release.ps1 and fake-ado/ are tracked:
-# package.json references them as the release flow and `pnpm tauri:fake`)
+# Local tooling and artifacts (release.ps1, fake-ado/ and check-file-lines.mjs
+# are tracked: package.json references them as the release flow,
+# `pnpm tauri:fake` and `pnpm check:lines`)
 scripts/*
 !scripts/release.ps1
 !scripts/fake-ado/
+!scripts/check-file-lines.mjs
 .claude/*
 !.claude/skills/
 .claude/skills/*
