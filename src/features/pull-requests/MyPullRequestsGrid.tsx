@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { commandErrorMessage, listMyCreatedPullRequests } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
@@ -17,10 +17,14 @@ import { useColumnDrag } from "@/lib/columnDrag";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
+import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import { usePendingRowFocus } from "@/lib/usePendingRowFocus";
+import { parkGridFocus } from "@/lib/parkGridFocus";
 import { copyRowsAsLinks, copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
-import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
+import { SortHeaderButton } from "./MyPullRequestsRow";
+import { MemoCreatedPrRow } from "./MemoCreatedPrRow";
 import { DraftsCheckbox } from "./DraftsCheckbox";
 import { prAgentList, usePrReviewPanels } from "./usePrReviewPanels";
 import { createdCopyColumns, prLinkTarget } from "./prCopyColumns";
@@ -28,6 +32,8 @@ import { copyPrMarkdownLink } from "./copyPrMarkdownLink";
 import { createdNextAction, nextActionableIndex } from "./nextAction";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
+  PR_GRID_OVERSCAN,
+  PR_GRID_ROW_HEIGHT,
   MAX_REVIEW_PREVIEW_WIDTH,
   MIN_REVIEW_PREVIEW_WIDTH,
 } from "./myReviewsTypes";
@@ -67,62 +73,6 @@ function toReviewSummary(pr: MyCreatedPullRequestSummary): ReviewPullRequestSumm
     ciCheckCount: 0,
   };
 }
-
-// One grid row. Memoized so that moving the selection or filtering the list
-// only re-renders the rows whose own props actually changed. `onSelect` and
-// the row `ref` callback are built here (not in the parent's map) so they stay
-// stable per row instead of being recreated — and thus invalidating the memo —
-// on every render.
-const MemoCreatedPrRow = memo(function MemoCreatedPrRow({
-  index,
-  pr,
-  columnTemplate,
-  visibleColumns,
-  selected,
-  inMultiSelection,
-  rowRefs,
-  handleRowClick,
-  setSelectedIndex,
-}: {
-  index: number;
-  pr: MyCreatedPullRequestSummary;
-  columnTemplate: string;
-  visibleColumns: SortKey[];
-  selected: boolean;
-  inMultiSelection: boolean;
-  rowRefs: React.RefObject<Array<HTMLDivElement | null>>;
-  handleRowClick: (
-    index: number,
-    modifiers: { shiftKey: boolean; ctrlKey: boolean },
-    setSelectedIndex: (index: number) => void,
-  ) => void;
-  setSelectedIndex: (index: number) => void;
-}) {
-  const setRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      rowRefs.current[index] = el;
-    },
-    [rowRefs, index],
-  );
-
-  const onSelect = useCallback(
-    (modifiers: { shiftKey: boolean; ctrlKey: boolean }) =>
-      handleRowClick(index, modifiers, setSelectedIndex),
-    [handleRowClick, index, setSelectedIndex],
-  );
-
-  return (
-    <CreatedPrRow
-      ref={setRef}
-      pr={pr}
-      columnTemplate={columnTemplate}
-      visibleColumns={visibleColumns}
-      selected={selected}
-      inMultiSelection={inMultiSelection}
-      onSelect={onSelect}
-    />
-  );
-});
 
 // Active pull requests the authenticated user authored, read from the local sync
 // cache and refreshed on sync:updated like the review grid. The grid
@@ -203,6 +153,20 @@ export function MyPullRequestsGrid() {
     setSelectedIndex((index) => Math.min(index, Math.max(0, rows.length - 1)));
   }, [rows.length]);
 
+  const restoreFocusRef = useRef(false);
+  const {
+    scrollerRef,
+    firstRow,
+    lastRow,
+    topPadding,
+    bottomPadding,
+    totalHeight,
+    scrollRowIntoView,
+  } = useGridVirtualizer({ rowCount: rows.length, rowHeight: PR_GRID_ROW_HEIGHT, overscan: PR_GRID_OVERSCAN });
+  const virtualRows = rows.slice(firstRow, lastRow);
+  // Rows outside the virtual window unmount; refocus the selection once mounted.
+  usePendingRowFocus(restoreFocusRef, rowRefs, selectedIndex);
+
   const selection = useRangeSelection({
     rows,
     keyOf: (pr) => `${pr.repositoryId}:${pr.pullRequestId}`,
@@ -221,8 +185,10 @@ export function MyPullRequestsGrid() {
   // starts a fresh single-row selection.
   const moveSelection = (next: number, extend = false) => {
     const clamped = Math.max(0, Math.min(next, rows.length - 1));
+    parkGridFocus(rowRefs.current[clamped]);
+    restoreFocusRef.current = true;
+    scrollRowIntoView(clamped);
     setSelectedIndex(clamped);
-    rowRefs.current[clamped]?.focus();
     if (extend) selection.extendTo(clamped);
     else selection.clear();
   };
@@ -381,7 +347,7 @@ export function MyPullRequestsGrid() {
       ) : query.isError ? (
         <p className="px-2 py-3 text-sm text-destructive">{commandErrorMessage(query.error)}</p>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto" onKeyDown={onKeyDown}>
+        <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto [overflow-anchor:none]" onKeyDown={onKeyDown}>
           <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
             {/* Column headers */}
             <div
@@ -410,8 +376,11 @@ export function MyPullRequestsGrid() {
                 You have no active pull requests in this organization.
               </div>
             ) : (
-              <div role="grid" aria-label="My pull requests" data-primary-grid="true" tabIndex={-1}>
-                {rows.map((pr, index) => (
+              <div role="grid" aria-label="My pull requests" data-primary-grid="true" tabIndex={-1} style={{ minHeight: totalHeight }}>
+                {topPadding > 0 ? <div style={{ height: topPadding }} /> : null}
+                {virtualRows.map((pr, offset) => {
+                  const index = firstRow + offset;
+                  return (
                   <MemoCreatedPrRow
                     key={`${pr.repositoryId}-${pr.pullRequestId}`}
                     index={index}
@@ -426,7 +395,9 @@ export function MyPullRequestsGrid() {
                     handleRowClick={selection.handleRowClick}
                     setSelectedIndex={setSelectedIndex}
                   />
-                ))}
+                  );
+                })}
+                {bottomPadding > 0 ? <div style={{ height: bottomPadding }} /> : null}
               </div>
             )}
           </div>

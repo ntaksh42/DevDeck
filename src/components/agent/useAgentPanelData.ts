@@ -83,7 +83,8 @@ export function useAgentPanelData(
     queryKey: AGENT_ASKS_KEY,
     queryFn: listAgentAsks,
     enabled,
-    refetchInterval: 5_000,
+    // Asks only show while no PR / work item is the subject.
+    refetchInterval: item ? false : 5_000,
   });
 
   const conversations: Conversation[] = [
