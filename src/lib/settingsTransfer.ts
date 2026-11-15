@@ -21,6 +21,7 @@ const ALLOWED_PREFIXES = [
   "azdodeck:quickPipelines",
   "azdodeck:pipelineSubscriptions",
   "azdodeck:theme",
+  "azdodeck:frameColor",
   "azdodeck:uiScale",
 ];
 
