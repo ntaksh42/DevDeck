@@ -27,6 +27,13 @@ async function list(name: string) {
   return listbox;
 }
 
+// Candidates is the first tab; the tests that look at runs switch to Runs.
+async function openRuns() {
+  mount();
+  fireEvent.click(await screen.findByRole("tab", { name: /^Runs/ }));
+  return list("Runs");
+}
+
 beforeEach(() => {
   resetDemoAgentWork();
   window.localStorage.clear();
@@ -35,63 +42,75 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AgentWorkView", () => {
-  it("opens on what needs attention and switches tabs with number keys", async () => {
+  it("opens on Candidates and switches to Runs with 2 and back with the tab-strip arrows", async () => {
     mount();
-    const attention = await list("Needs attention");
-    expect(within(attention).getByRole("option", { name: /!103/ })).toBeTruthy();
-    expect(within(attention).getByRole("option", { name: /!101/ })).toBeTruthy();
-    expect(screen.getByText("Automatic review timed out")).toBeTruthy();
-
-    fireEvent.keyDown(attention, { key: "2" });
-    const active = await list("Active");
-    expect(within(active).getByRole("option", { name: /!42/ })).toBeTruthy();
-    expect(within(active).getByRole("option", { name: /!99/ })).toBeTruthy();
+    await screen.findByRole("listbox", { name: "Auto queue candidates" });
+    expect(await screen.findByRole("tab", { name: /^Candidates/, selected: true })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("listbox", { name: "Auto queue candidates" }), { key: "2" });
+    const runs = await list("Runs");
+    expect(runs).toBeTruthy();
+    const runsTab = screen.getByRole("tab", { name: /^Runs/, selected: true });
+    runsTab.focus();
+    fireEvent.keyDown(runsTab, { key: "ArrowLeft" });
+    const candidates = await screen.findByRole("tab", { name: /^Candidates/, selected: true });
+    await waitFor(() => expect(document.activeElement).toBe(candidates));
+    fireEvent.keyDown(candidates, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Auto queue candidates" })));
   });
 
-  it("switches tabs with the arrows in the tab-strip segments and returns to the list with Enter", async () => {
-    mount();
-    await list("Needs attention");
-    const attentionTab = await screen.findByRole("tab", { name: /Needs attention/ });
-    attentionTab.focus();
-    fireEvent.keyDown(attentionTab, { key: "ArrowRight" });
-    const activeTab = await screen.findByRole("tab", { name: /^Active/, selected: true });
-    await waitFor(() => expect(document.activeElement).toBe(activeTab));
-    expect(within(await screen.findByRole("listbox", { name: "Active agent work" })).getByRole("option", { name: /!42/ })).toBeTruthy();
+  it("lists open runs with what needs attention first and keeps Done out of it", async () => {
+    const runs = await openRuns();
+    const ids = within(runs)
+      .getAllByRole("option")
+      .map((option) => /[!#]\d+/.exec(option.textContent ?? "")?.[0]);
+    // failed, partial, running, waiting, and the excluded one last. !189 and #123 are done.
+    expect(ids).toEqual(["!103", "!101", "!42", "!99", "#118"]);
+    expect(within(runs).getByRole("option", { name: /#118.*\(excluded\)/ })).toBeTruthy();
+    expect(screen.getByText("Automatic review timed out")).toBeTruthy();
+  });
 
-    fireEvent.keyDown(activeTab, { key: "Enter" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Active agent work" })));
+  it("shows the Done runs with D and leaves that view with Escape", async () => {
+    const runs = await openRuns();
+    fireEvent.keyDown(runs, { key: "d" });
+    await waitFor(() => expect(within(runs).getByRole("option", { name: /!189/ })).toBeTruthy());
+    expect(within(runs).getByRole("option", { name: /#123/ })).toBeTruthy();
+    expect(within(runs).queryByRole("option", { name: /!103/ })).toBeNull();
+    fireEvent.keyDown(runs, { key: "Escape" });
+    await waitFor(() => expect(within(runs).getByRole("option", { name: /!103/ })).toBeTruthy());
+    expect(within(runs).queryByRole("option", { name: /!189/ })).toBeNull();
+  });
+
+  it("counts the open runs and those that need attention in the tab", async () => {
+    mount();
+    const tab = await screen.findByRole("tab", { name: /^Runs/ });
+    expect(tab.textContent).toBe("Runs 5 · 2 need attention");
   });
 
   it("retries a failed item with R", async () => {
-    mount();
-    const attention = await list("Needs attention");
-    fireEvent.keyDown(attention, { key: "r" });
-    await waitFor(() => expect(within(attention).queryByRole("option", { name: /!103/ })).toBeNull());
-    fireEvent.keyDown(attention, { key: "2" });
-    expect(within(await list("Active")).getByRole("option", { name: /!103/ })).toBeTruthy();
+    const runs = await openRuns();
+    fireEvent.keyDown(runs, { key: "r" });
+    await waitFor(() => expect(within(runs).getByRole("option", { name: /!103/ }).textContent).toMatch(/Waiting|Running/));
   });
 
   it("opens the item in DevDeck with O and on Azure DevOps with Shift+O", async () => {
-    mount();
-    const attention = await list("Needs attention");
+    const runs = await openRuns();
     const navigated = vi.fn();
     window.addEventListener(NAVIGATE_PULL_REQUEST_EVENT, navigated);
-    fireEvent.keyDown(attention, { key: "o" });
+    fireEvent.keyDown(runs, { key: "o" });
     window.removeEventListener(NAVIGATE_PULL_REQUEST_EVENT, navigated);
     expect((navigated.mock.calls[0][0] as CustomEvent).detail).toMatchObject({
       pullRequestId: 103,
       repositoryId: "azdo-dashboard",
     });
-    fireEvent.keyDown(attention, { key: "O", shiftKey: true });
+    fireEvent.keyDown(runs, { key: "O", shiftKey: true });
     expect(openExternalUrl).toHaveBeenCalledWith("https://dev.azure.com/contoso/platform/_git/azdo-dashboard/pullrequest/103");
   });
 
   it("asks the agent about the selected item with Q", async () => {
-    mount();
-    const attention = await list("Needs attention");
+    const runs = await openRuns();
     const opened = vi.fn();
     window.addEventListener(OPEN_AGENT_PANEL_EVENT, opened);
-    fireEvent.keyDown(attention, { key: "q" });
+    fireEvent.keyDown(runs, { key: "q" });
     window.removeEventListener(OPEN_AGENT_PANEL_EVENT, opened);
     expect((opened.mock.calls[0][0] as CustomEvent).detail.subject).toMatchObject({
       kind: "pull-request",
@@ -101,25 +120,12 @@ describe("AgentWorkView", () => {
     });
   });
 
-  it("excludes with X and includes again from the Excluded tab with U", async () => {
-    mount();
-    const attention = await list("Needs attention");
-    fireEvent.keyDown(attention, { key: "x" });
-    fireEvent.keyDown(attention, { key: "4" });
-    const excluded = await list("Excluded");
-    await waitFor(() => expect(within(excluded).getByRole("option", { name: /!103/ })).toBeTruthy());
-    expect(within(excluded).getByRole("option", { name: /#118/ })).toBeTruthy();
-    fireEvent.click(within(excluded).getByRole("option", { name: /#118/ }));
-    fireEvent.keyDown(excluded, { key: "u" });
-    await waitFor(() => expect(within(excluded).queryByRole("option", { name: /#118/ })).toBeNull());
-  });
-
-  it("counts unread results and marks one read when it is shown", async () => {
-    mount();
-    await list("Needs attention");
-    expect(await screen.findByRole("tab", { name: /Results\s*2 \(2 new\)/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: /Results/ }));
-    await list("Results");
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Results\s*2 \(1 new\)/ })).toBeTruthy());
+  it("excludes with X and includes again with X on an excluded row", async () => {
+    const runs = await openRuns();
+    fireEvent.keyDown(runs, { key: "x" });
+    await waitFor(() => expect(within(runs).getByRole("option", { name: /!103.*\(excluded\)/ })).toBeTruthy());
+    fireEvent.click(within(runs).getByRole("option", { name: /#118/ }));
+    fireEvent.keyDown(runs, { key: "x" });
+    await waitFor(() => expect(within(runs).queryByRole("option", { name: /#118.*\(excluded\)/ })).toBeNull());
   });
 });

@@ -12,7 +12,6 @@ const actionButton =
 export type AgentWorkActions = {
   retry: () => void;
   toggleExcluded: () => void;
-  toggleLog: () => void;
   ask: () => void;
   canAsk: boolean;
   retrying: boolean;
@@ -81,11 +80,9 @@ export function AgentWorkResult({ entry }: { entry: AgentWorkEntry | null }) {
 /** The Details panel: linked items, what happened, actions and the log. */
 export function AgentWorkPreview({
   entry,
-  showLog,
   actions,
 }: {
   entry: AgentWorkEntry | null;
-  showLog: boolean;
   actions: AgentWorkActions;
 }) {
   if (!entry) {
@@ -95,7 +92,7 @@ export function AgentWorkPreview({
       </div>
     );
   }
-  const logVisible = entry.hasLog && (showLog || entry.status === "failed" || entry.status === "running");
+  const logVisible = entry.hasLog;
   const prefix = entry.target === "pull-request" ? "!" : "#";
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3 text-sm">
@@ -129,14 +126,9 @@ export function AgentWorkPreview({
             Retry now <kbd className="text-muted-foreground">R</kbd>
           </button>
         ) : null}
-        {entry.hasLog && entry.status !== "failed" && entry.status !== "running" ? (
-          <button type="button" className={actionButton} onClick={actions.toggleLog}>
-            {showLog ? "Hide log" : "Show log"} <kbd className="text-muted-foreground">L</kbd>
-          </button>
-        ) : null}
         <button type="button" className={actionButton} onClick={actions.toggleExcluded}>
           {entry.excluded ? "Include in automatic runs" : "Exclude from automatic runs"}{" "}
-          <kbd className="text-muted-foreground">{entry.excluded ? "U" : "X"}</kbd>
+          <kbd className="text-muted-foreground">X</kbd>
         </button>
       </div>
       {logVisible ? <Log entry={entry} /> : null}
