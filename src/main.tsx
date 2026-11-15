@@ -14,12 +14,14 @@ import "./index.css";
 import { applyTheme, loadThemePreference } from "./lib/theme";
 import { applyFrameColor, loadFrameColor } from "./lib/frameColor";
 import { applyUiScale, loadUiScale } from "./lib/uiScale";
+import { applyUiFont, loadUiFont } from "./lib/uiFont";
 
 // Apply the stored theme synchronously before React renders so the first paint
 // already has the correct .dark class (no light-to-dark flash on startup).
 applyTheme(loadThemePreference());
 applyFrameColor(loadFrameColor());
 applyUiScale(loadUiScale());
+applyUiFont(loadUiFont());
 
 const queryClient = new QueryClient({
   defaultOptions: {

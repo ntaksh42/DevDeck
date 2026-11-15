@@ -135,10 +135,29 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Atkinson Hyperlegible Next Variable", "BIZ UDPGothic", system-ui, -apple-system, sans-serif;
+    font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+}
+
+/* Body typeface presets (Settings > Appearance, src/lib/uiFont.ts). The default
+   stack is the bundled Atkinson Hyperlegible + BIZ UDPGothic; the others use
+   fonts installed with Windows and fall back to system-ui elsewhere. */
+:root {
+  --font-ui: "Atkinson Hyperlegible Next Variable", "BIZ UDPGothic", system-ui, -apple-system, sans-serif;
+}
+[data-font="biz-ud"] {
+  --font-ui: "BIZ UDPGothic", system-ui, sans-serif;
+}
+[data-font="yu-gothic"] {
+  --font-ui: "Yu Gothic UI", "Yu Gothic", "BIZ UDPGothic", system-ui, sans-serif;
+}
+[data-font="meiryo"] {
+  --font-ui: "Meiryo UI", Meiryo, "BIZ UDPGothic", system-ui, sans-serif;
+}
+[data-font="system"] {
+  --font-ui: system-ui, "Segoe UI", "Yu Gothic UI", sans-serif;
 }
 
 /* Frame color presets (Settings > Appearance). The default teal is defined in

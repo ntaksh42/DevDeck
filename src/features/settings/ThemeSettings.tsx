@@ -19,6 +19,7 @@ import {
   setFrameColor,
   type FrameColor,
 } from "@/lib/frameColor";
+import { loadUiFont, setUiFont, UI_FONTS, type UiFont } from "@/lib/uiFont";
 import { SettingsRow } from './SettingsRow';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
@@ -56,6 +57,12 @@ export function ThemeSettings() {
     setFrameColor(next);
   }
 
+  const [font, setFont] = useState<UiFont>(loadUiFont);
+  function selectFont(next: UiFont) {
+    setFont(next);
+    setUiFont(next);
+  }
+
   function selectTheme(next: ThemePreference) {
     setPreference(next);
     setThemePreference(next);
@@ -64,7 +71,7 @@ export function ThemeSettings() {
   return (
     <SettingsRow
       title="Appearance"
-      description={<>Choose a theme and the app zoom. System follows your operating system setting.</>}
+      description={<>Choose a theme, font, and the app zoom. System follows your operating system setting.</>}
     >
       <div>
         <div
@@ -123,6 +130,33 @@ export function ThemeSettings() {
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Navigation color: sidebar and header.
+        </p>
+
+        <div
+          role="radiogroup"
+          aria-label="Font"
+          className="mt-3 flex w-fit flex-wrap gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {UI_FONTS.map(({ value, label, family }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={font === value}
+              onClick={() => selectFont(value)}
+              style={{ fontFamily: `${family}, system-ui, sans-serif` }}
+              className={`inline-flex h-8 items-center rounded px-3 text-sm font-medium ${
+                font === value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Font: text across the app. Code and IDs keep the monospace font.
         </p>
 
         <div
