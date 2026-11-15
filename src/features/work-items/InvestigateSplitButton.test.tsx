@@ -40,6 +40,20 @@ describe("InvestigateSplitButton", () => {
     expect(screen.getByRole("button", { name: /Investigate\s*\(Codex\)/ })).toBeTruthy();
   });
 
+  it("renders outside a clipped toolbar and allows pointer selection", async () => {
+    const { container } = render(<div style={{ overflowX: "auto", height: 28 }}><Harness /></div>);
+    fireEvent.click(toggle());
+    const menu = await screen.findByRole("menu", { name: "Agent" });
+    expect(container.contains(menu)).toBe(false);
+    expect(document.body.contains(menu)).toBe(true);
+    const codex = screen.getByRole("menuitemradio", { name: "Codex" });
+    fireEvent.mouseDown(codex);
+    fireEvent.click(codex);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("button", { name: /Investigate\s*\(Codex\)/ })).toBeTruthy();
+    expect(document.activeElement).toBe(toggle());
+  });
+
   it("closes with Escape and keeps the current choice", async () => {
     render(<Harness initial="claude" />);
     fireEvent.click(toggle());

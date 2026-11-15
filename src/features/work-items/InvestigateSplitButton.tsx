@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { Bot, ChevronDown, Loader2 } from "lucide-react";
 import type { AgentKind } from "@/lib/azdoCommands";
 
@@ -40,7 +41,7 @@ export function InvestigateSplitButton({
     if (!open) return;
     menuRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
     const onDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!wrapRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) close();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -52,6 +53,7 @@ export function InvestigateSplitButton({
   }
 
   function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    event.stopPropagation();
     const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []);
     const index = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === "ArrowDown") items[(index + 1) % items.length]?.focus();
@@ -62,6 +64,7 @@ export function InvestigateSplitButton({
     event.stopPropagation();
   }
 
+  const rect = open ? toggleRef.current?.getBoundingClientRect() : null;
   const buttonClass =
     "inline-flex h-7 items-center gap-1 border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60";
   return (
@@ -88,13 +91,14 @@ export function InvestigateSplitButton({
       >
         <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
       </button>
-      {open ? (
+      {open && rect ? createPortal(
         <div
           ref={menuRef}
           role="menu"
           aria-label="Agent"
           onKeyDown={onMenuKeyDown}
-          className="absolute left-0 top-full z-30 mt-1 min-w-[190px] rounded-md border border-border bg-popover py-1 shadow-lg"
+          className="fixed z-50 min-w-[190px] rounded-md border border-border bg-popover py-1 shadow-lg"
+          style={{ top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 120)), left: Math.max(8, Math.min(rect.left, window.innerWidth - 198)) }}
         >
           {CHOICES.map((choice) => (
             <button
@@ -112,7 +116,8 @@ export function InvestigateSplitButton({
               {choice.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
