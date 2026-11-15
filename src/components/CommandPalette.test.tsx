@@ -115,7 +115,7 @@ describe("CommandPalette IME composition", () => {
         onClose={onClose}
       />,
     );
-    const input = screen.getByPlaceholderText("Type a command...");
+    const input = screen.getByPlaceholderText("Type a command…");
 
     fireEvent.keyDown(input, { key: "Enter", isComposing: true });
     fireEvent.keyDown(input, { key: "Escape", isComposing: true });

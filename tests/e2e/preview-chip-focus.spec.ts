@@ -12,7 +12,7 @@ test("keyboard assignee pick draws the focus ring on the field chip, not the tri
   await grid.getByText("Validate onboarding with PAT credentials").click();
   await page.keyboard.press("Enter");
   await page.keyboard.press("a");
-  await expect(page.getByPlaceholder("Search assignee...")).toBeFocused();
+  await expect(page.getByPlaceholder("Search assignee…")).toBeFocused();
   await expect(page.getByRole("button", { name: /Alice Johnson/ })).toBeVisible();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");

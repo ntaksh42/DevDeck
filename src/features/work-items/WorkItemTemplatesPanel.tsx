@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { FileText, Pencil, Plus, Star, Trash2, X } from "lucide-react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import {
   MAX_TEMPLATE_PRIORITY,
   MIN_TEMPLATE_PRIORITY,
@@ -49,6 +50,8 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
   const createMenuRef = useRef<HTMLDivElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -290,6 +293,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
           }}
         >
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="wi-template-dialog-title"

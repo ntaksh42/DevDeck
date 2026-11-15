@@ -80,7 +80,7 @@ export function AssigneePicker({
                 listRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
               }
             }}
-            placeholder="Search assignee..."
+            placeholder="Search assignee…"
             className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
           <div ref={listRef} className="max-h-44 overflow-auto">
@@ -90,7 +90,7 @@ export function AssigneePicker({
               </div>
             ) : null}
             {loading ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching...</div>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching…</div>
             ) : options.length > 0 ? (
               options.map((candidate) => (
                 <button

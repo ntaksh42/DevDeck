@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2 } from "lucide-react";
 import type { WorkItemPreview } from "@/lib/azdoCommands";
 import { commandErrorMessage, listWorkItemUpdates } from "@/lib/azdoCommands";
-import { formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { workItemQueryKeys } from "./queryKeys";
 import { workItemFieldLabel } from "./workItemPreviewHelpers";
 import { SectionGrip, usePreviewSectionHeaderMoveProps } from "./PreviewSectionMover";
@@ -72,7 +72,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
                   {update.revisedDate ? (
                     <span
                       className="shrink-0 text-muted-foreground"
-                      title={new Date(update.revisedDate).toLocaleString()}
+                      title={formatDate(update.revisedDate)}
                     >
                       {formatRelativeDate(update.revisedDate)}
                     </span>

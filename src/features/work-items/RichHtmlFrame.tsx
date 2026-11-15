@@ -93,7 +93,7 @@ export function RichHtmlFrame({
         if (!body) return;
         bindFramePaneFocus(frame);
         const syncHeight = () => {
-          const next = Math.max(minHeight, Math.ceil(body.scrollHeight));
+          const next = Math.max(minHeight, Math.ceil(Math.max(body.scrollHeight, doc.documentElement.scrollHeight)));
           setHeight(next);
           onHeight?.(next);
         };
@@ -117,6 +117,7 @@ export function RichHtmlFrame({
         if (ResizeObserverCtor) {
           const resizeObserver = new ResizeObserverCtor(syncHeight);
           resizeObserver.observe(body);
+          resizeObserver.observe(doc.documentElement);
           resizeObserverRef.current = resizeObserver;
         }
       }}

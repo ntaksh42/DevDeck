@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import {
+  formatDate,
   formatRelativeDate,
   type SortDirection,
 } from '@/lib/utils';
@@ -11,8 +12,8 @@ import { WorkItemStatePill } from './WorkItemBadges';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
-export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 68, 240, 82, 92, 140, 72];
-export const WI_COLUMN_MIN_WIDTHS = [44, 58, 68, 240, 70, 92, 60, 72];
+export const DEFAULT_WI_COLUMN_WIDTHS = [46, 76, 84, 240, 82, 92, 140, 72];
+export const WI_COLUMN_MIN_WIDTHS = [44, 76, 84, 240, 70, 92, 60, 72];
 export const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 400, 160];
 export const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 3);
 export const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 2);
@@ -285,7 +286,7 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
       return (
         <span
           className="text-xs text-muted-foreground"
-          title={item.changedDate ? new Date(item.changedDate).toLocaleString() : undefined}
+          title={item.changedDate ? formatDate(item.changedDate) : undefined}
         >
           {item.changedDate ? formatRelativeDate(item.changedDate) : "—"}
         </span>

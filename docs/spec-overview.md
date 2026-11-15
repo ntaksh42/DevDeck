@@ -979,7 +979,7 @@ format!(
   bg-warning/10 text-warning` のように 1 トークン + 透過度で書く (`bg-red-50 dark:bg-red-950`
   のようなライト/ダークの手書きペアは新規に増やさない)。`primary` は塗り色 (白文字で 4.5:1 以上)、
   `link` は小さな文字用の青。小さな文字は `text-[11px]` ではなく `text-xs` (12.5px) /
-  `text-2xs` (12px) / `text-3xs` (11px) を使う (ルート 15px のときの値)。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
+  `text-2xs` (12px) / `text-3xs` (12px) を使う (ルート 15px のときの値)。これらは rem 指定でルートの文字サイズ段階 (15/16/17px) に追従する。
   `index.css` の `:focus-visible` フォールバックが、自前のフォーカス表示 (`focus:ring-*`) を
   持たないコントロールにもテーマ色のリングを出す。
   OS の「視覚効果を減らす」設定 (`prefers-reduced-motion`) ではトランジションと pulse/ping を止める
@@ -1021,7 +1021,7 @@ format!(
 - 表示の視認性 (`src/index.css` のトークン): 補助テキスト `--muted-foreground` は白背景で 10.2:1
   (ダークで 10.8:1) を確保し、文字色に `text-muted-foreground/NN` のような透明度を重ねない
   (件数 0 の Done / Snoozed などを薄く見せる `ListStatusBar` の `/80` だけ例外で、4.5:1 以上を保つ)。
-  文字サイズの下限は 11px (`text-[9px]` / `text-[10px]` は使わない)。キー表記の `text-3xs` を除き、
+  文字サイズの下限は 12px (`text-[9px]` / `text-[10px]` / `text-[11px]` は使わない)。キー表記の `text-3xs` も 12px で、
   一覧とプレビューの文字は 12px 以上にする。ドックのタブ帯の高さは 28px
   (`COLLAPSED_GROUP_HEIGHT`)。ID などのリンク文字は
   `text-link` (`--link`、白背景で 6.3:1) を使い、`primary` はボタン等の塗りに限る。

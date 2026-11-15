@@ -207,7 +207,7 @@ export function CommentComposer({
         onKeyDown={handleCommentKeyDown}
         aria-label="Comment"
         aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
-        placeholder="Add a comment... (m)"
+        placeholder="Add a comment… (m)"
         rows={active ? 2 : 1}
         className={active ? "min-h-[36px] focus:min-h-[64px]" : "!h-7 !min-h-0 !resize-none"}
         overlay={

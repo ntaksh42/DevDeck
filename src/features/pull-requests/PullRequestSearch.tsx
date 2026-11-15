@@ -97,7 +97,7 @@ export function PullRequestSearch({ externalSearch, onExternalSearchHandled }: {
     onContinue: () => search.continueSearch(), onRetry: () => search.continueSearch(true), onStop: () => void search.stop() };
 
   return <div className="flex min-h-0 flex-1 flex-col gap-2">
-    <form className="grid shrink-0 gap-1.5" onSubmit={submit}>
+    <form className="grid shrink-0 gap-1.5 pr-1.5" onSubmit={submit}>
       <div className="flex items-center gap-2">
         <SearchInput value={query} onChange={(value) => { setQuery(value); setValidationError(null); }} placeholder="Search pull requests…" autoFocus
           onKeyDown={(event) => {

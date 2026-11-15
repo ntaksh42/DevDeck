@@ -301,7 +301,7 @@ export function BulkActionBar({
                     assignListRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
                   }
                 }}
-                placeholder="Search assignee..."
+                placeholder="Search assignee…"
                 className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
               />
               <div ref={assignListRef} className="max-h-44 overflow-auto">
