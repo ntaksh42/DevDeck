@@ -52,7 +52,7 @@ async function openViewsScreen() {
 }
 
 async function addView(main: ReturnType<typeof within>, name: string) {
-  fireEvent.click(await main.findByRole("button", { name: /Add/ }));
+  fireEvent.click(await main.findByRole("button", { name: /New view/ }));
   await screen.findByRole("dialog", { name: "Add View" });
   await main.findByText("Platform");
   fireEvent.change(main.getByLabelText("Name"), { target: { value: name } });

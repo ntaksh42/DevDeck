@@ -7,6 +7,7 @@ import { ViewAdvancedSettings } from './ViewAdvancedSettings';
 import { CONDITION_GRID_FOCUS_ID, ViewConditionGrid } from './ViewConditionGrid';
 import { WiqlEditor } from './WiqlEditor';
 import { isImeComposing } from '@/lib/utils';
+import { useFocusTrap } from '@/lib/useFocusTrap';
 
 type SourceTab = "url" | "query" | "conditions";
 const SOURCE_TABS: { id: SourceTab; label: string }[] = [
@@ -66,6 +67,8 @@ export function ViewEditorDialog({
   } = draft;
   const onTestRun = () => void draft.runTestQuery();
   const viewFormRef = useRef<HTMLFormElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
   const [sourceTab, setSourceTab] = useState<SourceTab>("url");
   function selectSourceTab(tab: SourceTab) {
     setSourceTab(tab);
@@ -108,6 +111,7 @@ export function ViewEditorDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="view-dialog-title"

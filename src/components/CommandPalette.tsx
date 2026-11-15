@@ -244,7 +244,7 @@ export function CommandPalette({
               setQuery(event.target.value);
               search?.onQueryChange(event.target.value);
             }}
-            placeholder={search ? "Type a command or search…" : "Type a command..."}
+            placeholder={search ? "Type a command or search…" : "Type a command…"}
             className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
           {search?.pending ? (

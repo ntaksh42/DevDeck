@@ -118,7 +118,7 @@ export function WorkItemSearch({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <form className="flex shrink-0 flex-wrap items-center gap-2" onSubmit={onSubmit}>
+      <form className="flex shrink-0 flex-wrap items-center gap-2 pr-1.5" onSubmit={onSubmit}>
         <div className="flex h-7 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
           <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input

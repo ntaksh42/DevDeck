@@ -144,7 +144,7 @@ export function WikiPageDialog({
           className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm focus:outline-none"
         >
           {page.isPending ? (
-            <p className="text-muted-foreground">Loading...</p>
+            <p className="text-muted-foreground">Loading…</p>
           ) : page.isError ? (
             <p role="alert" className="text-destructive">
               {commandErrorMessage(page.error)}

@@ -1,4 +1,4 @@
-import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -88,6 +88,13 @@ export function ViewsListPanel({
   onKeyDown,
 }: ViewsListPanelProps) {
   const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index]));
+
+  // In the one-row chip display the row scrolls sideways; keep the selected
+  // chip visible so a chip is never left half-cut at the edge.
+  useEffect(() => {
+    if (!collapsed || selectedViewIndex < 0) return;
+    viewButtonRefs.current[selectedViewIndex]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [collapsed, selectedViewIndex, viewButtonRefs]);
 
   // "Collapsed" is the default one-row chip display (a borderless toolbar row,
   // same height as the search rows); expanded is the card/compact-row grid.
@@ -343,11 +350,11 @@ export function ViewsListPanel({
           type="button"
           aria-keyshortcuts="N"
           onClick={onAddOpen}
-          title="Add new view (N)"
+          title="New view (N)"
           className={`inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 ${textBtn}`}
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          Add
+          New view
         </button>
       </div>
     </div>

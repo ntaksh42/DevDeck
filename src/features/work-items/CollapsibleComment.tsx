@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Loader2, Pencil, SmilePlus, Trash2 } from "lucide-react";
-import { formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate } from "@/lib/utils";
 import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import {
   usePersistedTextareaHeight,
@@ -207,7 +207,7 @@ export function CollapsibleComment({
         {createdDate ? (
           <span
             className="shrink-0 text-2xs font-medium text-muted-foreground"
-            title={new Date(createdDate).toLocaleString()}
+            title={formatDate(createdDate)}
           >
             {formatRelativeDate(createdDate)}
           </span>

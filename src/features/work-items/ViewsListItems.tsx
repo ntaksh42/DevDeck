@@ -176,7 +176,11 @@ export function ViewCompactRow({
         stats.alerting,
       )}`}
     >
-      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+      <span
+        className={`flex shrink-0 items-center justify-center ${
+          chip && !query?.isFetching && !stats.alerting && !view.pinned ? "hidden" : "h-3.5 w-3.5"
+        }`}
+      >
         {query?.isFetching ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : stats.alerting ? (

@@ -109,6 +109,29 @@
   }
 }
 
+/* Single-line <select>s: one look everywhere (same chevron, border and radius
+   as the hand-rolled dropdowns) instead of the OS-native control. Keyboard
+   behaviour stays native. Base values are :where() so a class can still
+   override them; the right padding is unlayered so utility px-* cannot push
+   the text under the chevron. */
+:where(select:not([multiple]):not([size])) {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid hsl(var(--input));
+  border-radius: 0.375rem;
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23475569' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 0.9rem;
+}
+.dark :where(select:not([multiple]):not([size])) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23cbd5e1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+}
+select:not([multiple]):not([size]) {
+  padding-right: 1.5rem;
+}
+
 /* Panel tabs: dockview's stock themes paint background tabs at 35-70% alpha
    grey, which reads as disabled. Background tabs use the app's muted text and
    the visible tab gets the foreground color, a heavier weight and a primary

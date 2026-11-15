@@ -2,9 +2,12 @@ import { useEffect, useRef } from "react";
 import { Keyboard, X } from "lucide-react";
 import { resolveKeybindings, type KeybindingId } from "@/lib/keybindings";
 import type { HelpSection } from "@/lib/helpEvents";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 export function HelpDialog({ onClose, section: targetSection }: { onClose: () => void; section?: HelpSection }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
 
   // Focus the close button on open so the dialog is keyboard-operable from the
   // start; Escape closes (App returns focus to the opener). (#443)
@@ -66,6 +69,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
       aria-hidden="false"
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="help-title"

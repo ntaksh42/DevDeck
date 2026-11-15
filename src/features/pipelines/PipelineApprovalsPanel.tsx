@@ -46,7 +46,7 @@ export function PipelineApprovalsPanel({
         {!expanded && approvals.length > 0 ? (
           <span className="min-w-0 truncate text-xs text-muted-foreground">
             {first}
-            {approvals.length > 1 ? ` and ${approvals.length - 1} more` : ""}
+            {approvals.length > 1 ? ` · +${approvals.length - 1} more` : ""}
           </span>
         ) : null}
       </button>

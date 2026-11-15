@@ -288,7 +288,7 @@ describe("App — Work Items (extra)", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("button", { name: "Views" }));
-    fireEvent.click(await main.findByRole("button", { name: /Add/ }));
+    fireEvent.click(await main.findByRole("button", { name: /New view/ }));
     await screen.findByRole("dialog", { name: "Add View" });
     await main.findByText("Platform");
 
@@ -440,7 +440,7 @@ describe("App — Work Items (extra)", () => {
     renderApp();
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("button", { name: "Views" }));
-    fireEvent.click(await within(screen.getByRole("main")).findByRole("button", { name: /Add/ }));
+    fireEvent.click(await within(screen.getByRole("main")).findByRole("button", { name: /New view/ }));
     await screen.findByRole("dialog", { name: "Add View" });
     await within(screen.getByRole("main")).findByText("Platform");
 

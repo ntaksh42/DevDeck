@@ -185,7 +185,7 @@ describe("App — Work Items", () => {
 
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });
-    expect(await screen.findByPlaceholderText("Search assignee...")).toBeTruthy();
+    expect(await screen.findByPlaceholderText("Search assignee…")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
 
     // Selection only stages the change; nothing is written yet.

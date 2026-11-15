@@ -133,7 +133,7 @@ export function NativeSelect({
     <span className={`relative inline-flex min-w-0 ${className}`}>
       <select
         {...props}
-        className={`w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-2 pr-7 outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
+        className={`w-full min-w-0 appearance-none bg-none rounded-md border border-input bg-background pl-2 pr-7 outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
           compact ? "h-7 text-xs" : "h-7 text-sm"
         }`}
       >
