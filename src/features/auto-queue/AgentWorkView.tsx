@@ -13,14 +13,13 @@ import { pushToast } from "@/lib/toast";
 import { clamp, isEditableTarget } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
-import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
+import { ListStateChip, ListStatusBar, itemCount } from "@/components/ListStatusBar";
 import { AutoQueueView } from "./AutoQueueView";
 import { AgentWorkPreview, AgentWorkResult } from "./AgentWorkPreview";
 import { openEntryInApp, openEntryInBrowser } from "./AgentWorkLinks";
-import { agentWorkSubject, StatusBadge, TABS, timeLabel, type AgentWorkTab } from "./agentWorkStatus";
+import { agentWorkSubject, sortRuns, StatusBadge, TABS, timeLabel, type AgentWorkTab } from "./agentWorkStatus";
 import { AgentWorkTabs } from "./AgentWorkTabs";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
-import { addSeen, loadSeen, seenKey } from "./agentWorkSeen";
 
 const WORK_KEY = ["agentWork"];
 
@@ -30,10 +29,10 @@ export function AgentWorkView() {
   const entries = useMemo(() => workQuery.data ?? [], [workQuery.data]);
   const [tabId, setTabId] = useState<AgentWorkTab["id"] | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
-  const [showLog, setShowLog] = useState(false);
+  // Runs lists what is still open; finished (Done) runs sit behind this view.
+  const [doneView, setDoneView] = useState(false);
   // Bumped to bring the Result panel's tab to the front.
   const [resultRequest, setResultRequest] = useState(0);
-  const [seen, setSeen] = useState<string[]>(loadSeen);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(
@@ -41,23 +40,18 @@ export function AgentWorkView() {
     [queryClient],
   );
 
-  // Open on what needs a decision; with nothing failed, on the latest results.
-  const attentionCount = entries.filter(TABS[0].matches).length;
-  const activeTab = TABS.find((tab) => tab.id === tabId) ?? (workQuery.isSuccess && attentionCount === 0 ? TABS[2] : TABS[0]);
-  const items = useMemo(() => entries.filter(activeTab.matches), [entries, activeTab]);
+  // One Runs list, ordered so what needs a decision comes first.
+  const activeTab = TABS.find((tab) => tab.id === tabId) ?? TABS[0];
+  const doneCount = entries.filter((entry) => entry.status === "succeeded").length;
+  const items = useMemo(() => {
+    if (activeTab.id !== "runs") return [];
+    return sortRuns(entries.filter((entry) => (entry.status === "succeeded") === doneView));
+  }, [entries, activeTab, doneView]);
   const focused = items.find((item) => agentWorkKey(item) === focusKey) ?? items[0] ?? null;
   const focusedIndex = focused ? items.indexOf(focused) : -1;
   // The Agent panel follows the selected item, so questions go to its conversation.
   const subject = focused && activeTab.id !== "candidates" ? agentWorkSubject(focused) : null;
   usePublishAgentSubject(subject);
-  const unread = entries.filter((e) => e.status === "succeeded" && !seen.includes(seenKey(e))).length;
-
-  // A result counts as read once it was shown.
-  useEffect(() => {
-    if (focused?.status === "succeeded") setSeen((current) => addSeen(current, focused));
-  }, [focused]);
-
-  useEffect(() => setShowLog(false), [focusKey, tabId]);
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: WORK_KEY });
@@ -81,7 +75,8 @@ export function AgentWorkView() {
     onError: (error) => pushToast(commandErrorMessage(error)),
   });
 
-  const focusList = () => listRef.current?.focus();
+  // On Candidates the list belongs to AutoQueueView, so fall back to the primary grid.
+  const focusList = () => (listRef.current ?? document.querySelector<HTMLElement>("[data-primary-grid='true']"))?.focus();
   // The list lives in a dock panel that mounts after this view, so it takes
   // focus when it attaches; later tab switches focus it directly.
   const wantsFocusRef = useRef(true);
@@ -93,7 +88,7 @@ export function AgentWorkView() {
     }
   }, []);
   useEffect(() => {
-    // Arrowing through the tab segments keeps focus there; 1-5 and clicks land on the list.
+    // Arrowing through the tab segments keeps focus there; 1-2 and clicks land on the list.
     if (document.activeElement?.closest('[role="tablist"][aria-label="Agent work"]')) return;
     if (listRef.current) listRef.current.focus();
     else wantsFocusRef.current = true;
@@ -104,7 +99,6 @@ export function AgentWorkView() {
     if (!tab) return;
     setTabId(tab.id);
     setFocusKey(null);
-    if (tab.id === "results") setResultRequest((n) => n + 1);
   };
 
   const move = (index: number) => {
@@ -128,17 +122,13 @@ export function AgentWorkView() {
       if (subject) openAgentPanel({ subject });
     },
     canAsk: subject !== null,
-    toggleLog: () => {
-      focusList();
-      if (focused?.hasLog) setShowLog((current) => !current);
-    },
     retrying: retry.isPending,
   };
 
-  // 1-5 switch tabs from anywhere in the view except text fields.
+  // 1-2 switch tabs from anywhere in the view except text fields.
   function onRootKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.ctrlKey || event.metaKey || event.altKey || isEditableTarget(event.target)) return;
-    if (/^[1-5]$/.test(event.key)) {
+    if (new RegExp(`^[1-${TABS.length}]$`).test(event.key)) {
       event.preventDefault();
       event.stopPropagation();
       selectTab(Number(event.key) - 1);
@@ -152,8 +142,9 @@ export function AgentWorkView() {
     else if (event.key === "ArrowUp") move(focusedIndex - 1);
     else if (key === "o" && focused) (event.shiftKey ? openEntryInBrowser : openEntryInApp)(focused);
     else if (key === "r") actions.retry();
-    else if ((key === "x" && !focused?.excluded) || (key === "u" && focused?.excluded)) actions.toggleExcluded();
-    else if (key === "l") actions.toggleLog();
+    else if (key === "x") actions.toggleExcluded();
+    else if (key === "d") setDoneView((current) => !current);
+    else if (event.key === "Escape" && doneView) setDoneView(false);
     else if (key === "q") actions.ask();
     else if (event.key === "Enter" && focused) setResultRequest((n) => n + 1);
     else return;
@@ -181,7 +172,6 @@ export function AgentWorkView() {
         {items.map((item) => {
           const key = agentWorkKey(item);
           const isFocused = focused !== null && key === agentWorkKey(focused);
-          const isUnread = item.status === "succeeded" && !seen.includes(seenKey(item));
           return (
             <div
               key={key}
@@ -199,12 +189,13 @@ export function AgentWorkView() {
               <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
                 {item.target === "pull-request" ? "PR" : "WI"}
               </span>
-              <span className={`truncate ${isUnread ? "font-semibold" : ""}`}>
+              <span className="truncate">
                 <span className="text-muted-foreground tabular-nums">
                   {item.target === "pull-request" ? "!" : "#"}
                   {item.id}
                 </span>{" "}
                 {item.title}
+                {item.excluded && <span className="ml-1 text-xs text-muted-foreground">(excluded)</span>}
               </span>
               <span className="max-w-32 truncate text-xs text-muted-foreground">{item.scope}</span>
               <span className="text-right text-xs tabular-nums text-muted-foreground">
@@ -217,7 +208,8 @@ export function AgentWorkView() {
         })}
       </div>
       <ListStatusBar
-        summary={[itemCount(items.length), activeTab.id === "results" && unread > 0 && `${unread} new`]}
+        summary={[itemCount(items.length, doneView ? "done" : "")]}
+        done={{ count: doneCount, active: doneView, onToggle: () => setDoneView((current) => !current) }}
         helpSection="agent-work"
       />
     </div>
@@ -227,7 +219,6 @@ export function AgentWorkView() {
     <AgentWorkTabs
       activeId={activeTab.id}
       entries={entries}
-      unread={unread}
       onSelect={selectTab}
       onFocusList={focusList}
     />
@@ -244,11 +235,22 @@ export function AgentWorkView() {
             storageKey="azdodeck:agentWork:dockview:v1"
             activatePanel={resultRequest > 0 ? { id: "result", key: resultRequest } : undefined}
             panels={[
-              { id: "list", title: "Items", headerActions: tabs, content: listPane, minWidth: 420 },
+              {
+                id: "list",
+                title: "Items",
+                headerActions: (
+                  <>
+                    {tabs}
+                    {doneView ? <ListStateChip label="Done" onClear={() => setDoneView(false)} /> : null}
+                  </>
+                ),
+                content: listPane,
+                minWidth: 420,
+              },
               {
                 id: "details",
                 title: "Details",
-                content: <AgentWorkPreview entry={focused} showLog={showLog} actions={actions} />,
+                content: <AgentWorkPreview entry={focused} actions={actions} />,
                 position: { relativeTo: "list", direction: "right" },
                 minWidth: 320,
               },

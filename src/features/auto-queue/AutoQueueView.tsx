@@ -12,9 +12,10 @@ import {
 } from "@/lib/azdoCommands";
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { pushToast } from "@/lib/toast";
-import { clamp } from "@/lib/utils";
+import { clamp, focusFilterInput } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { ListStatusBar } from "@/components/ListStatusBar";
+import { DockFilterBar, DockFilterInput, useDockFilter } from "@/components/DockFilterBar";
 
 const QUEUE_KEY = ["autoQueue"];
 
@@ -34,7 +35,11 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const filter = useDockFilter(filterInputRef, () => listRef.current?.focus());
 
   const queueQuery = useQuery({ queryKey: QUEUE_KEY, queryFn: listAutoQueue });
 
@@ -51,14 +56,29 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
     [queryClient],
   );
 
-  const items = useMemo(
+  const allItems = useMemo(
     () =>
       (queueQuery.data ?? []).filter((item) => !started.includes(autoQueueKey(item))),
     [queueQuery.data, started],
   );
+  // The filter narrows the list; only the rows shown can be selected and run.
+  const items = useMemo(() => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return allItems;
+    return allItems.filter((item) => {
+      const prefix = item.target === "pull-request" ? "!" : "#";
+      const text = `${prefix}${item.id} ${item.id} ${item.title} ${item.scope} ${item.organizationName}`.toLowerCase();
+      return words.every((word) => text.includes(word));
+    });
+  }, [allItems, query]);
   const focused = items.find((item) => autoQueueKey(item) === focusKey) ?? items[0] ?? null;
   const focusedIndex = focused ? items.indexOf(focused) : -1;
   const selected = items.filter((item) => checked.has(autoQueueKey(item)));
+  const allSelected = items.length > 0 && selected.length === items.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = selected.length > 0 && !allSelected;
+  }, [selected.length, allSelected]);
 
   const previewQuery = useQuery({
     queryKey: ["autoQueuePreview", focused ? autoQueueKey(focused) : null],
@@ -80,7 +100,11 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
 
   // The list owns the keyboard: it takes focus on open and gets it back after
   // a button was used, so arrow navigation resumes.
-  useEffect(() => listRef.current?.focus(), [queueQuery.isLoading]);
+  useEffect(() => {
+    // Arrowing between tabs hands focus to the tab segment; keep it there.
+    if (document.activeElement?.closest('[role="tablist"][aria-label="Agent work"]')) return;
+    listRef.current?.focus();
+  }, [queueQuery.isLoading]);
 
   const run = useCallback(() => {
     listRef.current?.focus();
@@ -88,7 +112,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   }, [selected, runMutation]);
 
   // Excluded items leave this list and are never started automatically; the
-  // Excluded tab of Agent Work includes them again.
+  // Runs list of Agent Work shows them as excluded, and X there includes them again.
   const excludeMutation = useMutation({
     mutationFn: (targets: AutoQueueItem[]) => Promise.all(targets.map((item) => setAgentWorkExcluded(item, true))),
     onSuccess: (_, targets) => {
@@ -127,6 +151,16 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
     [items],
   );
 
+  const toggleAll = useCallback(() => {
+    setChecked((current) => {
+      const next = new Set(current);
+      const keys = items.map(autoQueueKey);
+      if (keys.every((key) => next.has(key))) keys.forEach((key) => next.delete(key));
+      else keys.forEach((key) => next.add(key));
+      return next;
+    });
+  }, [items]);
+
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.ctrlKey && event.key === "Enter") {
       event.preventDefault();
@@ -147,11 +181,14 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
         break;
       case "a":
       case "A":
-        setChecked(selected.length === items.length ? new Set() : new Set(items.map(autoQueueKey)));
+        toggleAll();
         break;
       case "x":
       case "X":
         exclude();
+        break;
+      case "/":
+        focusFilterInput();
         break;
       default:
         return;
@@ -169,6 +206,23 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
     <div className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-3 py-1.5 text-sm">
         {tabs ?? <h1 className="font-semibold">Candidates</h1>}
+        <DockFilterBar
+          label="Filter candidates"
+          open={filter.open}
+          onOpen={filter.onOpen}
+          onClose={filter.onClose}
+          inputRef={filterInputRef}
+          hasValue={query.trim() !== ""}
+          chips={query.trim() ? [{ label: query.trim(), onClear: () => setQuery("") }] : []}
+        >
+          <DockFilterInput
+            inputRef={filterInputRef}
+            value={query}
+            onChange={setQuery}
+            placeholder="Filter by number, title, repository…"
+            ariaLabel="Filter candidates"
+          />
+        </DockFilterBar>
         <span className="truncate text-xs text-muted-foreground">
           Run candidates manually here. Eligible items also run automatically when enabled in Settings.
         </span>
@@ -192,6 +246,23 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-2">
+        <div className="flex min-h-0 flex-col border-r border-border">
+        <label className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-0.5 text-xs text-muted-foreground">
+          <input
+            ref={selectAllRef}
+            type="checkbox"
+            tabIndex={-1}
+            aria-label="Select all shown"
+            checked={allSelected}
+            disabled={items.length === 0}
+            onChange={() => {
+              toggleAll();
+              listRef.current?.focus();
+            }}
+            className="h-3.5 w-3.5"
+          />
+          Select all shown <kbd>A</kbd>
+        </label>
         <div
           ref={listRef}
           data-primary-grid="true"
@@ -199,10 +270,14 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
           aria-label="Auto queue candidates"
           aria-multiselectable="true"
           tabIndex={0}
-          className="min-h-0 overflow-auto border-r border-border outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-primary"
         >
           {items.length === 0 && (
-            <PreviewEmptyState message="Nothing is waiting." hint="New pull requests and work items appear here after a sync." />
+            allItems.length > 0 ? (
+              <PreviewEmptyState message="No candidates match the filter." />
+            ) : (
+              <PreviewEmptyState message="Nothing is waiting." hint="New pull requests and work items appear here after a sync." />
+            )
           )}
           {items.map((item) => {
             const key = autoQueueKey(item);
@@ -236,6 +311,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
               </div>
             );
           })}
+        </div>
         </div>
 
         <div className="min-h-0 overflow-auto p-3 text-sm">
@@ -271,7 +347,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
 
       <ListStatusBar
         summary={[
-          `${items.length} not run yet`,
+          query.trim() ? `${items.length} of ${allItems.length} not run yet` : `${items.length} not run yet`,
           `${selected.length} selected`,
           totalTokens !== null && `focused ≈ ${formatTokens(totalTokens)}`,
         ]}

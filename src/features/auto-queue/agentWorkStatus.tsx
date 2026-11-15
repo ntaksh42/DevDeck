@@ -57,18 +57,38 @@ export function StatusBadge({ status }: { status: AgentWorkStatus }) {
 }
 
 export type AgentWorkTab = {
-  id: "active" | "attention" | "results" | "excluded" | "candidates";
+  id: "runs" | "candidates";
   label: string;
   matches: (entry: AgentWorkEntry) => boolean;
 };
 
+// Candidates first: it is where manual runs start. Runs is for follow-up.
 export const TABS: AgentWorkTab[] = [
-  { id: "attention", label: "Needs attention", matches: (e) => e.status === "failed" || e.status === "partial" },
-  { id: "active", label: "Active", matches: (e) => e.status === "running" || e.status === "waiting" },
-  { id: "results", label: "Results", matches: (e) => e.status === "succeeded" },
-  { id: "excluded", label: "Excluded", matches: (e) => e.excluded },
   { id: "candidates", label: "Candidates", matches: () => false },
+  { id: "runs", label: "Runs", matches: () => true },
 ];
+
+export const needsAttention = (entry: AgentWorkEntry) => entry.status === "failed" || entry.status === "partial";
+
+/**
+ * Runs order: what needs a decision first, then running / waiting, then
+ * results, and items excluded from automatic runs last. Read state does not
+ * affect the order, so a row does not jump while it is being read. The sort is
+ * stable, so each group keeps the order the backend returned.
+ */
+export function sortRuns(entries: AgentWorkEntry[]): AgentWorkEntry[] {
+  const rank = (entry: AgentWorkEntry) => {
+    if (entry.excluded) return 4;
+    if (needsAttention(entry)) return 0;
+    if (entry.status === "running" || entry.status === "waiting") return 1;
+    if (entry.status === "succeeded") return 2;
+    return 3;
+  };
+  return entries
+    .map((entry, index) => ({ entry, index, rank: rank(entry) }))
+    .sort((x, y) => x.rank - y.rank || x.index - y.index)
+    .map((x) => x.entry);
+}
 
 /** "4m ago", "in 34m", "3h ago", "2d ago". */
 export function timeLabel(iso: string | null, now = Date.now()): string {

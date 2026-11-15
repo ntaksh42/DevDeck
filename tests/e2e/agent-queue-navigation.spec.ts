@@ -14,8 +14,6 @@ test("automatic review has no approval step and manual queue execution remains k
   await expect(page.getByRole("dialog", { name: "Choose what the agent handles" })).toHaveCount(0);
 
   await page.getByRole("navigation", { name: "Primary navigation" }).getByRole("button", { name: "Agent Work" }).click();
-  await expect(page.getByRole("listbox", { name: "Needs attention agent work" })).toBeFocused();
-  await page.keyboard.press("5");
   const list = page.getByRole("listbox", { name: "Auto queue candidates" });
   await expect(list).toBeFocused();
   const first = list.getByRole("option").first();
@@ -41,7 +39,9 @@ test("G then A opens Agent Work and Analyze is absent", async ({ page }) => {
   await page.keyboard.press("g");
   await page.keyboard.press("a");
   await expect(page.getByRole("heading", { name: "Agent Work", exact: true })).toBeVisible();
-  const attention = page.getByRole("listbox", { name: "Needs attention agent work" });
+  await expect(page.getByRole("listbox", { name: "Auto queue candidates" })).toBeFocused();
+  await page.keyboard.press("2");
+  const attention = page.getByRole("listbox", { name: "Runs agent work" });
   await expect(attention).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(attention.getByRole("option", { selected: true })).toContainText("!101");
@@ -65,5 +65,5 @@ test("Agent Work navigation can be rebound", async ({ page }) => {
   await page.keyboard.press("g");
   await page.keyboard.press("z");
   await expect(page.getByRole("heading", { name: "Agent Work", exact: true })).toBeVisible();
-  await expect(page.getByRole("listbox", { name: "Needs attention agent work" })).toBeFocused();
+  await expect(page.getByRole("listbox", { name: "Auto queue candidates" })).toBeFocused();
 });
