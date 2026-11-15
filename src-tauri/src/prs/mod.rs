@@ -11,6 +11,7 @@ mod query;
 mod search;
 mod service;
 mod sync;
+mod sync_ci;
 mod sync_fetch;
 mod types;
 mod util;

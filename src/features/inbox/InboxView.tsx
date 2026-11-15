@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInboxMeta } from "./useInboxMeta";
 import {
   commandErrorMessage,
   generateActionInboxInsight,
-  getActionInboxCounts,
-  getAppSettings,
-  listOrganizations,
   searchPullRequestMentions,
   type MentionCandidate,
 } from "@/lib/azdoCommands";
@@ -76,18 +73,7 @@ export function InboxView() {
   const { zoom, canZoomIn, canZoomOut, zoomIn, zoomOut, resetZoom } = usePreviewZoom();
   const filterBar = useDockFilter(filterInputRef, () => listRef.current?.focus());
 
-  const organizationsQuery = useQuery({
-    queryKey: ["organizations"],
-    queryFn: listOrganizations,
-    staleTime: 5 * 60_000,
-  });
-  const settingsQuery = useQuery({
-    queryKey: ["appSettings"],
-    queryFn: getAppSettings,
-    staleTime: 5 * 60_000,
-  });
-  const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
-  const insightEnabled = settingsQuery.data?.inboxInsightEnabled ?? false;
+  const { organizations, readOnly, insightEnabled, tabCounts } = useInboxMeta(organizationId);
 
   const { entries: fetchedEntries, priorityCounts, columnUniqueValues, isLoading, error, refetch } = useInboxEntries({
     tab,
@@ -103,17 +89,6 @@ export function InboxView() {
   });
   const entries = stateChanges.visibleEntries;
   const checked = useInboxChecked(entries);
-  const countsQuery = useQuery({
-    queryKey: ["actionInbox", "counts", organizationId],
-    queryFn: () => getActionInboxCounts(organizationId || undefined),
-    staleTime: 15_000,
-  });
-  const counts = countsQuery.data ?? { open: 0, snoozed: 0, done: 0 };
-  const tabCounts: Record<InboxTab, number> = {
-    open: counts.open,
-    snoozed: counts.snoozed,
-    done: counts.done,
-  };
 
   const index = clamp(selectedIndex, 0, Math.max(entries.length - 1, 0));
   const selected: InboxEntry | null = entries[index] ?? null;
@@ -336,7 +311,7 @@ export function InboxView() {
             switchTab("open");
             focusList();
           }}
-          organizations={organizationsQuery.data ?? []}
+          organizations={organizations}
           organizationId={organizationId}
           onOrganizationChange={(id) => {
             setOrganizationId(id);

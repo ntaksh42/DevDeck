@@ -51,6 +51,7 @@ $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 | Run Rust tests | `cargo test --workspace` |
 | Run one Rust test | `cargo test --package azdo-client test_name` |
 | Build desktop app | `pnpm tauri build` |
+| Check the 500-line file limit | `pnpm check:lines` |
 
 ## Runtime Boundaries
 

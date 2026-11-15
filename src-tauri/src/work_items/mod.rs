@@ -29,11 +29,13 @@ mod query;
 mod search;
 mod sync;
 mod types;
+mod types_views;
 pub(crate) use candidates::*;
 use conversions::*;
 pub(crate) use query::*;
 pub(crate) use sync::*;
 pub use types::*;
+pub use types_views::*;
 
 #[cfg(test)]
 mod tests;
