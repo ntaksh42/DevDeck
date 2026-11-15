@@ -49,6 +49,8 @@ export function MyWorkItemsPanel() {
         count === 0
           ? 'No assigned work item is waiting for an investigation.'
           : `Investigating ${count} work items, three at a time. Results appear in the result folder.`,
+        undefined,
+        5000,
       ),
     onError: (error) => pushToast(commandErrorMessage(error)),
   });

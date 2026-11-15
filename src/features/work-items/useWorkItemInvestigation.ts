@@ -20,7 +20,7 @@ export function useWorkItemInvestigation(items: WorkItemSummary[]) {
         agent || undefined,
       ),
     onSuccess: (count) =>
-      pushToast(`Investigating ${count} work item${count === 1 ? "" : "s"}, three at a time. Results appear in the result folder.`),
+      pushToast(`Investigating ${count} work item${count === 1 ? "" : "s"}, three at a time. Results appear in the result folder.`, undefined, 5000),
     onError: (error) => pushToast(commandErrorMessage(error)),
   });
   return { agent, onAgentChange: setAgent, onRun: () => { if (items.length && !mutation.isPending) mutation.mutate(); }, pending: mutation.isPending };

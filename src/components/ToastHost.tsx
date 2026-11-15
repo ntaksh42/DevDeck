@@ -8,6 +8,11 @@ import {
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
 
 function ToastRow({ toast }: { toast: Toast }) {
+  useEffect(() => {
+    if (toast.durationMs === undefined) return;
+    const timer = window.setTimeout(() => dismissToast(toast.id), toast.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [toast.id, toast.durationMs]);
   return (
     <div className="flex items-center gap-3 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-lg">
       <span className="min-w-0">{toast.message}</span>

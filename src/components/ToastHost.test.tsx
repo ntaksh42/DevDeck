@@ -14,6 +14,22 @@ describe("ToastHost", () => {
     cleanup();
     act(() => clearToasts());
     retryToastsFlag.mockReset();
+    vi.useRealTimers();
+  });
+
+  it("dismisses timed messages after five seconds and keeps untimed errors", () => {
+    vi.useFakeTimers();
+    retryToastsFlag.mockReturnValue(false);
+    render(<ToastHost />);
+    act(() => {
+      pushToast("Investigation requested", undefined, 5000);
+      pushToast("Investigation failed");
+    });
+    act(() => vi.advanceTimersByTime(4999));
+    expect(screen.queryByText("Investigation requested")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByText("Investigation requested")).toBeNull();
+    expect(screen.queryByText("Investigation failed")).toBeTruthy();
   });
 
   it("shows plain message toasts even when retryToasts is off", () => {
