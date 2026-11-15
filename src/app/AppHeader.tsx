@@ -77,8 +77,8 @@ export function AppHeader({
     : [VIEW_TITLES[activeView]];
 
   return (
-    <header className="flex h-9 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-5">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="app-frame flex h-9 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
           onClick={onToggleSidebar}

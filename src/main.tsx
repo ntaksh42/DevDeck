@@ -3,9 +3,13 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
-// Self-hosted variable font (bundled by Vite) so the desktop app renders the
-// brand typeface offline without a webfont CDN.
-import "@fontsource-variable/hanken-grotesk/index.css";
+// Self-hosted fonts (bundled by Vite) so the desktop app renders offline
+// without a webfont CDN. Atkinson Hyperlegible and BIZ UDPGothic are both
+// designed for legibility: Latin text, then Japanese, then code and IDs.
+import "@fontsource-variable/atkinson-hyperlegible-next/index.css";
+import "@fontsource-variable/atkinson-hyperlegible-mono/index.css";
+import "@fontsource/biz-udpgothic/400.css";
+import "@fontsource/biz-udpgothic/700.css";
 import "./index.css";
 import { applyTheme, loadThemePreference } from "./lib/theme";
 import { applyUiScale, loadUiScale } from "./lib/uiScale";

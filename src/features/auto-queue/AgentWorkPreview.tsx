@@ -97,7 +97,7 @@ export function AgentWorkPreview({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3 text-sm">
       <div className="shrink-0">
-        <h2 className="truncate font-semibold">
+        <h2 className="truncate text-base font-semibold leading-snug">
           {prefix}
           {entry.id} {entry.title}
         </h2>

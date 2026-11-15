@@ -2,7 +2,7 @@ import { ChevronDown, X } from "lucide-react";
 import { PR_SEARCH_STATUS_OPTIONS } from "./PrSearchTypes";
 import type { PrSearchFilters } from "./prSearchHistoryHelpers";
 
-const CHIP = "inline-flex items-center gap-1 rounded border border-border bg-card/60 px-1.5 py-0.5 text-2xs text-muted-foreground hover:bg-secondary";
+const CHIP = "inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs text-muted-foreground hover:bg-secondary";
 
 export function PrSearchFilterChips({ filters, onOpen, onChange }: {
   filters: PrSearchFilters;
@@ -18,8 +18,8 @@ export function PrSearchFilterChips({ filters, onOpen, onChange }: {
   if (filters.fromDate || filters.toDate) chips.push({ key: "dates", label: `${filters.fromDate || "…"} — ${filters.toDate || "…"}`, remove: { fromDate: "", toDate: "" } });
   if (filters.excludeWords) chips.push({ key: "exclude words", label: `Exclude: ${filters.excludeWords}`, remove: { excludeWords: "" } });
   if (filters.excludeDrafts) chips.push({ key: "drafts", label: "No drafts", remove: { excludeDrafts: false } });
-  return <div className="flex min-h-5 flex-wrap items-center gap-1.5">
-    <button type="button" className={CHIP} aria-label="Change status filter" onClick={(event) => onOpen(event.currentTarget)}>
+  return <div className="flex min-h-5 min-w-0 shrink items-center gap-1.5 overflow-hidden p-0.5">
+    <button type="button" className={`${CHIP} shrink-0`} aria-label="Change status filter" onClick={(event) => onOpen(event.currentTarget)}>
       {filters.statuses.map((status) => PR_SEARCH_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status).join(" + ")}
       <ChevronDown className="h-3 w-3" aria-hidden="true" />
     </button>

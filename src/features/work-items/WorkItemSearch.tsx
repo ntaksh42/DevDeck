@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Info, Loader2, Search } from "lucide-react";
 import {
@@ -118,72 +119,75 @@ export function WorkItemSearch({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <form className="flex shrink-0 flex-wrap items-center gap-2 pr-1.5" onSubmit={onSubmit}>
-        <div className="flex h-7 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
-          <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={handleSearchInputEscape}
-            placeholder="Search work items…"
-            aria-label="Search"
-            autoFocus
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-          />
-        </div>
-        <div className="w-44">
-          <MultiSelectFilter
-            options={projects.map((p) => ({ value: p.projectId, label: p.projectName }))}
-            selected={projectIds}
-            onChange={setProjectIds}
-            placeholder="All projects"
-            ariaLabel="Filter by project"
-            searchable
-            disabled={projectsQuery.isLoading}
-            className="h-7"
-          />
-        </div>
-        <div className="w-36">
-          <MultiSelectFilter
-            options={WORK_ITEM_STATE_OPTIONS}
-            selected={states}
-            onChange={setStates}
-            placeholder="All states"
-            ariaLabel="Filter by state"
-            className="h-7"
-          />
-        </div>
-        <div className="w-36">
-          <MultiSelectFilter
-            options={WORK_ITEM_TYPE_OPTIONS}
-            selected={workItemTypes}
-            onChange={setWorkItemTypes}
-            placeholder="Any type"
-            ariaLabel="Filter by type"
-            className="h-7"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={mutation.isPending || !organizationId}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {mutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <Search className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          Search
-        </button>
-        <span
-          className="text-muted-foreground"
-          title={openedItem ? "Opened from live Azure DevOps search. Use Ctrl+K to search all accessible projects." : "Showing locally synced data — refreshed automatically every 5 minutes."}
-          aria-label={openedItem ? "Opened from live Azure DevOps search" : "Showing locally synced data — refreshed automatically every 5 minutes."}
-          role="note"
-        >
-          <Info className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-      </form>
+      {/* The search row lives in the header next to the breadcrumb. */}
+      <HeaderToolbarPortal>
+        <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={onSubmit}>
+          <div className="flex h-7 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+            <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchInputEscape}
+              placeholder="Search work items…"
+              aria-label="Search"
+              autoFocus
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </div>
+          <div className="w-44 shrink-0">
+            <MultiSelectFilter
+              options={projects.map((p) => ({ value: p.projectId, label: p.projectName }))}
+              selected={projectIds}
+              onChange={setProjectIds}
+              placeholder="All projects"
+              ariaLabel="Filter by project"
+              searchable
+              disabled={projectsQuery.isLoading}
+              className="h-7"
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <MultiSelectFilter
+              options={WORK_ITEM_STATE_OPTIONS}
+              selected={states}
+              onChange={setStates}
+              placeholder="All states"
+              ariaLabel="Filter by state"
+              className="h-7"
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <MultiSelectFilter
+              options={WORK_ITEM_TYPE_OPTIONS}
+              selected={workItemTypes}
+              onChange={setWorkItemTypes}
+              placeholder="Any type"
+              ariaLabel="Filter by type"
+              className="h-7"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={mutation.isPending || !organizationId}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Search
+          </button>
+          <span
+            className="shrink-0 text-muted-foreground"
+            title={openedItem ? "Opened from live Azure DevOps search. Use Ctrl+K to search all accessible projects." : "Showing locally synced data — refreshed automatically every 5 minutes."}
+            aria-label={openedItem ? "Opened from live Azure DevOps search" : "Showing locally synced data — refreshed automatically every 5 minutes."}
+            role="note"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </form>
+      </HeaderToolbarPortal>
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />

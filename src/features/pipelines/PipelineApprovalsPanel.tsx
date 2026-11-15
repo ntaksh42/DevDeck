@@ -28,12 +28,12 @@ export function PipelineApprovalsPanel({
   };
   const first = approvals[0]?.instructions?.trim() || "Approval required to continue";
   return (
-    <div className="relative min-w-0 rounded-md border border-warning/30 bg-warning/10">
+    <div className="frame-surface relative min-w-0 rounded-md border border-warning/30 bg-card">
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-2 px-3 py-1 text-left text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+        className="flex w-full items-center gap-2 rounded-md bg-warning/10 px-3 py-0.5 text-left text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
       >
         {expanded ? (
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />

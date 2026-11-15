@@ -4,25 +4,33 @@
 
 @layer base {
   :root {
-    --background: 214 22% 92%;
-    --foreground: 222.2 84% 4.9%;
+    --s-background: 214 22% 92%;
+    --background: var(--s-background);
+    --s-foreground: 222.2 84% 4.9%;
+    --foreground: var(--s-foreground);
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
     --primary: 210 84% 46%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --s-secondary: 210 40% 96.1%;
+    --secondary: var(--s-secondary);
+    --s-secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: var(--s-secondary-foreground);
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215 25% 27%;
+    --s-muted-foreground: 215 25% 27%;
+    --muted-foreground: var(--s-muted-foreground);
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 72% 41%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 20% 84%;
-    --input: 214 28% 80%;
-    --ring: 210 84% 57%;
+    --s-border: 214 20% 84%;
+    --border: var(--s-border);
+    --s-input: 214 28% 80%;
+    --input: var(--s-input);
+    --s-ring: 210 84% 57%;
+    --ring: var(--s-ring);
     /* Text-only link blue. primary is the fill color for buttons (white text on
        it is 4.6:1); link is a notch darker for small text on tinted rows
        (6.27:1 on white, 4.5:1 or more on a selected row). */
@@ -33,31 +41,55 @@
     --success: 142 72% 26%;
     --warning: 30 95% 30%;
     --info: 214 85% 40%;
+    /* App frame (sidebar + header): a deep blue-green band that sets the
+       chrome apart from the white work surfaces. Inside .app-frame these
+       replace the surface tokens; controls and popups inside it switch back
+       (see .app-frame rules below). */
+    --frame: 193 59% 17%;
+    --frame-foreground: 190 40% 95%;
+    --frame-muted: 190 24% 76%;
+    --frame-hover: 192 42% 25%;
+    --frame-border: 193 55% 11%;
+    --frame-ring: 186 75% 62%;
     --radius: 0.5rem;
     color-scheme: light;
   }
 
   .dark {
-    --background: 222 44% 6%;
-    --foreground: 210 40% 98%;
+    --s-background: 222 44% 6%;
+    --background: var(--s-background);
+    --s-foreground: 210 40% 98%;
+    --foreground: var(--s-foreground);
     --card: 222 34% 13%;
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
     --primary: 210 95% 76%;
     --primary-foreground: 210 60% 12%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --s-secondary: 217.2 32.6% 17.5%;
+    --secondary: var(--s-secondary);
+    --s-secondary-foreground: 210 40% 98%;
+    --secondary-foreground: var(--s-secondary-foreground);
     --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 25% 82%;
+    --s-muted-foreground: 215 25% 82%;
+    --muted-foreground: var(--s-muted-foreground);
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 90% 80%;
     --destructive-foreground: 222.2 47% 11%;
-    --border: 222 24% 22%;
-    --input: 217 28% 28%;
-    --ring: 210 90% 70%;
+    --s-border: 222 24% 22%;
+    --border: var(--s-border);
+    --s-input: 217 28% 28%;
+    --input: var(--s-input);
+    --s-ring: 210 90% 70%;
+    --ring: var(--s-ring);
     --link: 210 95% 76%;
+    --frame: 195 48% 9%;
+    --frame-foreground: 190 30% 93%;
+    --frame-muted: 190 18% 74%;
+    --frame-hover: 195 38% 16%;
+    --frame-border: 195 40% 16%;
+    --frame-ring: 186 75% 62%;
     --success: 142 65% 58%;
     --warning: 38 92% 62%;
     --info: 210 95% 76%;
@@ -103,9 +135,46 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Hanken Grotesk Variable", system-ui, -apple-system, sans-serif;
+    font-family: "Atkinson Hyperlegible Next Variable", "BIZ UDPGothic", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+}
+
+/* App frame: the sidebar and header take the frame colors by swapping the
+   surface tokens, so their existing bg-secondary / text-muted-foreground /
+   border-border classes follow without per-element edits. Anything that
+   paints its own light surface inside the frame (the active nav item, inputs,
+   card-styled buttons, popups) switches back to the surface tokens. */
+.app-frame {
+  --background: var(--frame);
+  --foreground: var(--frame-foreground);
+  --muted-foreground: var(--frame-muted);
+  --secondary: var(--frame-hover);
+  --secondary-foreground: var(--frame-foreground);
+  --border: var(--frame-border);
+  --input: var(--frame-border);
+  --ring: var(--frame-ring);
+  background-color: hsl(var(--frame));
+  color: hsl(var(--frame-foreground));
+}
+.app-frame :is(input, select, textarea, [role="menu"], [role="listbox"], [role="dialog"], [data-nav-active], .frame-surface, .bg-card, .bg-popover, .bg-background) {
+  --background: var(--s-background);
+  --foreground: var(--s-foreground);
+  --muted-foreground: var(--s-muted-foreground);
+  --secondary: var(--s-secondary);
+  --secondary-foreground: var(--s-secondary-foreground);
+  --border: var(--s-border);
+  --input: var(--s-input);
+  --ring: var(--s-ring);
+}
+
+/* Text color is inherited as a computed value, so swapping the tokens alone
+   would leave light frame text on these light surfaces. In the base layer so
+   a control's own text-* utility still wins. */
+@layer base {
+  .app-frame :where(input, select, textarea, [role="menu"], [role="listbox"], [role="dialog"], [data-nav-active], .frame-surface, .bg-card, .bg-popover, .bg-background) {
+    color: hsl(var(--foreground));
   }
 }
 

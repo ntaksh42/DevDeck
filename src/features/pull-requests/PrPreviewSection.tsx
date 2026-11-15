@@ -88,12 +88,12 @@ export function PrPreviewSection({
                 }`}
                 aria-hidden="true"
               />
-              <h3 className="truncate text-2xs font-semibold uppercase tracking-wide leading-4 text-foreground">
+              <h3 className="truncate text-sm font-semibold leading-5 text-foreground">
                 {title}
               </h3>
             </button>
           ) : (
-            <h3 className="min-w-0 flex-1 truncate px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide leading-4 text-foreground">
+            <h3 className="min-w-0 flex-1 truncate px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
               {title}
             </h3>
           )}
