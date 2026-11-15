@@ -21,6 +21,7 @@ import {
   type TemplateDraft,
   draftFromTemplate,
   emptyDraft,
+  templateFromDraft,
   templateSummary,
 } from "./workItemTemplatesDraft";
 import { isImeComposing } from "@/lib/utils";
@@ -102,42 +103,13 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
 
   function saveDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = draft.name.trim();
-    const workItemType = draft.workItemType.trim();
-    if (!name) {
-      setFormError("Template name is required.");
+    const result = templateFromDraft(draft, editingId ?? newWorkItemTemplateId(), editingId ? templates.find((t) => t.id === editingId)?.isDefault : undefined);
+    if ("error" in result) {
+      setFormError(result.error);
       return;
     }
-    if (!workItemType) {
-      setFormError("Work item type is required.");
-      return;
-    }
-    const priorityInput = draft.priority.trim();
-    let priority: number | undefined;
-    if (priorityInput) {
-      const parsed = Number(priorityInput);
-      if (!Number.isFinite(parsed) || parsed < MIN_TEMPLATE_PRIORITY || parsed > MAX_TEMPLATE_PRIORITY) {
-        setFormError(`Priority must be between ${MIN_TEMPLATE_PRIORITY} and ${MAX_TEMPLATE_PRIORITY}.`);
-        return;
-      }
-      priority = Math.round(parsed);
-    }
-    const tags = draft.tags
-      .split(/[;,]/)
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
-    const next: WorkItemTemplate = {
-      id: editingId ?? newWorkItemTemplateId(),
-      name,
-      isDefault: editingId ? templates.find((t) => t.id === editingId)?.isDefault : undefined,
-      workItemType,
-      title: draft.title.trim() || undefined,
-      priority,
-      areaPath: draft.areaPath.trim() || undefined,
-      iteration: draft.iteration.trim() || undefined,
-      tags,
-    };
+    const next = result.template;
+    const name = next.name;
 
     setTemplates((current) =>
       editingId && current.some((t) => t.id === editingId)

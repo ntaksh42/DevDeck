@@ -1089,6 +1089,9 @@ format!(
 | Rust サービス/クライアント | `cargo test --workspace` |
 | Rust lint | `cargo clippy --workspace --all-targets -- -D warnings` |
 | リリース確認 | `pnpm tauri build` |
+| ファイル行数 (500 行以下) | `pnpm check:lines` |
+
+CI (`.github/workflows/ci.yml`) は push / PR ごとに、Rust の fmt・clippy・test、TypeScript の行数チェック・型チェック・単体テスト・`pnpm build`、Playwright の `pnpm test:e2e` を実行する。`scripts/check-file-lines.mjs` は、すでに 500 行を超えていたテストファイルを現在の行数で許可する。許可したファイルも、その行数より増やせない。
 
 デスクトップ版を偽の Azure DevOps で動かす: `pnpm tauri:fake` (`scripts/fake-ado/`)。偽サーバーを起動し、環境変数
 `DEVDECK_ADO_BASE_URL` (REST の送り先) と `DEVDECK_DATA_DIR` (SQLite と共有キャッシュの置き場。既定

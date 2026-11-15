@@ -79,11 +79,10 @@ import {
   demoMyWorkItems,
   demoProjectQueries,
   demoRunWorkItemQuery,
-  demoUpdateWorkItemFields,
-  demoWorkItemPreview,
   demoWorkItems,
   demoWorkItemProjects,
 } from "@/lib/demo/workItems";
+import { demoUpdateWorkItemFields, demoWorkItemPreview } from "@/lib/demo/workItemPreview";
 import {
   deleteDemoWorkItemComment,
   demoWorkItemComment,

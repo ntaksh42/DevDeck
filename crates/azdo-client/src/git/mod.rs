@@ -3,6 +3,7 @@ mod commit_comparison;
 mod palette;
 mod ref_updates;
 mod requests;
+mod requests_commits;
 mod search_page;
 pub use search_page::PullRequestPageCriteria;
 mod types;
