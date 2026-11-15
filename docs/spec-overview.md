@@ -337,7 +337,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     (管理区間) にだけ書く (ask の `AGENTS.md` には書かない)。エージェントは起動時に `AGENTS.md` を読むよう指示される。
     自動実行の依頼文 (`auto_agent/context.rs`) も `AGENTS.md` の節を指す。以前置いていた skill `devdeck-result-html` は、
     DevDeck 製の印がある場合に限り起動時に削除する (印が無いユーザーの `SKILL.md` は残す)。ファイル名は `PR{番号}.html` / `WIT{番号}.html`、
-    並びは結論 → ポイントの図 → 本文 → 根拠 → 未確認 → (PR のみ) 畳んだ指摘の下書き、見出しの番号は対象 PR / Work Item への
+    並びは結論 → (WI のみ) 次のアクション → ポイントの図 → 本文 → 根拠 → 未確認 → (PR のみ) 畳んだ指摘の下書き。
+    WI の判定が `要追加情報` でコードを確認できていないときは、短い型 (結論とポイントの図 1 枚 → 足りない情報 → 原因候補 → 未確認) で書く。見出しの番号は対象 PR / Work Item への
     リンク、図はインライン SVG (プレビューは JavaScript・外部ファイル不可)。PR の指摘の場所 (指摘一覧・根拠の `file:line`) は
     PR の Files タブへのリンクにする (`{PR の URL}?_a=files&path=…&line=…&lineEnd=…`。追加ファイルでは該当行が強調される)。
     行が決められないときは `line` 系を付けない。材料が分からないときは推測せず文字だけにする。
