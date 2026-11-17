@@ -143,7 +143,7 @@ export function MyPullRequestsGrid() {
     const data = allPrs.filter((pr) =>
       (showDrafts || !pr.isDraft) &&
       matchesAllSearchTerms(terms, [
-        pr.pullRequestId,
+        `#${pr.pullRequestId}`, // as the row shows it; "77" still matches
         pr.repositoryName,
         pr.title,
         pr.targetRefName,
