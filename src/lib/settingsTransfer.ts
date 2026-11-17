@@ -8,6 +8,9 @@ export const SETTINGS_EXPORT_VERSION = 1;
 
 const ALLOWED_PREFIXES = [
   "azdodeck:layout:",
+  // Agent Work's dock layouts predate the "layout:" naming; keep them movable too.
+  "azdodeck:agentWork:dockview:",
+  "azdodeck:agentWorkCandidates:dockview:",
   "azdodeck:view:",
   "azdodeck:keybindings:",
   "azdodeck:rowColorRules:",
