@@ -81,7 +81,7 @@ test.describe("browser preview", () => {
     ).toBeVisible();
     const commentInput = main.getByRole("textbox", { name: "Comment" });
     await commentInput.fill("@Ali");
-    await main.getByRole("button", { name: /Alice Johnson/ }).click();
+    await page.locator("[data-floating-overlay]").getByRole("button", { name: /Alice Johnson/ }).click();
     await commentInput.fill("@Alice Johnson please check");
     await main.getByRole("button", { name: "Post comment" }).click();
     await expect(main.getByText("Comment posted")).toBeVisible();
@@ -144,7 +144,7 @@ test.describe("browser preview", () => {
 
     const commentInput = main.getByRole("textbox", { name: "Comment" });
     await commentInput.fill("@Demo");
-    await main.getByRole("button", { name: /Demo User/ }).click();
+    await page.locator("[data-floating-overlay]").getByRole("button", { name: /Demo User/ }).click();
     await expect(commentInput).toHaveValue(/^@Demo User /);
 
     await commentInput.fill("@Demo User checking mention flow");

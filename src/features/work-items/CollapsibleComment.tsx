@@ -327,7 +327,8 @@ export function CollapsibleComment({
                 cancelEdit();
               }
             }}
-            rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
+            rows={Math.min(10, Math.max(4, draft.split("\n").length + 1))}
+            className="min-h-24"
             overlay={
               <MentionPickerDropdown
                 options={mentionPicker.dropdown.options}

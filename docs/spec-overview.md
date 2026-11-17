@@ -402,6 +402,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   インライン編集欄でも新規投稿と同じ @メンション候補 (オートコンプリート) を表示する。
   Work Item / PR のコメント入力欄は縦方向にリサイズでき、種別ごとの高さを localStorage に
   保存してビュー再訪時に復元する。
+  入力中の欄 (新規・返信・編集) は最低 96px (4 行) の高さを取る。@メンション候補はプレビュー枠の外に重ねて表示し、
+  入力欄の上下のうち空きのある側に出すため、一覧の端にあるコメントを編集しても候補が切れない (`FloatingOverlay`)。
   プレビューの Links から work item リンク (Parent/Child/Related/Predecessor/Successor) を
   ID 指定で追加・削除できる (`add_work_item_link` / `remove_work_item_link`)。
 - **PR 完了オプション**: complete 時にマージ戦略・ソースブランチ削除に加え、関連 work item を
