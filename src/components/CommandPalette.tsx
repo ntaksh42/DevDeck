@@ -72,6 +72,10 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  // The row picked with the arrow keys. Search results arrive after the
+  // actions and are listed above them, so an index alone would point at a
+  // different row once they land; the picked row is followed by its id.
+  const pickedRowIdRef = useRef<string | null>(null);
   const [usage, setUsage] = useState<Record<string, number>>(() => loadCommandUsage());
   const inputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -151,12 +155,21 @@ export function CommandPalette({
   }, []);
 
   useEffect(() => {
+    pickedRowIdRef.current = null;
     setActiveIndex(0);
   }, [query]);
 
   useEffect(() => {
     const focusedIndex = rowRefs.current.findIndex((row) => row === document.activeElement);
-    setActiveIndex((index) => focusedIndex >= 0 ? focusedIndex : Math.min(index, Math.max(rows.length - 1, 0)));
+    const picked = pickedRowIdRef.current;
+    const pickedIndex = picked ? rows.findIndex((row) => row.id === picked) : -1;
+    setActiveIndex((index) =>
+      focusedIndex >= 0
+        ? focusedIndex
+        : pickedIndex >= 0
+          ? pickedIndex
+          : Math.min(index, Math.max(rows.length - 1, 0)),
+    );
   }, [rows]);
 
   useEffect(() => {
@@ -175,6 +188,7 @@ export function CommandPalette({
 
   function moveActiveRow(delta: number) {
     const next = Math.max(0, Math.min(activeIndex + delta, rows.length - 1));
+    pickedRowIdRef.current = rows[next]?.id ?? null;
     setActiveIndex(next);
     if (rowRefs.current.some((row) => row === document.activeElement)) {
       rowRefs.current[next]?.focus();

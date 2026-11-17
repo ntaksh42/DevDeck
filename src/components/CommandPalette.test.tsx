@@ -32,6 +32,26 @@ it("runs the focused search result after results change order", async () => {
   expect(runA).not.toHaveBeenCalled();
 });
 
+it("keeps the row picked with the arrow keys when search results arrive above it", async () => {
+  const goA = vi.fn();
+  const goB = vi.fn();
+  const runResult = vi.fn();
+  const commands: CommandPaletteAction[] = [
+    { id: "nav-a", group: "Navigation", label: "Go to A", run: goA },
+    { id: "nav-b", group: "Navigation", label: "Go to B", run: goB },
+  ];
+  const view = (items: { id: string; group: string; label: string; run: () => void }[]) => (
+    <CommandPalette actions={commands} onClose={vi.fn()} search={{ items, pending: false, onQueryChange: vi.fn() }} />
+  );
+  const { rerender } = render(view([]));
+  const input = screen.getByRole("textbox");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  rerender(view([{ id: "wi:42", group: "Work Items", label: "#42 Item", run: runResult }]));
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(goB).toHaveBeenCalledTimes(1));
+  expect(runResult).not.toHaveBeenCalled();
+});
+
 it("leaves Enter on the close button to its native click action", () => {
   const run = vi.fn();
   const onClose = vi.fn();
