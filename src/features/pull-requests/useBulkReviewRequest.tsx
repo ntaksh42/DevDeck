@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { commandErrorMessage, runAutoQueue, type ReviewPullRequestSummary } from '@/lib/azdoCommands';
-import { pushToast } from '@/lib/toast';
+import { pushNotice, pushToast } from '@/lib/toast';
 import { BulkReviewDialog } from './BulkReviewDialog';
 
 /**
@@ -16,7 +16,7 @@ export function useBulkReviewRequest(selectedPrs: ReviewPullRequestSummary[]) {
     mutationFn: ({ targets, focus }: { targets: Parameters<typeof runAutoQueue>[0]; focus: string }) =>
       runAutoQueue(targets, focus.trim() || undefined),
     onSuccess: (count) =>
-      pushToast(`Review requested for ${count} PR${count === 1 ? '' : 's'}, one at a time. Results appear in the result folder.`),
+      pushNotice(`Review requested for ${count} PR${count === 1 ? '' : 's'}, one at a time. Results appear in the result folder.`),
     onError: (error) => pushToast(`Review request failed: ${commandErrorMessage(error)}`),
   });
 

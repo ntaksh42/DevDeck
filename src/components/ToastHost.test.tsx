@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearToasts, pushToast } from "@/lib/toast";
+import { clearToasts, pushToast, pushNotice, NOTICE_TOAST_MS } from "@/lib/toast";
 
 const retryToastsFlag = vi.fn();
 vi.mock("@/features/settings/useExperimentalFlags", () => ({
@@ -15,6 +15,17 @@ describe("ToastHost", () => {
     act(() => clearToasts());
     retryToastsFlag.mockReset();
     vi.useRealTimers();
+  });
+
+  it("closes success notices on their own", () => {
+    vi.useFakeTimers();
+    retryToastsFlag.mockReturnValue(false);
+    render(<ToastHost />);
+    act(() => {
+      pushNotice("Reminder cancelled");
+    });
+    act(() => vi.advanceTimersByTime(NOTICE_TOAST_MS));
+    expect(screen.queryByText("Reminder cancelled")).toBeNull();
   });
 
   it("dismisses timed messages after five seconds and keeps untimed errors", () => {

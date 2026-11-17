@@ -9,7 +9,7 @@ import {
   type AgentWorkEntry,
 } from "@/lib/azdoCommands";
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
-import { pushToast } from "@/lib/toast";
+import { pushNotice, pushToast } from "@/lib/toast";
 import { clamp, isEditableTarget } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
@@ -61,7 +61,7 @@ export function AgentWorkView() {
   const retry = useMutation({
     mutationFn: retryAgentWork,
     onSuccess: () => {
-      pushToast("Retrying now. It runs after the agent's current run finishes.");
+      pushNotice("Retrying now. It runs after the agent's current run finishes.");
       refresh();
     },
     onError: (error) => pushToast(commandErrorMessage(error)),
@@ -69,7 +69,7 @@ export function AgentWorkView() {
   const exclude = useMutation({
     mutationFn: (entry: AgentWorkEntry) => setAgentWorkExcluded(entry, !entry.excluded),
     onSuccess: (_, entry) => {
-      pushToast(entry.excluded ? "Included in automatic runs again." : "Excluded from automatic runs.");
+      pushNotice(entry.excluded ? "Included in automatic runs again." : "Excluded from automatic runs.");
       refresh();
     },
     onError: (error) => pushToast(commandErrorMessage(error)),
