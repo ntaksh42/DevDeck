@@ -197,7 +197,11 @@ export function buildDuplicateDraft(preview: WorkItemPreview): WorkItemDuplicate
     areaPath: preview.areaPath,
     iterationPath: preview.iterationPath,
     tags: splitWorkItemTags(preview.tags),
-    assignedTo: preview.assignedTo,
+    // "Display <unique>" so a namesake does not fail to resolve or get the copy.
+    assignedTo:
+      preview.assignedTo && preview.assignedToUniqueName
+        ? `${preview.assignedTo} <${preview.assignedToUniqueName}>`
+        : preview.assignedTo,
   };
 }
 

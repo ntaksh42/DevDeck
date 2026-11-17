@@ -69,6 +69,11 @@ describe("buildDuplicateDraft", () => {
     });
   });
 
+  it("assigns the copy by unique name when it is known", () => {
+    const preview = makePreview({ assignedTo: "Jane Doe", assignedToUniqueName: "jane@contoso.com" });
+    expect(buildDuplicateDraft(preview).assignedTo).toBe("Jane Doe <jane@contoso.com>");
+  });
+
   it("does not mutate the source preview", () => {
     const preview = makePreview({ title: "Original", tags: "alpha" });
     const snapshot = structuredClone(preview);
