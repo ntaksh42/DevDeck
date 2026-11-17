@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { openExternalUrl } from "@/lib/openExternal";
 import { NAVIGATE_PULL_REQUEST_EVENT } from "@/lib/crossLinks";
-import { resetDemoInbox } from "@/lib/demo/actionInbox";
+import { demoListInboxItems, demoSetInboxItemState, resetDemoInbox } from "@/lib/demo/actionInbox";
 import { InboxView } from "./InboxView";
 import { openList, renderView, rowFor, storedRows } from "./inboxViewTestUtils";
 
@@ -42,6 +42,24 @@ describe("InboxView", () => {
     expect(rows[2].textContent).toContain("Reply");
     expect(rows[2].textContent).toContain("!103 ");
     expect(rows[3].textContent).toContain("!189 ");
+  });
+
+  it("keeps the selected conversation when a sync changes the rows above it", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <InboxView />
+      </QueryClientProvider>,
+    );
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!103"));
+    await waitFor(() => expect(rowFor(list, "!103").getAttribute("aria-selected")).toBe("true"));
+    // The top row is handled elsewhere (e.g. answered on the web) and the next sync drops it.
+    const top = demoListInboxItems().find((item) => item.subjectId === 42)!;
+    demoSetInboxItemState({ ids: [top.id], state: "done" });
+    await act(() => client.invalidateQueries({ queryKey: ["actionInbox"] }));
+    await waitFor(() => expect(storedRows(list)).toHaveLength(3));
+    expect(rowFor(list, "!103").getAttribute("aria-selected")).toBe("true");
   });
 
   it("shows how many comments wait in a conversation when there are several", async () => {
