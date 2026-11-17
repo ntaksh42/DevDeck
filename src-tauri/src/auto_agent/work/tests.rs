@@ -173,3 +173,32 @@ fn the_log_tail_is_read_from_the_latest_attempt() {
         "stderr: context window exceeded"
     );
 }
+
+#[test]
+fn excluding_many_items_at_once_keeps_every_one() {
+    let (_dir, db) = database();
+    std::thread::scope(|scope| {
+        for id in 1..=12 {
+            let db = db.clone();
+            scope.spawn(move || {
+                set_excluded(
+                    &db,
+                    SetExcludedInput {
+                        item: ExcludedItem {
+                            organization_id: "org".into(),
+                            target: NoteTarget::WorkItem,
+                            id,
+                            title: format!("item {id}"),
+                            scope: "project".into(),
+                            scope_id: "p".into(),
+                            excluded_at: None,
+                        },
+                        excluded: true,
+                    },
+                )
+                .unwrap();
+            });
+        }
+    });
+    assert_eq!(excluded_keys(&db).len(), 12);
+}
