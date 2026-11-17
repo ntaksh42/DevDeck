@@ -499,6 +499,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 ### 同期ループ (`sync.rs`)
 
 - スコープ: `All` / `Hot` (MyReviews + MyWorkItems の高速更新) / `MyReviews` / `MyWorkItems`。コミットは同期しない (Commits ビューは API 負荷削減のため廃止)。
+  Ctrl+R (現在のビューを更新) は Work Item 系のビューで `MyWorkItems`、PR と作業項目を両方扱うビュー (Inbox・Notifications・Agent Work・Cross-organization summary) と Settings で `All`、それ以外で `MyReviews` を同期する。
 - 間隔: フル同期は約 5 分間隔。起動時とウィンドウ復帰時は Hot 同期 (復帰はスロットル)。手動トリガは間隔を無視。
 - 並列実行: 1 パス内で全組織を並列処理し、各組織の PR / 作業項目同期も並列に走らせる。
   プロジェクト一覧 (`_apis/projects`) は組織ごとに 1 回だけ取得して両種別で共有する。
