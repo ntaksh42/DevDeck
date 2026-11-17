@@ -41,6 +41,8 @@ export function SetupPanel({
     setPat("");
     setValidationError(null);
     void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+    void queryClient.invalidateQueries({ queryKey: ["activeOrganization"] });
+    void queryClient.invalidateQueries({ queryKey: ["providerCapabilities"] });
   }
 
   const patMutation = useMutation({

@@ -64,11 +64,14 @@ export function startFakeAdo({ scenario, org, port, options, log = console.log }
       const reviewer = url.searchParams.get("searchCriteria.reviewerId");
       const creator = url.searchParams.get("searchCriteria.creatorId");
       const status = url.searchParams.get("searchCriteria.status") ?? "active";
-      const value = state.prs
+      const matching = state.prs
         .filter((pr) => status === "all" || pr.status === status)
         .filter((pr) => !reviewer || pr.reviewers.some((r) => r.id === reviewer))
         .filter((pr) => !creator || pr.createdBy.id === creator)
         .map(withoutThreads);
+      const skip = Number(url.searchParams.get('$skip') ?? 0);
+      const top = Number(url.searchParams.get('$top') ?? matching.length);
+      const value = matching.slice(skip, skip + top);
       return { count: value.length, value };
     }],
     ["GET", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)$/, (m) => {

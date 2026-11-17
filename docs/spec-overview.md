@@ -1106,6 +1106,9 @@ CI (`.github/workflows/ci.yml`) は push / PR ごとに、Rust の fmt・clippy�
 
 ## 関連ドキュメント
 
+- Windows Desktop E2E: `pnpm test:e2e:desktop` (`tests/desktop/`)。WebDriver で実アプリを起動し、偽 Azure DevOps への接続追加、同期、My Reviews の PR 表示を検証する。実行ごとに SQLite・共有キャッシュ・組織名を分け、終了時にテスト用資格情報を削除する。事前ビルドとドライバーの準備は [`desktop-e2e.md`](desktop-e2e.md) を参照。
+- 接続追加後は組織一覧・現在の接続・プロバイダー機能のキャッシュを更新し、新しい接続の一覧取得を有効にする。
+
 - 設計解説 (初心者向け): [`docs/design/README.md`](design/README.md)
 - 提案/将来計画: `docs/spec-daily-flow.md` (トレイ常駐・ディープリンクは仕様のみ),
   `docs/spec-cross-cutting-efficiency.md` (横断・運用効率),
