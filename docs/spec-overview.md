@@ -391,7 +391,9 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
     リンククエリ (`[Source].[...]`) を含む WIQL は行にできず、理由を表示して WIQL 欄での編集を促す。
     Field は選択中プロジェクトのフィールド一覧 (`list_work_item_fields`) を候補に出す入力欄、Operator は
     フィールド型で絞った選択肢、Value は `@Me` / `@Today - 7` などのマクロ・数値・文字列 (`IN` / `NOT IN`
-    はカンマ区切り) を受け付ける。文字列型のフィールドの値は数字でも引用符で囲む。「Add condition」で
+    はカンマ区切り) を受け付ける。文字列型のフィールドの値は数字でも引用符で囲む。WIQL 側で引用符付きの
+    文字列のうち、そのままではマクロ・数値・真偽値と読める値 (`'@Me'`、`'5'`) とカンマを含むリスト項目は、
+    Value 欄にも引用符付きで表示し、そのまま書き戻す。「Add condition」で
     `[System.Title] CONTAINS ''` の行を追加してその Field 欄へ、行末の × で削除して隣の行へフォーカスを移す。
     タブを開くと先頭行の Field 欄 (行が無ければ「Add condition」) にフォーカスする。
 - **作業項目の一括操作**: 複数項目の状態変更・割当・優先度設定をまとめて適用。
