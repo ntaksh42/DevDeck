@@ -25,11 +25,18 @@ pub fn update_app_settings(
     app: AppHandle,
 ) -> Result<AppSettings> {
     let settings = normalize_app_settings(input);
-    // Re-register only when the hotkey changed: a hotkey another app took
-    // since startup must not block saving unrelated settings.
+    // A changed hotkey that cannot be registered is an error for the user to
+    // fix. An unchanged one is only re-tried: if another app took it since
+    // startup, that must not block saving unrelated settings.
     let current = state.settings.get()?.show_window_hotkey;
-    if current.as_deref().map(str::trim) != settings.show_window_hotkey.as_deref().map(str::trim) {
-        configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
+    let changed =
+        current.as_deref().map(str::trim) != settings.show_window_hotkey.as_deref().map(str::trim);
+    let registered = configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref());
+    match registered {
+        Err(e) if !changed => {
+            tracing::warn!(error = ?e, "could not re-register the show window hotkey");
+        }
+        other => other?,
     }
     state.settings.update_normalized(settings)
 }
