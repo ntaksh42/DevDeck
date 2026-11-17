@@ -73,6 +73,14 @@ fn mentions(text: &str, me: &str) -> bool {
     !me.is_empty() && text.to_ascii_lowercase().contains(&me.to_ascii_lowercase())
 }
 
+/// The browser link of a work item; the project name is a path segment.
+pub(super) fn work_item_web_url(base_url: &str, project_name: &str, id: i64) -> String {
+    format!(
+        "{base_url}/{}/_workitems/edit/{id}",
+        crate::repos::encode_path_segment(project_name)
+    )
+}
+
 fn author_id(comment: &WorkItemComment) -> Option<&str> {
     comment.created_by.as_ref().and_then(|a| a.id.as_deref())
 }
@@ -254,10 +262,7 @@ async fn scan_candidates(
             followed.contains(&work_item.id),
         );
         let title = field_str(&work_item, "System.Title").unwrap_or_default();
-        let web_url = format!(
-            "{}/{}/_workitems/edit/{}",
-            org.base_url, project.name, work_item.id
-        );
+        let web_url = work_item_web_url(&org.base_url, &project.name, work_item.id);
         let new_items: Vec<NewInboxItem> = hits
             .into_iter()
             .map(|hit| NewInboxItem {
