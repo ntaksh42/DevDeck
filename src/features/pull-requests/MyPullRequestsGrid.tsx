@@ -7,6 +7,7 @@ import {
   isEditableTarget,
   matchesAllSearchTerms,
   splitSearchTerms,
+  hasTextSelectionWithin,
 } from "@/lib/utils";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { FilterAutocomplete } from "@/components/FilterAutocomplete";
@@ -198,7 +199,7 @@ export function MyPullRequestsGrid() {
     const pr = rows[selectedIndex];
     // Ctrl+C copies the whole selection; other chords belong to the app.
     if (event.ctrlKey || event.metaKey) {
-      if ((event.key === "c" || event.key === "C") && !event.altKey) {
+      if ((event.key === "c" || event.key === "C") && !event.altKey && !hasTextSelectionWithin(event.target)) {
         event.preventDefault();
         if (event.shiftKey) void copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast);
         else void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
