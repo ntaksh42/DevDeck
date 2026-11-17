@@ -4,13 +4,12 @@
 // that looks like a credential is refused even if it matches the allow-list.
 // Organizations and PAT/Azure CLI secrets are never part of the export.
 
+import { LAYOUT_STORAGE_PREFIXES } from "./layoutReset";
+
 export const SETTINGS_EXPORT_VERSION = 1;
 
 const ALLOWED_PREFIXES = [
-  "azdodeck:layout:",
-  // Agent Work's dock layouts predate the "layout:" naming; keep them movable too.
-  "azdodeck:agentWork:dockview:",
-  "azdodeck:agentWorkCandidates:dockview:",
+  ...LAYOUT_STORAGE_PREFIXES,
   "azdodeck:view:",
   "azdodeck:keybindings:",
   "azdodeck:rowColorRules:",
