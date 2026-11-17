@@ -25,7 +25,12 @@ pub fn update_app_settings(
     app: AppHandle,
 ) -> Result<AppSettings> {
     let settings = normalize_app_settings(input);
-    configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
+    // Re-register only when the hotkey changed: a hotkey another app took
+    // since startup must not block saving unrelated settings.
+    let current = state.settings.get()?.show_window_hotkey;
+    if current.as_deref().map(str::trim) != settings.show_window_hotkey.as_deref().map(str::trim) {
+        configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
+    }
     state.settings.update_normalized(settings)
 }
 
