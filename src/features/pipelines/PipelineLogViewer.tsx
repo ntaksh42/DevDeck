@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { PreviewBand } from "@/components/PreviewBand";
-import { isEditableTarget } from "@/lib/utils";
+import { isEditableTarget, isImeComposing } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { type LogSeverity, logLineSeverity } from "./pipelineLogSeverity";
 
@@ -208,6 +208,7 @@ export function PipelineLogViewer({
                 setMatchCursor(0);
               }}
               onKeyDown={(event) => {
+                if (isImeComposing(event)) return;
                 if (event.key === "Enter") {
                   event.preventDefault();
                   event.stopPropagation();

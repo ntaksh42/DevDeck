@@ -10,7 +10,7 @@ import {
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { focusPrimaryPreview } from "@/lib/utils";
+import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
@@ -260,6 +260,8 @@ export function ReviewTab({
                   value={draftTitle}
                   onChange={(event) => setDraftTitle(event.target.value)}
                   onKeyDown={(event) => {
+                    // Enter / Escape that confirm or cancel an IME conversion belong to the IME.
+                    if (isImeComposing(event)) return;
                     if (event.key === "Escape") {
                       event.stopPropagation();
                       setEditingDetails(false);
@@ -280,6 +282,8 @@ export function ReviewTab({
                   value={draftDescription}
                   onChange={(event) => setDraftDescription(event.target.value)}
                   onKeyDown={(event) => {
+                    // Enter / Escape that confirm or cancel an IME conversion belong to the IME.
+                    if (isImeComposing(event)) return;
                     if (event.key === "Escape") {
                       event.stopPropagation();
                       setEditingDetails(false);
