@@ -9,4 +9,11 @@ describe("invalidateSyncedDataQueries", () => {
     invalidateSyncedDataQueries(client, ["myWorkItems"]);
     expect(client.getQueryState(["snoozedItems", "work_item", "org"])?.isInvalidated).toBe(true);
   });
+
+  it("re-reads the Inbox so items whose snooze ran out come back", () => {
+    const client = new QueryClient();
+    client.setQueryData(["actionInbox", "list", "open", ""], []);
+    invalidateSyncedDataQueries(client, ["myReviews"]);
+    expect(client.getQueryState(["actionInbox", "list", "open", ""])?.isInvalidated).toBe(true);
+  });
 });
