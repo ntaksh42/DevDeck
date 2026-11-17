@@ -123,7 +123,9 @@ fn proposal_location(
 /// Automatic posts must not carry anything a hostile pull request could use to
 /// make the agent reach out: links and @-mentions go through the user.
 fn check_auto_content(body: &str) -> Result<()> {
-    if body.contains("http://") || body.contains("https://") || body.contains('@') {
+    // URL schemes are case-insensitive, so "HTTPS://" is a link too.
+    let lower = body.to_ascii_lowercase();
+    if lower.contains("http://") || lower.contains("https://") || body.contains('@') {
         return Err(AppError::InvalidInput(
             "a comment with a link or @mention needs your approval".to_string(),
         ));
