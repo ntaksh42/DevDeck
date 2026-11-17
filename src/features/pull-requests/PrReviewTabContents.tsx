@@ -153,7 +153,8 @@ export function ReviewTab({
           <select
             id="pr-vote-select"
             value={myVote}
-            disabled={voteMutation.isPending}
+            disabled={readOnly || voteMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : undefined}
             onChange={(event) =>
               voteMutation.mutate({
                 ...prLocator(pr),
