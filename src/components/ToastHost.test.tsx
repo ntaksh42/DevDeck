@@ -17,6 +17,27 @@ describe("ToastHost", () => {
     vi.useRealTimers();
   });
 
+  it("keeps a message when Escape was handled elsewhere or belongs to the IME", () => {
+    retryToastsFlag.mockReturnValue(false);
+    render(<ToastHost />);
+    act(() => {
+      pushToast("Could not save");
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", isComposing: true }));
+    });
+    const handled = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    handled.preventDefault();
+    act(() => {
+      window.dispatchEvent(handled);
+    });
+    expect(screen.queryByText("Could not save")).toBeTruthy();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(screen.queryByText("Could not save")).toBeNull();
+  });
+
   it("closes success notices on their own", () => {
     vi.useFakeTimers();
     retryToastsFlag.mockReturnValue(false);
