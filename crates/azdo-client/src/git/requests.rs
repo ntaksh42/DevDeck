@@ -4,13 +4,13 @@ use crate::error::Result;
 use super::*;
 
 /// Page size for list endpoints that return at most one page by default
-/// (Refs - List, Projects - List); further pages follow the continuation token.
+/// (Refs - List, Projects - List, Pull Request Commits); further pages follow the continuation token.
 const LIST_PAGE_SIZE: &str = "1000";
 
 impl AdoClient {
     /// Fetches every page of a list endpoint that signals more results with an
     /// `x-ms-continuationtoken` header, sending `$top` and `continuationToken`.
-    async fn list_all_pages<T: serde::de::DeserializeOwned>(
+    pub(crate) async fn list_all_pages<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
         base_query: &[(&str, &str)],
