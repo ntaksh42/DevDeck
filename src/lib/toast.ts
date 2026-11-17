@@ -35,6 +35,14 @@ export function pushToast(message: string, onRetry?: () => void, durationMs?: nu
   return id;
 }
 
+/** How long a success message stays; errors stay until dismissed. */
+export const NOTICE_TOAST_MS = 5000;
+
+/** A success message that closes on its own (errors use `pushToast`). */
+export function pushNotice(message: string): number {
+  return pushToast(message, undefined, NOTICE_TOAST_MS);
+}
+
 export function dismissToast(id: number) {
   const next = toasts.filter((toast) => toast.id !== id);
   if (next.length === toasts.length) {

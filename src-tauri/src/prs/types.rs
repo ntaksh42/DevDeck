@@ -89,6 +89,9 @@ pub struct SearchPullRequestsInput {
     /// Inclusive date window (`YYYY-MM-DD`) interpreted against `date_basis`.
     pub from_date: Option<String>,
     pub to_date: Option<String>,
+    /// Minutes the user's local time is ahead of UTC. The date window is a
+    /// local calendar range; omitted, it is read in UTC.
+    pub utc_offset_minutes: Option<i32>,
     /// `created` (default) or `closed`: which date the window applies to.
     pub date_basis: Option<String>,
     pub exclude_drafts: Option<bool>,

@@ -14,6 +14,9 @@ use super::{
 };
 use crate::error::{AppError, Result};
 
+/// The `resolved` text of a note the user resolved in DevDeck (not the agent).
+pub(crate) const RESOLVED_BY_USER: &str = "Resolved in DevDeck";
+
 /// Deleted notes are kept this long so the delete can be undone.
 const TRASH_KEEP: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -153,7 +156,7 @@ pub(crate) fn set_status(folder: &Path, input: SetAgentNoteStatusInput) -> Resul
     }
     let mut text = fs::read_to_string(&path)?;
     text = if to_status == "done" {
-        set_field(&text, "resolved", Some("Resolved in DevDeck"))
+        set_field(&text, "resolved", Some(RESOLVED_BY_USER))
     } else {
         // Reopened by the user: a leftover `resolved` line would still show it
         // as handled.

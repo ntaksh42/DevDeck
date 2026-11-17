@@ -7,7 +7,7 @@ import {
   setReplyReminder,
   type ReplyReminder,
 } from "@/lib/azdoCommands";
-import { pushToast } from "@/lib/toast";
+import { pushNotice, pushToast } from "@/lib/toast";
 import { isPullRequestItem, type InboxEntry } from "./inboxPresentation";
 
 /** The conversation a reminder watches: a PR thread, or a work item (no repository, thread 0). */
@@ -63,7 +63,7 @@ export function useInboxReminder(selected: InboxEntry | null) {
       }),
     onSuccess: (reminder) => {
       void refresh();
-      pushToast(`Reminder set for ${new Date(reminder.dueAt).toLocaleString()} if no one replies`);
+      pushNotice(`Reminder set for ${new Date(reminder.dueAt).toLocaleString()} if no one replies`);
     },
     onError: (error) => pushToast(`Could not set the reminder: ${commandErrorMessage(error)}`),
   });
@@ -71,7 +71,7 @@ export function useInboxReminder(selected: InboxEntry | null) {
     mutationFn: clearReplyReminder,
     onSuccess: () => {
       void refresh();
-      pushToast("Reminder cancelled");
+      pushNotice("Reminder cancelled");
     },
     onError: (error) => pushToast(`Could not cancel the reminder: ${commandErrorMessage(error)}`),
   });

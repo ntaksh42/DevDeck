@@ -23,6 +23,9 @@ describe("isTransferableKey", () => {
 
   it("refuses credential-looking keys even under an allowed prefix", () => {
     expect(isTransferableKey("azdodeck:layout:pat")).toBe(false);
+    expect(isTransferableKey("azdodeck:agentWork:dockview:v1")).toBe(true);
+    expect(isTransferableKey("azdodeck:workItems:previewFields")).toBe(true);
+    expect(isTransferableKey("azdodeck:agentWorkCandidates:dockview:v1")).toBe(true);
     expect(isTransferableKey("azdodeck:view:apiToken")).toBe(false);
     expect(isTransferableKey("azdodeck:org:contoso:azure-cli")).toBe(false);
   });

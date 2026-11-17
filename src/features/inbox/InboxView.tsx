@@ -92,9 +92,21 @@ export function InboxView() {
 
   const index = clamp(selectedIndex, 0, Math.max(entries.length - 1, 0));
   const selected: InboxEntry | null = entries[index] ?? null;
+  // A sync can add rows above the selected one; keep the same conversation
+  // selected rather than whatever row now sits at its old position. When it
+  // left the list (Done / Snooze), the row that took its place is selected.
+  // moveSelectionTo records its target here too, so an explicit pick in the
+  // same update (undo's reselect) is the one followed.
+  const selectedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    setSelectedIndex((value) => clamp(value, 0, Math.max(entries.length - 1, 0)));
-  }, [entries.length]);
+    const kept = selectedIdRef.current === null
+      ? -1
+      : entries.findIndex((entry) => entry.id === selectedIdRef.current);
+    setSelectedIndex((value) => (kept >= 0 ? kept : clamp(value, 0, Math.max(entries.length - 1, 0))));
+  }, [entries]);
+  useEffect(() => {
+    selectedIdRef.current = selected?.id ?? null;
+  }, [selected?.id]);
 
   const detail = useInboxDetail(selected);
   const reminder = useInboxReminder(selected);
@@ -135,6 +147,7 @@ export function InboxView() {
   const parkingFocusRef = useRef(false);
   function moveSelectionTo(next: number) {
     const target = clamp(next, 0, entries.length - 1);
+    selectedIdRef.current = entries[target]?.id ?? null;
     // Parking focus on the list must not bounce it straight back to the old row.
     parkingFocusRef.current = true;
     parkGridFocus(rowRefs.current[target]);

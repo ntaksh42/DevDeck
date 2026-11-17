@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { isImeComposing } from '@/lib/utils';
 
 /**
  * Asks to confirm a review request and lets the requester say what the agent
@@ -23,6 +24,8 @@ export function BulkReviewDialog({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // Escape that cancels an IME conversion must not close the dialog.
+      if (isImeComposing(event)) return;
       // Focus that strayed outside (e.g. onto <body>) must not drive the app
       // behind the dialog; pull it back in instead.
       if (!dialogRef.current?.contains(event.target as Node)) {

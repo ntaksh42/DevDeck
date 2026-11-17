@@ -6,6 +6,7 @@ import {
   type Toast,
 } from "@/lib/toast";
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
+import { isImeComposing } from "@/lib/utils";
 
 function ToastRow({ toast }: { toast: Toast }) {
   useEffect(() => {
@@ -72,6 +73,9 @@ function ToastList({ toasts }: { toasts: Toast[] }) {
       return;
     }
     function onKeyDown(event: KeyboardEvent) {
+      // An Escape that closed a popup or cancelled an IME conversion was meant
+      // for that; it must not also throw away a message (often an error).
+      if (event.defaultPrevented || isImeComposing(event)) return;
       if (event.key === "Escape") {
         dismissToast(visible[visible.length - 1].id);
       }

@@ -140,3 +140,11 @@ fn replies_count_on_followed_items_and_after_my_comment() {
         vec![(4, KIND_WI_REPLY), (6, KIND_WI_REPLY), (7, KIND_WI_MENTION)]
     );
 }
+
+#[test]
+fn work_item_links_encode_the_project_name() {
+    assert_eq!(
+        work_item_web_url("https://dev.azure.com/org", "My Project", 42),
+        "https://dev.azure.com/org/My%20Project/_workitems/edit/42"
+    );
+}

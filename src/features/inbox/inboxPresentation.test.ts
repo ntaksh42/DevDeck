@@ -100,6 +100,12 @@ describe("inbox presentation helpers", () => {
     expect(matchesInboxFilter(target, "!42")).toBe(true);
     expect(matchesInboxFilter(target, "billing")).toBe(false);
   });
+
+  it("finds a work item by #id, as its row shows it", () => {
+    const target = item({ kind: "wi_mention", subjectId: 123 });
+    expect(matchesInboxFilter(target, "#123")).toBe(true);
+    expect(matchesInboxFilter(target, "!123")).toBe(false);
+  });
 });
 
 describe("inboxLocationLabel", () => {

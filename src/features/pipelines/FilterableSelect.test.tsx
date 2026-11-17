@@ -162,6 +162,27 @@ describe("FilterableSelect", () => {
       expect(onChange).toHaveBeenCalledWith("2");
     });
 
+    it("prefers the option that matches the typed text exactly", () => {
+      const onChange = vi.fn();
+      render(
+        <FilterableSelect
+          ariaLabel="Branch"
+          value=""
+          options={[
+            { value: "release/1.0", label: "release/1.0" },
+            { value: "release", label: "release" },
+          ]}
+          onChange={onChange}
+          allowCustomValue
+        />,
+      );
+      const input = screen.getByRole("combobox", { name: "Branch" });
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value: "release" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onChange).toHaveBeenCalledWith("release");
+    });
+
     it("closes on Escape without committing the typed text", () => {
       const { input, onChange } = setupCustom();
       fireEvent.mouseDown(input);

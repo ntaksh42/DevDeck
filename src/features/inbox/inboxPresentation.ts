@@ -119,7 +119,9 @@ export function shortRefName(ref: string): string {
 export function matchesInboxFilter(item: InboxItem, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return [item.title, item.author, item.snippet, item.repositoryName, item.projectName, `!${item.subjectId}`]
+  // The id as the row shows it: `!42` for a pull request, `#42` for a work item.
+  const id = `${isPullRequestItem(item) ? "!" : "#"}${item.subjectId}`;
+  return [item.title, item.author, item.snippet, item.repositoryName, item.projectName, id]
     .filter((value): value is string => !!value)
     .some((value) => value.toLowerCase().includes(needle));
 }

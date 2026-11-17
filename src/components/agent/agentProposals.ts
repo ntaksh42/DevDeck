@@ -26,7 +26,7 @@ export function isLineProposal(reply: NoteReply): boolean {
  */
 export function approvalReason(reply: NoteReply): string | null {
   if (isLineProposal(reply)) return "A line comment always needs your approval.";
-  if (/https?:\/\/|@/.test(reply.body)) return "Has a link or @mention, so it needs your approval.";
+  if (/https?:\/\/|@/i.test(reply.body)) return "Has a link or @mention, so it needs your approval.";
   return null;
 }
 

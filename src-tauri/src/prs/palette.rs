@@ -37,7 +37,11 @@ impl PullRequestService {
         org: &Organization,
         query: &str,
     ) -> Result<(Vec<PullRequestSummary>, Vec<String>)> {
-        if let Ok(id) = query.parse::<i32>() {
+        // Only bare digits are an id: "-5" or "+5" is text to search for.
+        let id = Some(query)
+            .filter(|q| q.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|q| q.parse::<i32>().ok());
+        if let Some(id) = id {
             let pr = client.get_pull_request_by_id(i64::from(id)).await?;
             return Ok((
                 pr.filter(|p| p.status == "active")

@@ -68,7 +68,11 @@ impl WorkItemService {
         query: &str,
         limit: usize,
     ) -> Result<Vec<WorkItemSummary>> {
-        let work_items = if let Ok(id) = query.parse::<i32>() {
+        // Only bare digits are an id: "-5" or "+5" is text to search for.
+        let id = Some(query)
+            .filter(|q| q.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|q| q.parse::<i32>().ok());
+        let work_items = if let Some(id) = id {
             client
                 .get_work_item_org(i64::from(id), WORK_ITEM_FIELDS)
                 .await?

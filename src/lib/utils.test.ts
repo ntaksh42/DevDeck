@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  hasTextSelectionWithin,
   formatRelativeDate,
   focusPrimaryGrid,
   handleSearchInputEscape,
@@ -170,5 +171,30 @@ describe("handleSearchInputEscape focus hand-off", () => {
     escapeIn(input);
 
     expect(document.activeElement).toBe(document.getElementById("pane"));
+  });
+});
+
+describe("hasTextSelectionWithin", () => {
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+    document.body.innerHTML = "";
+  });
+
+  function selectText(node: Node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }
+
+  it("is true only for a selection inside the event target", () => {
+    document.body.innerHTML = '<div id="preview"><p id="text">Some description</p></div><div id="row">Row</div>';
+    const preview = document.getElementById("preview")!;
+    const row = document.getElementById("row")!;
+    expect(hasTextSelectionWithin(preview)).toBe(false);
+    selectText(document.getElementById("text")!);
+    expect(hasTextSelectionWithin(preview)).toBe(true);
+    expect(hasTextSelectionWithin(row)).toBe(false);
+    expect(hasTextSelectionWithin(null)).toBe(false);
   });
 });

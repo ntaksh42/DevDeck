@@ -162,8 +162,9 @@ impl PullRequestService {
                 normalize_optional(Some(branch)).map(|value| short_ref(&value).to_string())
             })
             .collect();
-        let from_rfc = parse_date_bound(input.from_date.as_deref(), false)?;
-        let to_rfc = parse_date_bound(input.to_date.as_deref(), true)?;
+        let from_rfc =
+            parse_date_bound(input.from_date.as_deref(), false, input.utc_offset_minutes)?;
+        let to_rfc = parse_date_bound(input.to_date.as_deref(), true, input.utc_offset_minutes)?;
         if let (Some(from), Some(to)) = (&from_rfc, &to_rfc) {
             if from > to {
                 return Err(AppError::InvalidInput(

@@ -35,4 +35,12 @@ describe("layout reset", () => {
     expect(window.localStorage.getItem("azdodeck:commandPalette:usage")).toBe("{}");
     expect(window.localStorage.getItem("azdodeck:workItemViews")).toBe("[]");
   });
+
+  it("also resets Agent Work's dock arrangements", () => {
+    window.localStorage.setItem("azdodeck:agentWork:dockview:v1", "{}");
+    window.localStorage.setItem("azdodeck:agentWorkCandidates:dockview:v1", "{}");
+
+    expect(clearLayoutStorage()).toBe(2);
+    expect(window.localStorage.getItem("azdodeck:agentWork:dockview:v1")).toBeNull();
+  });
 });

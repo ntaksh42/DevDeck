@@ -1,3 +1,4 @@
+import { isImeComposing } from "@/lib/utils";
 import { type ReactNode, useState } from "react";
 import { ChevronRight, Loader2, X } from "lucide-react";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
@@ -216,7 +217,7 @@ export function PreviewTagsField({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               stopPreviewNavigationKeyDown(event);
-              if (event.key === "Enter") {
+              if (event.key === "Enter" && !isImeComposing(event)) {
                 event.preventDefault();
                 addDraftTag();
               }

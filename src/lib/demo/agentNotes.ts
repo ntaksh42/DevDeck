@@ -293,6 +293,7 @@ export function demoSummarizeAgentNotes(target: AgentNoteTarget): AgentNoteSumma
       needsYou: notes.filter(noteNeedsYou).length,
       drafts: notes.filter((n) => n.status === "draft").length,
       done: notes.filter((n) => n.status === "done").length,
+      doneByAgent: notes.filter((n) => n.status === "done" && n.resolved !== "Resolved in DevDeck").length,
       lastAgentReplyAt: latest(agentReplies.map((r) => r.createdAt)),
       lastModifiedAt: latest(notes.map((n) => n.modifiedAt ?? n.createdAt)),
     });

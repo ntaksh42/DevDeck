@@ -110,6 +110,19 @@ export function handleSearchInputEscape(
   }
 }
 
+/**
+ * True when the user has selected text inside the element a key event targets
+ * (e.g. a sentence in a preview pane). The grids' Ctrl+C "Copy as Grid"
+ * handlers also receive keys that bubble up from their preview panes; they
+ * check this first so Ctrl+C copies the selected text as usual.
+ */
+export function hasTextSelectionWithin(target: EventTarget | null): boolean {
+  if (!(target instanceof Node)) return false;
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+  return !!selection.anchorNode && target.contains(selection.anchorNode);
+}
+
 export function focusWorkItemCommentInput(): boolean {
   const textarea = document.querySelector<HTMLTextAreaElement>(
     "[data-work-item-comment-input='true']",

@@ -4,10 +4,12 @@
 // that looks like a credential is refused even if it matches the allow-list.
 // Organizations and PAT/Azure CLI secrets are never part of the export.
 
+import { LAYOUT_STORAGE_PREFIXES } from "./layoutReset";
+
 export const SETTINGS_EXPORT_VERSION = 1;
 
 const ALLOWED_PREFIXES = [
-  "azdodeck:layout:",
+  ...LAYOUT_STORAGE_PREFIXES,
   "azdodeck:view:",
   "azdodeck:keybindings:",
   "azdodeck:rowColorRules:",
@@ -16,6 +18,7 @@ const ALLOWED_PREFIXES = [
   "azdodeck:workItemViewLayout:",
   "azdodeck:workItemTemplates",
   "azdodeck:workItems:fieldPresets",
+  "azdodeck:workItems:previewFields",
   "azdodeck:workItems:previewCustomFields",
   "azdodeck:wiPreview:",
   "azdodeck:quickPipelines",

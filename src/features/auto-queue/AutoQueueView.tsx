@@ -11,7 +11,7 @@ import {
   type AutoQueueTarget,
 } from "@/lib/azdoCommands";
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
-import { pushToast } from "@/lib/toast";
+import { pushNotice, pushToast } from "@/lib/toast";
 import { clamp, focusFilterInput } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { ListStatusBar } from "@/components/ListStatusBar";
@@ -92,7 +92,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const runMutation = useMutation({
     mutationFn: (targets: AutoQueueTarget[]) => runAutoQueue(targets),
     onSuccess: (count, targets) => {
-      pushToast(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
+      pushNotice(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
@@ -128,7 +128,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const excludeMutation = useMutation({
     mutationFn: (targets: AutoQueueItem[]) => Promise.all(targets.map((item) => setAgentWorkExcluded(item, true))),
     onSuccess: (_, targets) => {
-      pushToast(`${targets.length} excluded from automatic runs.`);
+      pushNotice(`${targets.length} excluded from automatic runs.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });

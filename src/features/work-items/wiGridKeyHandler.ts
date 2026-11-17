@@ -5,6 +5,7 @@ import {
   focusFilterInput,
   focusPrimaryPreview,
   markdownLink,
+  hasTextSelectionWithin,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
@@ -108,7 +109,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
         e.preventDefault();
         const item = displayed[selectedIndex];
         if (item?.webUrl) openExternalUrl(item.webUrl);
-      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C") && !hasTextSelectionWithin(e.target)) {
         // Copies every checked row, falling back to the focused row when the
         // user has not checked anything, as a table for pasting into email.
         // `c` alone stays the single-row URL copy.

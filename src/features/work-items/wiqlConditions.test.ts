@@ -113,6 +113,20 @@ describe('replaceWiqlConditions', () => {
     ).toContain("= '5'");
   });
 
+  it('keeps quoted values that would otherwise change meaning', () => {
+    const wiql =
+      "SELECT [System.Id] FROM WorkItems WHERE [System.Title] = '@Me' " +
+      "AND [Custom.Code] = '5' AND [System.AssignedTo] IN ('Smith, John', 'B', 'it''s')";
+    const parsed = parseWiqlConditions(wiql);
+    if (!parsed.ok) throw new Error(parsed.reason);
+    expect(parsed.conditions.map((c) => c.value)).toEqual(["'@Me'", "'5'", "'Smith, John', B, it's"]);
+    // Editing a row rewrites every condition; field types are not loaded yet.
+    const next = replaceWiqlConditions(wiql, parsed.conditions, {});
+    expect(next).toContain("[System.Title] = '@Me'");
+    expect(next).toContain("[Custom.Code] = '5'");
+    expect(next).toContain("[System.AssignedTo] IN ('Smith, John', 'B', 'it''s')");
+  });
+
   it('drops the WHERE clause when the last condition is removed', () => {
     expect(replaceWiqlConditions(WIQL, [], {})).toBe(
       "SELECT [System.Id], [System.Title]\nFROM WorkItems\nORDER BY [System.ChangedDate] DESC",

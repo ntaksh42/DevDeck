@@ -32,6 +32,8 @@ mod tests_inbox_hits;
 mod tests_capped;
 
 #[cfg(test)]
+mod tests_dates;
+#[cfg(test)]
 mod tests_force_refresh;
 
 pub(crate) use group_reviews::member_group_ids;
