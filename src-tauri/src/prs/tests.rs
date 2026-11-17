@@ -281,17 +281,31 @@ fn normalize_set_drops_blanks_and_empty() {
 
 #[test]
 fn parse_date_bound_spans_start_and_end_of_day() {
-    let from = parse_date_bound(Some("2026-05-01"), false)
+    let from = parse_date_bound(Some("2026-05-01"), false, None)
         .unwrap()
         .unwrap();
-    let to = parse_date_bound(Some(" 2026-05-31 "), true)
+    let to = parse_date_bound(Some(" 2026-05-31 "), true, None)
         .unwrap()
         .unwrap();
     assert!(from.starts_with("2026-05-01T00:00:00"));
     assert!(to.starts_with("2026-05-31T23:59:59"));
-    assert_eq!(parse_date_bound(None, false).unwrap(), None);
-    assert_eq!(parse_date_bound(Some("  "), false).unwrap(), None);
-    assert!(parse_date_bound(Some("not-a-date"), false).is_err());
+    assert_eq!(parse_date_bound(None, false, None).unwrap(), None);
+    assert_eq!(parse_date_bound(Some("  "), false, None).unwrap(), None);
+    assert!(parse_date_bound(Some("not-a-date"), false, None).is_err());
+}
+
+#[test]
+fn date_bounds_follow_the_users_calendar_day() {
+    // 2026-05-01 in Japan (UTC+9) starts at 2026-04-30 15:00 UTC.
+    let from = parse_date_bound(Some("2026-05-01"), false, Some(540))
+        .unwrap()
+        .unwrap();
+    let to = parse_date_bound(Some("2026-05-31"), true, Some(540))
+        .unwrap()
+        .unwrap();
+    assert!(from.starts_with("2026-04-30T15:00:00"), "{from}");
+    assert!(to.starts_with("2026-05-31T14:59:59"), "{to}");
+    assert!(parse_date_bound(Some("2026-05-01"), false, Some(24 * 60)).is_err());
 }
 
 #[test]
@@ -321,7 +335,9 @@ fn end_of_day_bound_covers_the_whole_final_second() {
     // 23:59:59 bound sits before it and dropped the row -- both from the
     // in-memory active-cache filter and from the live query, which sends this
     // same value as `maxTime`.
-    let to = parse_date_bound(Some("2026-05-31"), true).unwrap().unwrap();
+    let to = parse_date_bound(Some("2026-05-31"), true, None)
+        .unwrap()
+        .unwrap();
     assert!(within_window(
         "2026-05-31T23:59:59.913333300+00:00",
         None,

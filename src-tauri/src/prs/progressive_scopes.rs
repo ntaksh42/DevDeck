@@ -52,8 +52,8 @@ impl Criteria {
             input.query.as_deref().unwrap_or_default(),
             input.exclude_words.as_deref().unwrap_or_default(),
         )?;
-        let from = parse_date_bound(input.from_date.as_deref(), false)?;
-        let to = parse_date_bound(input.to_date.as_deref(), true)?;
+        let from = parse_date_bound(input.from_date.as_deref(), false, input.utc_offset_minutes)?;
+        let to = parse_date_bound(input.to_date.as_deref(), true, input.utc_offset_minutes)?;
         if from.as_ref().zip(to.as_ref()).is_some_and(|(a, b)| a > b) {
             return Err(AppError::InvalidInput(
                 "From must be before or equal to To".into(),

@@ -168,7 +168,10 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
   const inWindow = (iso: string | null) => {
     if (!fromDate && !toDate) return true;
     if (!iso) return false;
-    const d = iso.slice(0, 10);
+    // Compare local calendar days, as the desktop backend does.
+    const date = new Date(iso);
+    if (!Number.isFinite(date.getTime())) return false;
+    const d = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     if (fromDate && d < fromDate) return false;
     if (toDate && d > toDate) return false;
     return true;

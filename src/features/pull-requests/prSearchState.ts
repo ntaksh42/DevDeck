@@ -13,6 +13,8 @@ export function prSearchInput(query: string, filters: PrSearchFilters): SearchPu
     repositoryIds: filters.repositoryIds.length ? filters.repositoryIds : undefined,
     targetBranches: filters.targetBranches.length ? filters.targetBranches : undefined,
     fromDate: filters.fromDate || undefined, toDate: filters.toDate || undefined,
+    // The picked dates are local days; the backend needs the offset to bound them.
+    utcOffsetMinutes: filters.fromDate || filters.toDate ? -new Date().getTimezoneOffset() : undefined,
     dateBasis: filters.dateBasis, sortBy: filters.sortBy, excludeDrafts: filters.excludeDrafts || undefined,
     authorId: filters.author?.id, reviewerId: filters.reviewer?.id, excludeWords: filters.excludeWords || undefined,
   };

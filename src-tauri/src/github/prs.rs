@@ -59,8 +59,12 @@ impl PrSearchQualifiers {
                 Some("closed") => "closed",
                 _ => "created",
             },
-            from_date: parse_search_date(input.from_date.as_deref())?,
-            to_date: parse_search_date(input.to_date.as_deref())?,
+            from_date: parse_search_date(
+                input.from_date.as_deref(),
+                false,
+                input.utc_offset_minutes,
+            )?,
+            to_date: parse_search_date(input.to_date.as_deref(), true, input.utc_offset_minutes)?,
         })
     }
 
@@ -95,13 +99,24 @@ impl PrSearchQualifiers {
 }
 
 /// Validates a `YYYY-MM-DD` filter bound for use in a GitHub date qualifier.
-fn parse_search_date(value: Option<&str>) -> Result<Option<String>> {
+/// With the user's UTC offset the bound becomes a local date-time, so the day
+/// matches the user's calendar rather than UTC's.
+fn parse_search_date(
+    value: Option<&str>,
+    end_of_day: bool,
+    utc_offset_minutes: Option<i32>,
+) -> Result<Option<String>> {
     let Some(trimmed) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
     NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map_err(|_| AppError::InvalidInput(format!("invalid date: {trimmed}")))?;
-    Ok(Some(trimmed.to_string()))
+    let offset = crate::prs::local_offset(utc_offset_minutes)?;
+    if offset.local_minus_utc() == 0 {
+        return Ok(Some(trimmed.to_string()));
+    }
+    let time = if end_of_day { "23:59:59" } else { "00:00:00" };
+    Ok(Some(format!("{trimmed}T{time}{offset}")))
 }
 
 /// Searches pull requests the authenticated user is involved in (authored,
@@ -382,6 +397,19 @@ mod tests {
             sort_by: None,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn local_dates_become_offset_date_times() {
+        let mut i = input();
+        i.from_date = Some("2026-05-01".into());
+        i.to_date = Some("2026-05-31".into());
+        i.utc_offset_minutes = Some(540);
+        let q = query_for(&i);
+        assert!(
+            q.contains("created:2026-05-01T00:00:00+09:00..2026-05-31T23:59:59+09:00"),
+            "{q}"
+        );
     }
 
     fn query_for(input: &SearchPullRequestsInput) -> String {
