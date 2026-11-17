@@ -98,7 +98,8 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
         if (first || !notify || !settings) continue;
         const replied =
           !!summary.lastAgentReplyAt && summary.lastAgentReplyAt !== (before?.lastAgentReplyAt ?? null);
-        const finished = summary.done > (before?.done ?? 0);
+        // Only notes the agent finished; resolving one yourself is not news.
+        const finished = summary.doneByAgent > (before?.doneByAgent ?? 0);
         if (!replied && !finished) continue;
         const label =
           target === "pull-request" ? `PR !${summary.itemId}` : target === "ask" ? "your request" : `#${summary.itemId}`;
