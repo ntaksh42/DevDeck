@@ -29,6 +29,7 @@ vi.mock("@/lib/openExternal", () => ({
 }));
 
 import {
+  showAgentNoteNotification,
   showPipelineWatchNotification,
   showPullRequestNotificationEvent,
   showSyncFailedNotificationEvent,
@@ -383,6 +384,19 @@ describe("quiet hours gating", () => {
     vi.setSystemTime(new Date(2026, 0, 1, 23, 0, 0));
 
     const result = await showWorkItemNotificationEvent(workItemEvent, quietHoursSettings);
+
+    expect(result).toBe("skipped");
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("skips agent reply notifications during the configured window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 23, 0, 0));
+
+    const result = await showAgentNoteNotification(
+      { title: "Agent replied on #1", body: "1 note waiting for you", onClick: () => {} },
+      quietHoursSettings,
+    );
 
     expect(result).toBe("skipped");
     expect(sendNotification).not.toHaveBeenCalled();
