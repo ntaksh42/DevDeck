@@ -15,6 +15,7 @@ fn comment(id: i64, author: &str, text: &str) -> WorkItemComment {
         id,
         text: Some(text.to_string()),
         rendered_text: None,
+        format: None,
         created_date: None,
         created_by: Some(CommentIdentityRef {
             id: Some(author.to_string()),

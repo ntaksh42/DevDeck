@@ -6,6 +6,15 @@ import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { MarkdownView } from "@/lib/markdown";
 import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import { CommentComposer } from "./CommentComposer";
+import { markdownMentionsToEditable } from "@/features/work-items/mentionEditDraft";
+
+function editDraftProps(
+  content: string | null | undefined,
+  names: ReadonlyMap<string, string>,
+) {
+  const draft = markdownMentionsToEditable(content ?? "", names);
+  return { initialValue: draft.text, initialMentions: draft.mentions };
+}
 
 const AVATAR_PALETTE = [
   "bg-info/10 text-info",
@@ -386,7 +395,9 @@ export function PrThreadCard({
                     <CommentComposer
                       placeholder="Edit comment…"
                       submitLabel="Save"
-                      initialValue={comment.content ?? ""}
+                      // Show existing mentions as @Name; they turn back into
+                      // @<guid> on save.
+                      {...editDraftProps(comment.content, mentionDisplayNames)}
                       autoFocus
                       busy={busy}
                       mentionSearch={mentionSearch}

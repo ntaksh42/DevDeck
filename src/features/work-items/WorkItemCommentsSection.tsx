@@ -92,6 +92,9 @@ export function WorkItemCommentsSection({
                 mentionDisplayNames,
               )}
               commentText={comment.text}
+              commentFormat={comment.format}
+              commentRenderedText={comment.renderedText}
+              mentionDisplayNames={mentionDisplayNames}
               createdBy={comment.createdBy}
               createdDate={comment.createdDate}
               deleting={deleting}

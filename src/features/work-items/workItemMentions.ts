@@ -299,6 +299,7 @@ export type SelectedMention = {
 export function activeMentionAt(
   text: string,
   cursor: number,
+  completedNames: readonly string[] = [],
 ): { start: number; query: string } | null {
   const beforeCursor = text.slice(0, cursor);
   // Allow one internal space so "姓 名" style full names remain searchable.
@@ -306,6 +307,11 @@ export function activeMentionAt(
   // inserted right after applying a mention) closes the picker.
   const match = /(^|\s)@([^\s@<>]{1,40}(?: [^\s@<>]{1,40})?|)$/.exec(beforeCursor);
   if (!match) return null;
+  // "@Bob " is a finished one-word mention: typing after it ("@Bob t") is
+  // ordinary text, not a new search for "Bob t".
+  if (completedNames.some((name) => name && match[2].startsWith(`${name} `))) {
+    return null;
+  }
   return {
     start: beforeCursor.length - (match[2].length + 1),
     query: match[2],

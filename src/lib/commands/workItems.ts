@@ -85,6 +85,8 @@ export const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
   renderedText: z.string().nullable(),
+  /** "markdown" or "html"; html comments carry HTML in `text`. */
+  format: z.string().nullable().optional(),
   createdBy: z.string().nullable(),
   createdById: z.string().nullable().optional(),
   createdByUniqueName: z.string().nullable().optional(),

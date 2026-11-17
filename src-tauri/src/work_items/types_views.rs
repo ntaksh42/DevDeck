@@ -165,6 +165,8 @@ pub struct WorkItemComment {
     pub id: i64,
     pub text: Option<String>,
     pub rendered_text: Option<String>,
+    /// `markdown` or `html` as reported by Azure DevOps; `None` when unknown.
+    pub format: Option<String>,
     pub created_by: Option<String>,
     pub created_by_id: Option<String>,
     pub created_by_unique_name: Option<String>,

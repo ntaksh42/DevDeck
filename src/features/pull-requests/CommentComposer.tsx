@@ -8,6 +8,7 @@ import {
   addSelectedMention,
   mentionTokenDeletionStart,
   renderAzureMentionMarkdown,
+  scrollMentionOptionIntoView,
   type SelectedMention,
 } from "@/features/work-items/workItemMentions";
 import {
@@ -97,7 +98,13 @@ export function CommentComposer({
   // the picker.
   function refreshMention(value: string, caret: number) {
     if (!mentionSearch) return;
-    setMention(activeMentionAt(value, caret));
+    setMention(
+      activeMentionAt(
+        value,
+        caret,
+        selectedMentions.map((selected) => selected.displayName),
+      ),
+    );
   }
 
   const mentionQuery = mention?.query;
@@ -267,6 +274,7 @@ export function CommentComposer({
                   <li key={candidate.id}>
                     <button
                       type="button"
+                      ref={index === activeIndex ? scrollMentionOptionIntoView : undefined}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         insertMention(candidate);

@@ -400,6 +400,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   @メンション付きコメント、フィールドプリセット。投稿済みコメントはプレビューから
   インライン編集・削除が可能 (`update_work_item_comment` / `delete_work_item_comment`)。
   インライン編集欄でも新規投稿と同じ @メンション候補 (オートコンプリート) を表示する。
+  編集欄を開くと、本文の `@<GUID>` は表示名の `@名前` で表示し、保存時に `@<GUID>` へ戻す (PR も同じ)。Web UI のリッチエディタで書いた
+  HTML 形式のコメント (`format: html`) は markdown に変換して編集欄に出す。保存時は新規投稿と同じく 1 行の改行を改行として残す。
   Work Item / PR のコメント入力欄は縦方向にリサイズでき、種別ごとの高さを localStorage に
   保存してビュー再訪時に復元する。
   入力中の欄 (新規・返信・編集) は最低 96px (4 行) の高さを取る。@メンション候補はプレビュー枠の外に重ねて表示し、
