@@ -55,6 +55,27 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("!77")));
   });
 
+  it("keeps the selected PR when a sync adds a newer one above it", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    const older = { ...pr, pullRequestId: 70, title: "Older change", creationDate: "2026-06-01T00:00:00Z" };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr, older], warnings: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    fireEvent.keyDown(grid, { key: "j" });
+    const selectedTitle = () =>
+      within(grid).getAllByRole("row").find((row) => row.getAttribute("aria-selected") === "true")?.textContent ?? "";
+    await waitFor(() => expect(selectedTitle()).toContain("Older change"));
+    const newer = { ...pr, pullRequestId: 90, title: "Newest change", creationDate: "2026-07-01T00:00:00Z" };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [newer, pr, older], warnings: [] });
+    await waitFor(() => expect(within(grid).getByText("Newest change")).toBeTruthy());
+    expect(selectedTitle()).toContain("Older change");
+  });
+
   it("copies the selected PR as a Markdown link with L", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["activeOrganization"], { id: "contoso" });
