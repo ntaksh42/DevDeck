@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Loader2, Pencil, SmilePlus, Trash2 } from "lucide-react";
-import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate, isImeComposing } from "@/lib/utils";
 import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import {
   usePersistedTextareaHeight,
@@ -313,6 +313,9 @@ export function CollapsibleComment({
               mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
             }}
             onKeyDown={(event) => {
+              // Enter / Escape that confirm or cancel an IME conversion belong
+              // to the IME, as in the comment composer.
+              if (isImeComposing(event)) return;
               // Ctrl+Enter always saves, matching the composer, even with the
               // picker open; then the picker consumes its own keys; a second
               // Escape (picker already closed) cancels the edit.
