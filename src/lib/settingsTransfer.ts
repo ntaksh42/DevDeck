@@ -19,6 +19,7 @@ const ALLOWED_PREFIXES = [
   "azdodeck:workItemViewLayout:",
   "azdodeck:workItemTemplates",
   "azdodeck:workItems:fieldPresets",
+  "azdodeck:workItems:previewFields",
   "azdodeck:workItems:previewCustomFields",
   "azdodeck:wiPreview:",
   "azdodeck:quickPipelines",
