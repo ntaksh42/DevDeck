@@ -487,9 +487,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   DevOps 組織を独立にポーリングするのを避けるため、Active PR (+レビュアー一覧) と
   Work Item を同期成功のたびに中立な第三の SQLite ファイル
   (`%APPDATA%\AzDoSharedCache\cache.db`) へ書き込む (`prs/sync_fetch.rs` /
-  `work_items/sync.rs`)。Active PR の同期前にはこの共有キャッシュが直近 (waypoint 側で)
-  更新済みでないか確認し、更新済みならその内容を読んで自分の API 呼び出しをスキップする。読み込み時は API 取得時と同じ短いブランチ名へ正規化し、PR の Web URL は組織・プロジェクト・リポジトリ名・PR 番号から再構築する
-  (`shared_cache::is_fresh`)。ただしユーザーの明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン。`trigger_sync` の `force: true`) ではこのスキップを行わず必ず API を取りに行き、結果を共有キャッシュへ書き戻す (起動時・ウィンドウ復帰時の Hot 同期と定期同期は従来どおり共有キャッシュを優先)。共有スキーマは DevDeck 自身のテーブル形と無関係な独立の契約
+  `work_items/sync.rs`)。Active PR の定期同期では、同じ組織 URL・プロジェクト ID・利用者の新しいスナップショットを再利用する。取得上限が一致するか、より小さい上限で全件取得済みであることも確認する。範囲を記録しない既存の waypoint が書いたデータを読むときや、明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン) では Azure DevOps API から取得する。PR とレビュアーの行、同期時刻、取得範囲は同じトランザクションで更新する。上限に達した結果には旧版向けの同期済み印を付けず、旧版は全件を取り直す。読み込み時はブランチ名を正規化し、PR の Web URL を再構築する。
+  共有スキーマは DevDeck 自身のテーブル形と無関係な独立の契約
   (Azure DevOps の生の事実のみ、is_mine 等の per-viewer 判断は持たない) なので、
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
   追従させれば waypoint 側は壊れない。Work Item は書き込みのみで読み取りゲートは持たない
