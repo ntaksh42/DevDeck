@@ -89,11 +89,26 @@ impl AdoClient {
         project_id: &str,
         team_id: &str,
     ) -> Result<Vec<TeamMember>> {
+        // One page holds at most `PAGE` members; larger teams continue with `$skip`.
+        const PAGE: usize = 100;
         let path = format!("_apis/projects/{project_id}/teams/{team_id}/members");
-        let list: ValueList<TeamMember> = self
-            .get_json(&path, &[("api-version", "7.1"), ("$top", "100")])
-            .await?;
-        Ok(list.value)
+        let top = PAGE.to_string();
+        let mut members = Vec::new();
+        for _ in 0..50 {
+            let skip = members.len().to_string();
+            let list: ValueList<TeamMember> = self
+                .get_json(
+                    &path,
+                    &[("api-version", "7.1"), ("$top", &top), ("$skip", &skip)],
+                )
+                .await?;
+            let len = list.value.len();
+            members.extend(list.value);
+            if len < PAGE {
+                break;
+            }
+        }
+        Ok(members)
     }
 
     pub async fn list_service_endpoints(&self, project_id: &str) -> Result<Vec<ServiceEndpoint>> {
@@ -129,6 +144,37 @@ mod tests {
         AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
             .unwrap()
             .with_base_url(base_url)
+    }
+
+    #[tokio::test]
+    async fn lists_every_member_of_a_large_team() {
+        let server = MockServer::start().await;
+        let member =
+            |n: usize| serde_json::json!({ "identity": { "displayName": format!("M{n}") } });
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects/p-1/teams/t-1/members"))
+            .and(query_param("$skip", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "value": (0..100).map(member).collect::<Vec<_>>()
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects/p-1/teams/t-1/members"))
+            .and(query_param("$skip", "100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "value": (100..130).map(member).collect::<Vec<_>>()
+            })))
+            .mount(&server)
+            .await;
+
+        let members = client(&server)
+            .await
+            .list_team_members("p-1", "t-1")
+            .await
+            .unwrap();
+        assert_eq!(members.len(), 130);
+        assert_eq!(members[129].identity.display_name.as_deref(), Some("M129"));
     }
 
     #[tokio::test]

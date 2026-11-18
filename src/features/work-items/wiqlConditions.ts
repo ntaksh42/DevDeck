@@ -122,6 +122,60 @@ function unquote(literal: string): string {
   return literal.slice(1, -1).split(quote + quote).join(quote);
 }
 
+const MACRO_VALUE = /^@[A-Za-z][\w.]*(\s*[+-]\s*\d+)?$/;
+const NUMBER_VALUE = /^-?\d+(\.\d+)?$/;
+const BOOLEAN_VALUE = /^(true|false)$/i;
+const QUOTED_VALUE = /^'(?:[^']|'')*'$/;
+
+/**
+ * The grid text for a quoted WIQL string. Plain text when that serializes back
+ * to the same literal; otherwise the literal itself (`'@Me'`, `'5'`, or a list
+ * item with a comma), which `serializeAtom` passes through unchanged, so
+ * editing another row never turns a string into a macro or number, or splits
+ * a list item.
+ */
+function stringValue(literal: string, inList: boolean): string {
+  const text = unquote(literal);
+  const ambiguous =
+    MACRO_VALUE.test(text.trim()) ||
+    NUMBER_VALUE.test(text.trim()) ||
+    BOOLEAN_VALUE.test(text.trim()) ||
+    QUOTED_VALUE.test(text.trim()) ||
+    (inList && text.includes(","));
+  return ambiguous ? `'${text.split("'").join("''")}'` : text;
+}
+
+/**
+ * Splits a list value on commas, except inside an item written as a 'quoted'
+ * literal (one that starts with a quote). Apostrophes in plain items such as
+ * "it's" do not start a quote.
+ */
+function splitListValue(value: string): string[] {
+  const items: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (quoted && char === "'") {
+      if (value[i + 1] === "'") {
+        current += "''";
+        i += 1;
+        continue;
+      }
+      quoted = false;
+    } else if (!quoted && char === "'" && current.trim() === "") {
+      quoted = true;
+    } else if (!quoted && char === ",") {
+      items.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  items.push(current);
+  return items;
+}
+
 /** Parses a WHERE clause body into flat AND/OR conditions, or explains why it cannot. */
 export function parseWhereConditions(where: string): ParsedConditions {
   const tokenized = tokenize(where);
@@ -132,12 +186,12 @@ export function parseWhereConditions(where: string): ParsedConditions {
   const peek = () => tokens[index];
   const upper = (offset = 0) => tokens[index + offset]?.text.toUpperCase();
 
-  function readValue(): string | null {
+  function readValue(inList = false): string | null {
     const token = peek();
     if (!token) return null;
     if (token.kind === "string") {
       index += 1;
-      return unquote(token.text);
+      return stringValue(token.text, inList);
     }
     if (token.kind === "number" || (token.kind === "word" && /^(true|false)$/i.test(token.text))) {
       index += 1;
@@ -204,7 +258,7 @@ export function parseWhereConditions(where: string): ParsedConditions {
       index += 1;
       const items: string[] = [];
       while (upper() !== ")") {
-        const item = readValue();
+        const item = readValue(true);
         if (item === null) return { ok: false, reason: `Unsupported value in ${operator} list.` };
         items.push(item);
         if (upper() === ",") index += 1;
@@ -237,16 +291,16 @@ const NUMERIC_TYPES = new Set(["integer", "double", "picklistInteger", "picklist
 
 function serializeAtom(raw: string, fieldType: string | undefined): string {
   const value = raw.trim();
-  if (/^@[A-Za-z][\w.]*(\s*[+-]\s*\d+)?$/.test(value)) return value.replace(/\s*([+-])\s*/, " $1 ");
-  if (/^-?\d+(\.\d+)?$/.test(value) && (!fieldType || NUMERIC_TYPES.has(fieldType))) return value;
-  if (fieldType === "boolean" && /^(true|false)$/i.test(value)) return value;
+  if (QUOTED_VALUE.test(value)) return value;
+  if (MACRO_VALUE.test(value)) return value.replace(/\s*([+-])\s*/, " $1 ");
+  if (NUMBER_VALUE.test(value) && (!fieldType || NUMERIC_TYPES.has(fieldType))) return value;
+  if (fieldType === "boolean" && BOOLEAN_VALUE.test(value)) return value;
   return `'${raw.split("'").join("''")}'`;
 }
 
 function serializeCondition(condition: WiqlCondition, fieldType: string | undefined): string {
   const value = LIST_OPERATORS.has(condition.operator)
-    ? `(${condition.value
-        .split(",")
+    ? `(${splitListValue(condition.value)
         .filter((item) => item.trim())
         .map((item) => serializeAtom(item.trim(), fieldType))
         .join(", ")})`

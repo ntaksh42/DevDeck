@@ -6,6 +6,7 @@ import {
   focusFilterInput,
   focusPrimaryPreview,
   markdownLink,
+  hasTextSelectionWithin,
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
@@ -239,7 +240,7 @@ export function PullRequestResults({
         e.preventDefault();
         const pr = filteredResults[selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
-      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C") && !hasTextSelectionWithin(e.target)) {
         e.preventDefault();
         void (e.shiftKey ? copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast) : copyRowsAsTable(selection.selectedRows, prSearchCopyColumns(visibleColumns), setCopyToast));
       }

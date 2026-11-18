@@ -326,8 +326,9 @@ export function AgentCommandSettings() {
               className={`${INPUT_CLASS} w-24`}
             />
           </label>
-          <Help summary={<>Every {autoAgentInterval} minutes, up to {autoAgentMax} run one at a time. Needs a result folder for each type; code is not changed and comments are not proposed.</>}>
-            The check runs on the next sync after the interval. First reviews cover the full PR, skipping
+          <Help summary={<>New assignments are queued on sync. Regular checks run every {autoAgentInterval} minutes, with up to {autoAgentMax} items per check, one at a time.</>}>
+            Regular checks run on the next sync after the interval. Each type requires a result folder.
+            The agent leaves code and comments untouched. First reviews cover the full PR, skipping
             drafts, voted PRs and PRs over 30 days old. Tracked PRs continue reviewing later pushes, except
             while in draft, using only changes since the last fully completed review, including force pushes.
             Failed runs retry after a delay; partial coverage keeps the previous reviewed commit. Open human

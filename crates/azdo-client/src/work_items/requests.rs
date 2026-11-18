@@ -320,18 +320,34 @@ impl AdoClient {
         Ok(())
     }
 
+    /// The latest `keep` updates, oldest first. The API lists updates oldest
+    /// first, so `$top` alone would return the oldest ones; page with `$skip`
+    /// and keep the tail.
     pub async fn list_work_item_updates(
         &self,
         project_id: &str,
         work_item_id: i64,
-        top: u32,
+        keep: u32,
     ) -> Result<Vec<WorkItemUpdate>> {
+        const PAGE: usize = 200;
         let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/updates");
-        let top_str = top.to_string();
-        let response: WorkItemUpdatesList = self
-            .get_json(&path, &[("api-version", "7.1-preview"), ("$top", &top_str)])
-            .await?;
-        Ok(response.value)
+        let top = PAGE.to_string();
+        let mut all = Vec::new();
+        for _ in 0..50 {
+            let skip = all.len().to_string();
+            let query = [
+                ("api-version", "7.1-preview"),
+                ("$top", &top),
+                ("$skip", &skip),
+            ];
+            let page: WorkItemUpdatesList = self.get_json(&path, &query).await?;
+            let len = page.value.len();
+            all.extend(page.value);
+            if len < PAGE {
+                break;
+            }
+        }
+        Ok(all.split_off(all.len().saturating_sub(keep as usize)))
     }
 
     /// Creates a work item of `work_item_type` in a project. `fields` are

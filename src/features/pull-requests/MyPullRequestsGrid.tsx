@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { commandErrorMessage, listMyCreatedPullRequests } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
@@ -7,6 +7,7 @@ import {
   isEditableTarget,
   matchesAllSearchTerms,
   splitSearchTerms,
+  hasTextSelectionWithin,
 } from "@/lib/utils";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { FilterAutocomplete } from "@/components/FilterAutocomplete";
@@ -17,6 +18,7 @@ import { useColumnDrag } from "@/lib/columnDrag";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
+import { useKeyedGridSelection } from "@/lib/useKeyedGridSelection";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import { usePendingRowFocus } from "@/lib/usePendingRowFocus";
 import { parkGridFocus } from "@/lib/parkGridFocus";
@@ -79,9 +81,12 @@ function toReviewSummary(pr: MyCreatedPullRequestSummary): ReviewPullRequestSumm
 // layout, resizable/toggleable columns, sort headers, row styling, keyboard,
 // and status bar mirror MyReviewsGrid, including the PR review panels docked
 // to the right of the grid.
+function createdPrKey(pr: { repositoryId: string; pullRequestId: number }): string {
+  return `${pr.repositoryId}:${pr.pullRequestId}`;
+}
+
 export function MyPullRequestsGrid() {
   const organizationId = useActiveOrganizationId();
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
   const [showDrafts, setShowDrafts] = useState(true);
@@ -138,7 +143,7 @@ export function MyPullRequestsGrid() {
     const data = allPrs.filter((pr) =>
       (showDrafts || !pr.isDraft) &&
       matchesAllSearchTerms(terms, [
-        pr.pullRequestId,
+        `#${pr.pullRequestId}`, // as the row shows it; "77" still matches
         pr.repositoryName,
         pr.title,
         pr.targetRefName,
@@ -149,9 +154,11 @@ export function MyPullRequestsGrid() {
     return data;
   }, [allPrs, textFilter, showDrafts, sort]);
 
-  useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(0, rows.length - 1)));
-  }, [rows.length]);
+  // Follows the selected PR by key, so a sync that adds or drops PRs above it
+  // does not move the selection (and the preview) to another PR.
+  const keyedSelection = useKeyedGridSelection(rows, createdPrKey);
+  const selectedIndex = Math.max(keyedSelection.selectedIndex, 0);
+  const setSelectedIndex = keyedSelection.setSelectedIndex;
 
   const restoreFocusRef = useRef(false);
   const {
@@ -169,7 +176,7 @@ export function MyPullRequestsGrid() {
 
   const selection = useRangeSelection({
     rows,
-    keyOf: (pr) => `${pr.repositoryId}:${pr.pullRequestId}`,
+    keyOf: createdPrKey,
     selectedIndex,
   });
 
@@ -198,7 +205,7 @@ export function MyPullRequestsGrid() {
     const pr = rows[selectedIndex];
     // Ctrl+C copies the whole selection; other chords belong to the app.
     if (event.ctrlKey || event.metaKey) {
-      if ((event.key === "c" || event.key === "C") && !event.altKey) {
+      if ((event.key === "c" || event.key === "C") && !event.altKey && !hasTextSelectionWithin(event.target)) {
         event.preventDefault();
         if (event.shiftKey) void copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast);
         else void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);

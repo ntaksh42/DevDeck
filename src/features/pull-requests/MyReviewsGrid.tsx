@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
-import { isEditableTarget, focusPrimaryPreview, markdownLink } from '@/lib/utils';
+import { isEditableTarget, focusPrimaryPreview, markdownLink, hasTextSelectionWithin } from '@/lib/utils';
 import { readStoredJson, writeStoredJson } from '@/lib/storage';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { useDockFilter } from '@/components/DockFilterBar';
@@ -129,7 +129,7 @@ export function MyReviewsGrid({
         e.preventDefault();
         const pr = g.sortedPrs[g.selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
-      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'c' || e.key === 'C') && !hasTextSelectionWithin(e.target)) {
         // Copies the whole shift-selection as a table; `c` alone stays the
         // single-row URL copy.
         e.preventDefault();

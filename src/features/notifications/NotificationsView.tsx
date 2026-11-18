@@ -169,9 +169,19 @@ export function NotificationsView({
   const selectedRecord = items[selectedIndex];
   usePublishAgentSubject(selectedRecord ? resolveNotificationAgentSubject(selectedRecord) : null);
 
+  // New notifications arrive at the top; keep the same record selected rather
+  // than whatever row now sits at its old position.
+  // (The follow effect must run before the one recording the selected id.)
+  const selectedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(items.length - 1, 0)));
-  }, [items.length]);
+    const kept = selectedIdRef.current === null
+      ? -1
+      : items.findIndex((record) => record.id === selectedIdRef.current);
+    setSelectedIndex((index) => (kept >= 0 ? kept : Math.min(index, Math.max(items.length - 1, 0))));
+  }, [items]);
+  useEffect(() => {
+    selectedIdRef.current = selectedRecord?.id ?? null;
+  }, [selectedRecord?.id]);
 
   // Rows outside the virtual window unmount, so roving focus is restored once
   // the row for the new selection is mounted again. This effect runs on every
@@ -200,6 +210,7 @@ export function NotificationsView({
     parkGridFocus(rowRefs.current[next]);
     restoreFocusRef.current = true;
     scrollRowIntoView(entryIndexOf[next] ?? next);
+    selectedIdRef.current = items[next]?.id ?? null;
     setSelectedIndex(next);
   }
 

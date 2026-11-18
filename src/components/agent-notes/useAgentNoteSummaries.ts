@@ -95,10 +95,11 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
             void queryClient.invalidateQueries({ queryKey: [resultKey, summary.itemId] });
           }
         }
-        if (first || !notify) continue;
+        if (first || !notify || !settings) continue;
         const replied =
           !!summary.lastAgentReplyAt && summary.lastAgentReplyAt !== (before?.lastAgentReplyAt ?? null);
-        const finished = summary.done > (before?.done ?? 0);
+        // Only notes the agent finished; resolving one yourself is not news.
+        const finished = summary.doneByAgent > (before?.doneByAgent ?? 0);
         if (!replied && !finished) continue;
         const label =
           target === "pull-request" ? `PR !${summary.itemId}` : target === "ask" ? "your request" : `#${summary.itemId}`;
@@ -113,8 +114,8 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
               : target === "ask"
                 ? openAgentPanel({ subject: null, askId: summary.itemId })
                 : navigateToWorkItem({ workItemId: summary.itemId }),
-        });
+        }, settings);
       }
     }
-  }, [workItems.data, pullRequests.data, asks.data, notify, queryClient]);
+  }, [workItems.data, pullRequests.data, asks.data, notify, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 }

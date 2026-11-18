@@ -11,13 +11,25 @@
 
 export const LAYOUT_STORAGE_PREFIX = "azdodeck:layout:";
 
+/**
+ * Every prefix that holds layout. Agent Work's dock arrangements predate the
+ * `azdodeck:layout:` naming; renaming them would drop users' saved layouts.
+ */
+export const LAYOUT_STORAGE_PREFIXES = [
+  LAYOUT_STORAGE_PREFIX,
+  "azdodeck:agentWork:dockview:",
+  "azdodeck:agentWorkCandidates:dockview:",
+];
+
+export function isLayoutStorageKey(key: string): boolean {
+  return LAYOUT_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
 /** Returns the layout-width localStorage keys currently set. */
 export function layoutStorageKeys(): string[] {
   if (typeof window === "undefined") return [];
   try {
-    return Object.keys(window.localStorage).filter((key) =>
-      key.startsWith(LAYOUT_STORAGE_PREFIX),
-    );
+    return Object.keys(window.localStorage).filter(isLayoutStorageKey);
   } catch {
     return [];
   }

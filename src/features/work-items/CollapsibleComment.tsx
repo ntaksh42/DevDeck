@@ -336,7 +336,8 @@ export function CollapsibleComment({
               mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
             }}
             onKeyDown={(event) => {
-              // Enter/Escape while the IME is converting belong to the IME.
+              // Enter / Escape that confirm or cancel an IME conversion belong
+              // to the IME, as in the comment composer.
               if (isImeComposing(event)) return;
               // Ctrl+Enter always saves, matching the composer, even with the
               // picker open; then the picker consumes its own keys; a second

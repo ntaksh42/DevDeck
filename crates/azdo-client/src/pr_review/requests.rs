@@ -343,10 +343,10 @@ impl AdoClient {
         let path = format!(
             "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/commits"
         );
-        let response: ListResponse<GitCommitRef> = self
-            .get_json(&path, &[("api-version", "7.1-preview")])
-            .await?;
-        Ok(response.value)
+        // One response holds at most one page (100 commits by default); the
+        // rest follow the continuation token.
+        self.list_all_pages(&path, &[("api-version", "7.1-preview")])
+            .await
     }
 
     /// Ids of the work items linked to a pull request (the Development-section

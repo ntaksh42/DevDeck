@@ -64,11 +64,14 @@ export function startFakeAdo({ scenario, org, port, options, log = console.log }
       const reviewer = url.searchParams.get("searchCriteria.reviewerId");
       const creator = url.searchParams.get("searchCriteria.creatorId");
       const status = url.searchParams.get("searchCriteria.status") ?? "active";
-      const value = state.prs
+      const matching = state.prs
         .filter((pr) => status === "all" || pr.status === status)
         .filter((pr) => !reviewer || pr.reviewers.some((r) => r.id === reviewer))
         .filter((pr) => !creator || pr.createdBy.id === creator)
         .map(withoutThreads);
+      const skip = Number(url.searchParams.get('$skip') ?? 0);
+      const top = Number(url.searchParams.get('$top') ?? matching.length);
+      const value = matching.slice(skip, skip + top);
       return { count: value.length, value };
     }],
     ["GET", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)$/, (m) => {
@@ -78,6 +81,27 @@ export function startFakeAdo({ scenario, org, port, options, log = console.log }
     ["GET", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)\/threads$/, (m) => {
       const pr = state.prs.find((p) => p.pullRequestId === Number(m[1]));
       return { count: pr?.threads.length ?? 0, value: pr?.threads ?? [] };
+    }],
+    ["POST", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)\/threads$/, (m, _url, body) => {
+      const pr = state.prs.find((p) => p.pullRequestId === Number(m[1]));
+      if (!pr) return null;
+      const added = {
+        id: Math.max(0, ...pr.threads.map((thread) => thread.id)) + 1,
+        status: 'active',
+        isDeleted: false,
+        threadContext: body.threadContext ?? null,
+        comments: (body.comments ?? []).map((comment) => ({
+          id: ++commentSeq,
+          parentCommentId: comment.parentCommentId ?? 0,
+          content: comment.content ?? '',
+          commentType: 'text',
+          author: ME,
+          publishedDate: new Date().toISOString(),
+          isDeleted: false,
+        })),
+      };
+      pr.threads.push(added);
+      return added;
     }],
     ["POST", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)\/threads\/(\d+)\/comments$/, (m, _url, body) => {
       const thread = state.prs.find((p) => p.pullRequestId === Number(m[1]))?.threads.find((t) => t.id === Number(m[2]));

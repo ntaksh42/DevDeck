@@ -239,7 +239,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Exclude from / include in automatic runs (toggle)</span><kbd className={kbd}>X</kbd></div>
           <div className={row}><span>Runs: show finished (Done) runs · back to open runs</span><kbd className={kbd}>D · Esc</kbd></div>
           <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>
-          <div className={row}><span>Candidates: select / select all shown / exclude / run selected</span><kbd className={kbd}>Space / A / X / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Candidates: select / select range / select all shown / exclude / run selected</span><kbd className={kbd}>Space / Shift+↑↓ / A / X / Ctrl+Enter</kbd></div>
           <div className={row}><span>Candidates: filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
 
           <p className={section}>Notifications</p>

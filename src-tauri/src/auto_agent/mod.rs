@@ -1,6 +1,6 @@
 //! Automatic review and investigation (setting `auto_agent_enabled`): on a sync
-//! at least `auto_agent_interval_minutes` after the previous check (the first
-//! one after startup always checks), pull requests awaiting my review and work
+//! with a new assignment or when the regular check is due, pull requests awaiting
+//! my review and work
 //! items assigned to me that are not handled yet are handed to the agent as an
 //! Agent notes `investigate` note, exactly as if the user had asked from the
 //! Result panel. The items form a queue worked off a few per check, so what was waiting when
@@ -42,7 +42,8 @@ const MAX_WI_AGE_DAYS: i64 = 30;
 /// different organization's agent is still running.
 static BATCH_SLOT: LazyLock<tokio::sync::Semaphore> =
     LazyLock::new(|| tokio::sync::Semaphore::new(1));
-static QUEUED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
+pub(crate) type Assignments = HashSet<(NoteTarget, String, i64)>;
+static QUEUED: LazyLock<Mutex<HashMap<String, Assignments>>> = LazyLock::new(Mutex::default);
 static LAST_CHECK: LazyLock<Mutex<HashMap<String, Instant>>> = LazyLock::new(Mutex::default);
 
 /// Whether the interval since `last` has elapsed (never checked counts as due).
@@ -171,50 +172,65 @@ pub(crate) fn pick(
         .collect()
 }
 
-struct BatchGuard(String);
+struct BatchGuard(Option<String>);
 impl BatchGuard {
-    fn reserve(key: String) -> Option<Self> {
-        let inserted = {
-            let mut queued = QUEUED.lock().ok()?;
-            queued.insert(key.clone())
-        };
-        if inserted {
-            Some(Self(key))
-        } else {
-            None
+    fn reserve(key: String, assignments: Assignments) -> Option<Self> {
+        let mut queued = QUEUED.lock().ok()?;
+        match queued.entry(key.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().extend(assignments);
+                None
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(assignments);
+                Some(Self(Some(key)))
+            }
         }
+    }
+
+    fn take(&mut self) -> Assignments {
+        self.0
+            .take()
+            .and_then(|key| QUEUED.lock().ok()?.remove(&key))
+            .unwrap_or_default()
     }
 }
 impl Drop for BatchGuard {
     fn drop(&mut self) {
-        if let Ok(mut queued) = QUEUED.lock() {
-            queued.remove(&self.0);
-        }
+        self.take();
     }
 }
 
-pub(crate) fn start(db: &AppDatabase, settings: &AppSettings, org: &Organization) {
+pub(crate) fn start(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    org: &Organization,
+    assignments: Assignments,
+) {
     if !settings.auto_agent_enabled {
         return;
     }
     let key = format!("{}|{}", db.cache_key(), org.id);
-    let Some(guard) = BatchGuard::reserve(key.clone()) else {
+    let Some(mut guard) = BatchGuard::reserve(key.clone(), assignments) else {
         return;
     };
     let db = db.clone();
     let org = org.clone();
     tauri::async_runtime::spawn(async move {
-        let _guard = guard;
         let Ok(_slot) = BATCH_SLOT.acquire().await else {
             return;
         };
+        let assignments = guard.take();
         // Queued organizations use the current settings when their turn comes.
         let outcome = match db.get_app_settings() {
-            Ok(settings)
-                if settings.auto_agent_enabled
-                    && claim_check(&key, settings.auto_agent_interval_minutes, Instant::now()) =>
-            {
-                run_batch(&db, &settings, &org).await
+            Ok(settings) if settings.auto_agent_enabled => {
+                let periodic_due =
+                    claim_check(&key, settings.auto_agent_interval_minutes, Instant::now());
+                if periodic_due || !assignments.is_empty() {
+                    run_batch(&db, &settings, &org, &assignments, periodic_due).await
+                } else {
+                    Ok(())
+                }
             }
             Ok(_) => Ok(()),
             Err(error) => Err(error),
@@ -263,7 +279,13 @@ fn batch_items(
         .collect()
 }
 
-async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization) -> Result<()> {
+async fn run_batch(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    org: &Organization,
+    assignments: &Assignments,
+    periodic_due: bool,
+) -> Result<()> {
     let prs = if settings.review_result_folder_path.is_some() {
         db.list_review_pull_requests(&org.id)?
     } else {
@@ -286,10 +308,21 @@ async fn run_batch(db: &AppDatabase, settings: &AppSettings, org: &Organization)
     items.retain(|item| !excluded.contains(&work::key(&org.id, item.target(), item.id())));
     // Never-attempted and least-recently-attempted items get their turn before
     // repeatedly failing entries can consume the same first slots forever.
+    let newly_assigned = |item: &AutoItem| {
+        let scope = match item {
+            AutoItem::PullRequest(pr) => &pr.repository_id,
+            AutoItem::WorkItem(wi) => &wi.project_id,
+        };
+        assignments.contains(&(item.target(), scope.clone(), item.id()))
+    };
+    if !periodic_due {
+        items.retain(newly_assigned);
+    }
     items.sort_by_key(|item| {
-        state::History::read(&item.history_path(db, org))
+        let last_attempt = state::History::read(&item.history_path(db, org))
             .ok()
-            .and_then(|h| h.runs.last().map(|r| r.started_at))
+            .and_then(|h| h.runs.last().map(|r| r.started_at));
+        (!newly_assigned(item), last_attempt)
     });
     let max_attempts = clamp_auto_agent_max_per_sync(settings.auto_agent_max_per_sync) as usize;
     let mut attempted = 0;

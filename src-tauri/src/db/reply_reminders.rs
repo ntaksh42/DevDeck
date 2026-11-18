@@ -246,12 +246,19 @@ pub(super) fn reconcile(
     };
     let mut fired = Vec::new();
     for reminder in due {
+        // A reminder set again on the same conversation keeps its id, so its
+        // earlier "Waiting" row (often already done) is reopened as new rather
+        // than left hidden while the notification still fires.
         tx.execute(
-            "INSERT OR IGNORE INTO action_inbox_items( \
+            "INSERT INTO action_inbox_items( \
                  org_id, kind, subject_id, project_id, project_name, repository_id, \
                  repository_name, thread_id, comment_id, title, author, snippet, web_url, \
                  state, detected_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, ?11, ?12, 'open', ?13)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, ?11, ?12, 'open', ?13) \
+             ON CONFLICT(org_id, kind, repository_id, subject_id, comment_id) DO UPDATE SET \
+                 title = excluded.title, snippet = excluded.snippet, \
+                 web_url = excluded.web_url, state = 'open', snoozed_until = NULL, \
+                 done_at = NULL, detected_at = excluded.detected_at",
             params![
                 org_id,
                 waiting_kind(&reminder.fired.kind),

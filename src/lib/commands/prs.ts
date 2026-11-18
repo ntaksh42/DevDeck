@@ -111,9 +111,11 @@ export type SearchPullRequestsInput = {
   repositoryIds?: string[];
   /** Target branches to include, e.g. ["main", "release"]. */
   targetBranches?: string[];
-  /** Inclusive date window as "YYYY-MM-DD". */
+  /** Inclusive date window as "YYYY-MM-DD" (days on the user's calendar). */
   fromDate?: string;
   toDate?: string;
+  /** Minutes local time is ahead of UTC, so the window covers local days. */
+  utcOffsetMinutes?: number;
   /** Which date the window applies to. Defaults to "created". */
   dateBasis?: "created" | "closed";
   excludeDrafts?: boolean;

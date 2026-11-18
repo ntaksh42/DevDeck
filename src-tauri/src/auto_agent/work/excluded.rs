@@ -53,21 +53,35 @@ pub struct SetExcludedInput {
     pub excluded: bool,
 }
 
+/// Serializes the read-modify-write below: excluding several items sends one
+/// command each, and they run on separate threads.
+static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn set_excluded(db: &AppDatabase, input: SetExcludedInput) -> Result<()> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let SetExcludedInput { mut item, excluded } = input;
     let wanted = key(&item.organization_id, item.target, item.id);
-    let mut items = read_excluded(db);
+    let path = excluded_path(db);
+    // An unreadable list must not be replaced by one holding only this item.
+    let mut items: Vec<ExcludedItem> = match fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| {
+            AppError::InvalidInput(format!("the excluded items list is unreadable: {e}"))
+        })?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(e.into()),
+    };
     items.retain(|e| key(&e.organization_id, e.target, e.id) != wanted);
     if excluded {
         item.excluded_at = Some(Utc::now());
         items.push(item);
     }
-    let path = excluded_path(db);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     let bytes =
         serde_json::to_vec_pretty(&items).map_err(|e| AppError::InvalidInput(e.to_string()))?;
-    fs::write(path, bytes)?;
+    let temp = path.with_extension("json.tmp");
+    fs::write(&temp, bytes)?;
+    fs::rename(temp, path)?;
     Ok(())
 }

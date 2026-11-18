@@ -3,6 +3,8 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentNoteSummary, AgentNoteTarget } from "@/lib/azdoCommands";
+import type { AppSettings } from "@/lib/azdoCommands";
+import { showAgentNoteNotification } from "@/lib/desktopNotifications";
 import { agentNoteSummariesKey, useAgentNoteWatcher } from "./useAgentNoteSummaries";
 
 vi.mock("@/lib/azdoCommands", () => ({ summarizeAgentNotes: vi.fn(async () => []) }));
@@ -18,12 +20,12 @@ afterEach(() => {
 
 function summary(overrides: Partial<AgentNoteSummary> = {}): AgentNoteSummary {
   return {
-    itemId: 42, open: 1, needsYou: 0, drafts: 0, done: 0,
+    itemId: 42, open: 1, needsYou: 0, drafts: 0, done: 0, doneByAgent: 0,
     lastAgentReplyAt: null, lastModifiedAt: "2026-11-07T10:00:00Z", ...overrides,
   };
 }
 
-function watch(target: AgentNoteTarget, initial: AgentNoteSummary[]) {
+function watch(target: AgentNoteTarget, initial: AgentNoteSummary[], settings: AppSettings | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   clients.push(client);
   for (const kind of ["pull-request", "work-item", "ask"] as const) {
@@ -36,7 +38,7 @@ function watch(target: AgentNoteTarget, initial: AgentNoteSummary[]) {
   const wrapper = ({ children }: { children: ReactNode }) =>
     <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   const hook = renderHook(() => {
-    useAgentNoteWatcher(null);
+    useAgentNoteWatcher(settings);
     return useQuery({ queryKey: [resultKey, 42], queryFn: readResult });
   }, { wrapper });
   return {
@@ -100,5 +102,22 @@ describe("agent result refresh", () => {
     await waitFor(() => expect(watched.invalidate).toHaveBeenCalledWith({ queryKey: ["agentAsks"] }));
     expect(watched.invalidate).toHaveBeenCalledWith({ queryKey: ["agentNotes", "ask", 42] });
     expect(watched.readResult).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("agent note notifications", () => {
+  const settings = { desktopNotificationsEnabled: true } as AppSettings;
+
+  it("does not announce a note the user resolved as finished by the agent", async () => {
+    vi.mocked(showAgentNoteNotification).mockClear();
+    const watched = watch("work-item", [summary()], settings);
+    await waitFor(() => expect(watched.result.current.data).toBe("old result"));
+
+    watched.update([summary({ open: 0, done: 1, doneByAgent: 0 })]);
+    await waitFor(() => expect(watched.result.current.data).toBe("updated result"));
+    expect(showAgentNoteNotification).not.toHaveBeenCalled();
+
+    watched.update([summary({ open: 0, done: 2, doneByAgent: 1 })]);
+    await waitFor(() => expect(showAgentNoteNotification).toHaveBeenCalledTimes(1));
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   acknowledgeReturn,
   reconcileReturns,
+  recordOwnVote,
   seedDemoReturn,
 } from "./reviewReturnTracking";
 
@@ -22,6 +23,13 @@ describe("reconcileReturns", () => {
     reconcileReturns([{ key: "r:1", myVote: -5 }], t0);
     const returned = reconcileReturns([{ key: "r:1", myVote: 0 }], t1);
     expect(returned.has("r:1")).toBe(true);
+  });
+
+  it("does not flag my own reset to No vote", () => {
+    reconcileReturns([{ key: "r:1", myVote: 10 }], t0);
+    recordOwnVote("r:1", 0);
+    const returned = reconcileReturns([{ key: "r:1", myVote: 0 }], t1);
+    expect(returned.has("r:1")).toBe(false);
   });
 
   it("clears the flag when I vote again", () => {

@@ -147,6 +147,7 @@ const agentNoteSummarySchema = z.object({
   needsYou: z.number(),
   drafts: z.number(),
   done: z.number(),
+  doneByAgent: z.number().default(0),
   lastAgentReplyAt: z.string().nullable(),
   lastModifiedAt: z.string().nullable(),
 });

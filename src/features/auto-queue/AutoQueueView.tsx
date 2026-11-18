@@ -11,7 +11,7 @@ import {
   type AutoQueueTarget,
 } from "@/lib/azdoCommands";
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
-import { pushToast } from "@/lib/toast";
+import { pushNotice, pushToast } from "@/lib/toast";
 import { clamp, focusFilterInput } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { ListStatusBar } from "@/components/ListStatusBar";
@@ -39,6 +39,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const rangeAnchor = useRef<string | null>(null);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const filter = useDockFilter(filterInputRef, () => listRef.current?.focus());
@@ -92,7 +93,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const runMutation = useMutation({
     mutationFn: (targets: AutoQueueTarget[]) => runAutoQueue(targets),
     onSuccess: (count, targets) => {
-      pushToast(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
+      pushNotice(`${count} handed to the agent. Results appear in the Agent panel and the result folders.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
@@ -128,7 +129,7 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
   const excludeMutation = useMutation({
     mutationFn: (targets: AutoQueueItem[]) => Promise.all(targets.map((item) => setAgentWorkExcluded(item, true))),
     onSuccess: (_, targets) => {
-      pushToast(`${targets.length} excluded from automatic runs.`);
+      pushNotice(`${targets.length} excluded from automatic runs.`);
       setStarted((current) => [...current, ...targets.map(autoQueueKey)]);
       setChecked(new Set());
       void queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
@@ -181,13 +182,31 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
       return;
     }
     if (event.target !== listRef.current || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!focused) return;
+      const nextIndex = clamp(focusedIndex + (event.key === "ArrowDown" ? 1 : -1), 0, items.length - 1);
+      if (event.shiftKey) {
+        const keys = items.map(autoQueueKey);
+        const previousAnchor = rangeAnchor.current === null ? -1 : keys.indexOf(rangeAnchor.current);
+        const anchorIndex = previousAnchor < 0 ? focusedIndex : previousAnchor;
+        rangeAnchor.current = keys[anchorIndex];
+        const range = keys.slice(Math.min(anchorIndex, nextIndex), Math.max(anchorIndex, nextIndex) + 1);
+        setChecked((current) => {
+          const next = new Set(current);
+          keys.forEach((key) => next.delete(key));
+          range.forEach((key) => next.add(key));
+          return next;
+        });
+      } else {
+        rangeAnchor.current = null;
+      }
+      move(nextIndex);
+      return;
+    }
+    rangeAnchor.current = null;
     switch (event.key) {
-      case "ArrowDown":
-        move(focusedIndex + 1);
-        break;
-      case "ArrowUp":
-        move(focusedIndex - 1);
-        break;
       case " ":
         if (focused) toggle(focused);
         break;
@@ -256,7 +275,10 @@ export function AutoQueueView({ tabs }: { tabs?: ReactNode }) {
               key={key}
               role="option"
               aria-selected={checked.has(key)}
-              onClick={() => setFocusKey(key)}
+              onClick={() => {
+                rangeAnchor.current = null;
+                setFocusKey(key);
+              }}
               className={`grid cursor-default grid-cols-[22px_34px_1fr_auto_auto] items-center gap-2 border-b border-border px-3 py-1 text-sm ${
                 isFocused ? "bg-primary/10 outline outline-2 -outline-offset-2 outline-primary" : ""
               }`}

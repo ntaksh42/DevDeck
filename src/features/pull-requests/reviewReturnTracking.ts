@@ -89,6 +89,19 @@ export function reconcileReturns(
   return awaiting;
 }
 
+// Records a vote the user just cast, so the next reconcile does not read the
+// user's own "No vote" as a reset by the author. Untracked PRs are left alone:
+// reconcile starts them from the synced vote.
+export function recordOwnVote(key: string, vote: number): void {
+  const tracking = load();
+  const entry = tracking[key];
+  if (!entry) return;
+  entry.lastVote = vote;
+  entry.returnedAt = null;
+  entry.ackAt = null;
+  save(tracking);
+}
+
 // Marks a returned PR as acknowledged so it stops being highlighted, typically
 // when the user opens/selects it.
 export function acknowledgeReturn(key: string, now: Date = new Date()): void {

@@ -421,6 +421,10 @@ describe("App — Work Items", () => {
       "Edit comment 5",
     )) as HTMLTextAreaElement;
 
+    // Escape that cancels an IME conversion keeps the editor open.
+    fireEvent.keyDown(editBox, { key: "Escape", isComposing: true });
+    expect(screen.getByLabelText("Edit comment 5")).toBe(editBox);
+
     // Typing @ opens the same autocomplete the composer uses; pick a candidate.
     fireEvent.change(editBox, { target: { value: "@" } });
     editBox.setSelectionRange(1, 1);

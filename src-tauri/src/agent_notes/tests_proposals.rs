@@ -89,12 +89,18 @@ fn automatic_posting_needs_the_setting_and_plain_text() {
     let temp = tempfile::tempdir().unwrap();
     setup(
         temp.path(),
-        &["いい変更です", "see https://example.com", "@someone 見て"],
+        &[
+            "いい変更です",
+            "see https://example.com",
+            "@someone 見て",
+            "see HTTPS://example.com",
+        ],
     );
     assert!(prepare_post_in(temp.path(), input(1, true), false, at(0)).is_err());
     assert!(prepare_post_in(temp.path(), input(1, true), true, at(0)).is_ok());
     assert!(prepare_post_in(temp.path(), input(2, true), true, at(0)).is_err());
     assert!(prepare_post_in(temp.path(), input(3, true), true, at(0)).is_err());
+    assert!(prepare_post_in(temp.path(), input(4, true), true, at(0)).is_err());
     // The user can still approve those by hand.
     assert!(prepare_post_in(temp.path(), input(2, false), false, at(0)).is_ok());
 }

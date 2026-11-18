@@ -399,7 +399,7 @@ async fn list_work_item_updates_returns_revised_by_and_field_values() {
     Mock::given(method("GET"))
         .and(path("/project-1/_apis/wit/workItems/10/updates"))
         .and(query_param("api-version", "7.1-preview"))
-        .and(query_param("$top", "50"))
+        .and(query_param("$top", "200"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "count": 1,
             "value": [

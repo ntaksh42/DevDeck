@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Search, X } from 'lucide-react';
+import { isImeComposing } from '@/lib/utils';
 
 export type DockFilterChip = { label: string; onClear: () => void; onEdit?: () => void };
 
@@ -130,7 +131,7 @@ export function DockFilterBar({
       // Capture phase: a child's own Escape handling (e.g. an open autocomplete
       // dropdown) must not swallow the press that folds the bar.
       onKeyDownCapture={(event) => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' && !isImeComposing(event)) {
           event.preventDefault();
           event.stopPropagation();
           onClose(true);

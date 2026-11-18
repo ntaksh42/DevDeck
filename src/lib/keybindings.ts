@@ -188,6 +188,15 @@ function isModifierKey(key: string): boolean {
   return key === "Control" || key === "Alt" || key === "Shift" || key === "Meta";
 }
 
+// Whether Shift is part of a combo's identity for this (normalized) key. For a
+// symbol such as "?" the shifted character already sits in `key`, so Shift is
+// implied. Letters are normalized to upper case whether or not Shift was held,
+// so for them (and named keys like "Enter") Shift has to be compared
+// explicitly; otherwise "Ctrl+Shift+P" would also fire on Ctrl+P.
+function shiftIsSignificant(key: string): boolean {
+  return key.length > 1 || key.toLowerCase() !== key.toUpperCase();
+}
+
 export function parseCombo(combo: string): ParsedCombo | null {
   const parts = combo.split("+").map((part) => part.trim()).filter(Boolean);
   if (parts.length === 0) return null;
@@ -219,9 +228,10 @@ export function comboFromEvent(event: {
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
   if (event.metaKey) parts.push("Meta");
-  // For printable keys, Shift is usually implied by the produced character
-  // (e.g. "?"), so do not also require a literal Shift modifier.
-  if (key.length === 1 && parts.length === 1 && parts[0] === "Shift") parts.pop();
+  // For symbol keys, Shift is implied by the produced character (e.g. "?"), so
+  // do not also require a literal Shift modifier. Letters keep it, because
+  // their normalized key is the same with or without Shift.
+  if (!shiftIsSignificant(key) && parts.length === 1 && parts[0] === "Shift") parts.pop();
   parts.push(key);
   return parts.join("+");
 }
@@ -248,9 +258,9 @@ export function matchesCombo(
   } else if (event.ctrlKey || event.metaKey) {
     return false;
   }
-  // Shift is only enforced for non-printable keys; printable combos like "?"
+  // Shift is enforced for letters and named keys; symbol combos like "?"
   // already encode the shifted character in `key`.
-  if (parsed.key.length > 1 && parsed.shift !== event.shiftKey) return false;
+  if (shiftIsSignificant(parsed.key) && parsed.shift !== event.shiftKey) return false;
   return true;
 }
 

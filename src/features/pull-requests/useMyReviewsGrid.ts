@@ -26,7 +26,7 @@ import {
   toggleColumnFilterValue,
 } from '@/lib/columnFilters';
 import { activeArchivedKeys } from '@/lib/triage';
-import { reconcileReturns, seedDemoReturn } from './reviewReturnTracking';
+import { reconcileReturns, recordOwnVote, seedDemoReturn } from './reviewReturnTracking';
 import { changedSince } from '@/lib/lastSeen';
 import { reviewFingerprint } from './reviewFingerprint';
 import {
@@ -219,7 +219,7 @@ export function useMyReviewsGrid({
       if (!showDrafts && pr.isDraft) return false;
       if (
         !matchesAllSearchTerms(terms, [
-          pr.pullRequestId,
+          `#${pr.pullRequestId}`, // as the row shows it; "77" still matches
           pr.repositoryName,
           pr.title,
           pr.createdBy,
@@ -357,6 +357,7 @@ export function useMyReviewsGrid({
       { ...prLocator(pr), vote },
       {
         onSuccess: () => {
+          recordOwnVote(reviewTriageKey(pr), vote);
           recordUsage('votes', experimental.usageStats);
           setCopyToast(`Voted: ${label}`);
           setTimeout(() => setCopyToast(null), 1500);

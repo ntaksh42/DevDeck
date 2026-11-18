@@ -212,3 +212,21 @@ fn timestamps_are_compared_by_instant_and_missing_dates_sort_last() {
         Ordering::Less
     );
 }
+#[tokio::test]
+async fn a_signed_number_is_searched_as_title_text() {
+    let server = MockServer::start().await;
+    projects(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/_apis/wit/wiql"))
+        .and(body_json(json!({"query":"SELECT [System.Id] FROM WorkItems WHERE [System.Title] CONTAINS '-5' ORDER BY [System.ChangedDate] DESC"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"workItems":[]})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let (_file, _, org, work_items, _) = setup();
+    let hits = work_items
+        .search_palette_with_client(&client(&server).await, &org, "-5", 5)
+        .await
+        .unwrap();
+    assert!(hits.is_empty());
+}

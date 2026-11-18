@@ -146,3 +146,23 @@ fn setting_again_restarts_the_wait_and_clear_removes_it() {
     assert_eq!(db.clear_reply_reminder(first.id).unwrap(), 1);
     assert!(db.list_reply_reminders().unwrap().is_empty());
 }
+
+#[test]
+fn a_reminder_set_again_after_firing_raises_its_row_again() {
+    let (_tf, db) = setup();
+    db.set_reply_reminder(&input(1)).unwrap();
+    reconcile(&db.open().unwrap(), "org1", Utc::now() + Duration::hours(2)).unwrap();
+    db.open()
+        .unwrap()
+        .execute(
+            "UPDATE action_inbox_items SET state = 'done', done_at = ?1 WHERE kind = 'pr_waiting'",
+            rusqlite::params![format_time(Utc::now())],
+        )
+        .unwrap();
+    assert!(open_kinds(&db).is_empty());
+
+    db.set_reply_reminder(&input(1)).unwrap();
+    let again = reconcile(&db.open().unwrap(), "org1", Utc::now() + Duration::hours(2)).unwrap();
+    assert_eq!(again.fired.len(), 1);
+    assert_eq!(open_kinds(&db), vec!["pr_waiting".to_string()]);
+}

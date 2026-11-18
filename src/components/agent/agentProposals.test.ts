@@ -50,6 +50,7 @@ describe("agent comment proposals", () => {
 
   it("asks for approval when a comment has a link or mention", () => {
     expect(needsApproval(reply({ body: "see https://example.com" }))).toBe(true);
+    expect(needsApproval(reply({ body: "see HTTPS://example.com" }))).toBe(true);
     expect(needsApproval(reply({ body: "@alice please check" }))).toBe(true);
     expect(needsApproval(reply({ body: "Nice change, #123 covers it" }))).toBe(false);
   });
