@@ -8,7 +8,8 @@ import {
 } from "@/lib/usePersistedTextareaHeight";
 import { commentAuthorInitials } from "./workItemHtml";
 import { RichHtmlFrame } from "./RichHtmlFrame";
-import { renderAzureMentionMarkdown } from "./workItemMentions";
+import { markdownWithHardLineBreaks, renderAzureMentionMarkdown } from "./workItemMentions";
+import { editableCommentDraft, mentionNamesFromHtml } from "./mentionEditDraft";
 import {
   useWorkItemMentionPicker,
   type WorkItemMentionScope,
@@ -32,6 +33,9 @@ export function CollapsibleComment({
   baseUrl,
   commentHtml,
   commentText,
+  commentFormat,
+  commentRenderedText,
+  mentionDisplayNames,
   createdBy,
   createdDate,
   deleting,
@@ -55,6 +59,9 @@ export function CollapsibleComment({
   baseUrl?: string | null;
   commentHtml: string;
   commentText: string | null;
+  commentFormat?: string | null;
+  commentRenderedText?: string | null;
+  mentionDisplayNames?: ReadonlyMap<string, string>;
   createdBy: string | null;
   createdDate: string | null;
   deleting: boolean;
@@ -80,7 +87,8 @@ export function CollapsibleComment({
   // heavy markup isn't collapsed and a tall one always gets its toggle.
   const [expanded, setExpanded] = useState(commentHtml.length < 700);
   const [editMode, setEditMode] = useState(false);
-  const [draft, setDraft] = useState(commentText ?? "");
+  const [draft, setDraft] = useState("");
+  const [initialDraftText, setInitialDraftText] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const editTextareaRef = usePersistedTextareaHeight(
@@ -164,27 +172,42 @@ export function CollapsibleComment({
     }
   }
 
+  // The stored text as the user should edit it: `@Name` instead of `@<guid>`,
+  // and markdown instead of the HTML of a web UI rich-editor comment.
+  function initialDraft() {
+    const names = new Map(mentionDisplayNames ?? []);
+    for (const [key, name] of mentionNamesFromHtml(commentRenderedText)) names.set(key, name);
+    return editableCommentDraft(commentText, { format: commentFormat, names });
+  }
+
   function startEdit() {
-    setDraft(commentText ?? "");
-    mentionPicker.resetMentions();
+    const initial = initialDraft();
+    setDraft(initial.text);
+    setInitialDraftText(initial.text);
+    mentionPicker.resetMentions(initial.mentions);
     setEditMode(true);
   }
 
   function cancelEdit() {
     setEditMode(false);
-    setDraft(commentText ?? "");
     mentionPicker.resetMentions();
   }
 
   function saveEdit() {
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === (commentText ?? "").trim()) {
+    if (!trimmed || trimmed === initialDraftText.trim()) {
       cancelEdit();
       return;
     }
-    // Resolve any @Name inserted from the picker to Azure DevOps' @<guid> form
-    // so the edited comment actually notifies the mentioned identity.
-    onEdit(id, renderAzureMentionMarkdown(trimmed, mentionPicker.selectedMentions));
+    // Resolve @Name tokens (existing and newly picked) to Azure DevOps'
+    // @<guid> form so the edited comment keeps notifying, and keep single
+    // newlines visible the same way a new comment does.
+    onEdit(
+      id,
+      markdownWithHardLineBreaks(
+        renderAzureMentionMarkdown(trimmed, mentionPicker.selectedMentions),
+      ),
+    );
   }
 
   // Leave edit mode once the in-flight save for this comment resolves.
@@ -330,7 +353,8 @@ export function CollapsibleComment({
                 cancelEdit();
               }
             }}
-            rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
+            rows={Math.min(10, Math.max(4, draft.split("\n").length + 1))}
+            className="min-h-24"
             overlay={
               <MentionPickerDropdown
                 options={mentionPicker.dropdown.options}

@@ -125,6 +125,10 @@ pub struct WorkItemComment {
     pub id: i64,
     pub text: Option<String>,
     pub rendered_text: Option<String>,
+    /// `markdown` or `html`. Comments written in the web UI's rich editor are
+    /// `html`, and their `text` is HTML rather than markdown.
+    #[serde(default)]
+    pub format: Option<String>,
     pub created_date: Option<String>,
     pub created_by: Option<CommentIdentityRef>,
     #[serde(default)]

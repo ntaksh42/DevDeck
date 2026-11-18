@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { commentAuthorInitials } from "./workItemHtml";
 import { isImeComposing } from "@/lib/utils";
+import { isInFloatingOverlayOf } from "@/components/FloatingOverlay";
 
 export function useCloseOnOutsidePointer<T extends HTMLElement>(
   open: boolean,
@@ -13,7 +14,11 @@ export function useCloseOnOutsidePointer<T extends HTMLElement>(
 
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
-      if (!(target instanceof Node) || ref.current?.contains(target)) {
+      if (
+        !(target instanceof Node) ||
+        ref.current?.contains(target) ||
+        isInFloatingOverlayOf(ref.current, target)
+      ) {
         return;
       }
       onClose();
