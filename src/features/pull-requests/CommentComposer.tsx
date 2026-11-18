@@ -1,4 +1,5 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
+import type { CommentImageTarget } from "@/lib/commands/commentImages";
 import { CommentField } from "@/components/CommentField";
 import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { type MentionCandidate } from "@/lib/azdoCommands";
@@ -36,8 +37,10 @@ export function CommentComposer({
   mentionSearch,
   collapsible = false,
   onCollapse,
+  imageTarget,
 }: {
   placeholder: string;
+  imageTarget?: CommentImageTarget;
   submitLabel?: string;
   initialValue?: string;
   /** Mentions already present in `initialValue` (e.g. a reply addressed to someone). */
@@ -238,6 +241,11 @@ export function CommentComposer({
         textareaRef={textareaRef}
         autoFocus={autoFocus || (collapsible && expanded)}
         value={text}
+        imageTarget={busy || submitting ? undefined : imageTarget}
+        onImagePaste={(value) => {
+          setText(value);
+          setMention(null);
+        }}
         onChange={(event) => {
           setText(event.target.value);
           refreshMention(event.target.value, event.target.selectionStart ?? event.target.value.length);

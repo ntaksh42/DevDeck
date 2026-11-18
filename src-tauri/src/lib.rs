@@ -215,6 +215,7 @@ pub fn run() {
             commands::pr_review::list_pull_request_commits,
             commands::pr_review::list_pull_request_work_items,
             commands::pr_review::post_pull_request_comment,
+            commands::pr_review::upload_comment_image,
             commands::pr_review::set_pull_request_thread_status,
             commands::pr_review::submit_pull_request_vote,
             commands::pr_review::update_pull_request,

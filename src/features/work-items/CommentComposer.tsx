@@ -124,7 +124,7 @@ export function CommentComposer({
       textareaRef.current?.focus();
     }
     function submitCurrentComment() {
-      postComment();
+      if (!textareaRef.current?.readOnly) postComment();
     }
     window.addEventListener("azdodeck:work-items:focus-comment", focusComment);
     window.addEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
@@ -197,6 +197,14 @@ export function CommentComposer({
         containerRef={mentionPicker.containerRef}
         data-work-item-comment-input="true"
         value={commentText}
+        imageTarget={commentMutation.isPending || !selectedItem ? undefined : {
+          organizationId: selectedItem.organizationId,
+          projectId: selectedItem.projectId,
+        }}
+        onImagePaste={(value, caret) => {
+          setCommentText(value);
+          mentionPicker.handleTextChange(value, caret);
+        }}
         onChange={(event) => {
           setCommentText(event.target.value);
           mentionPicker.handleTextChange(event.target.value, event.target.selectionStart);

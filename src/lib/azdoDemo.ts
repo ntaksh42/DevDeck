@@ -252,6 +252,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: GetPullRequestFileDiffInput } | undefined)?.input;
       return demoPrFileDiff(input);
     }
+    case "upload_comment_image":
+      return "https://dev.azure.com/demo/_apis/wit/attachments/demo-image";
     case "post_pull_request_comment": {
       const input = (args as { input?: PostPullRequestCommentInput } | undefined)?.input;
       if (!input) throw new Error("missing input");

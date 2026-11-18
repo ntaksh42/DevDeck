@@ -46,6 +46,7 @@ export const writeCommands = new Set([
   "set_work_items_priority",
   "set_work_items_tags",
   "post_pull_request_comment",
+  "upload_comment_image",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
   "update_pull_request",
