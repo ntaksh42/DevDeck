@@ -83,6 +83,11 @@ export function ReviewTab({
     confirmDialogProps,
   } = usePrReviewActions(pr);
 
+  const imageTarget = pr.webUrl?.includes("/_git/") ? {
+    organizationId: pr.organizationId,
+    projectId: pr.projectId,
+    pr: { repositoryId: pr.repositoryId, pullRequestId: pr.pullRequestId },
+  } : undefined;
   const mentionSearch = usePrMentionSearch(pr.organizationId);
   const descriptionMentionNames = useMentionIdentityNames(pr.organizationId, [
     review?.description,
@@ -376,6 +381,7 @@ export function ReviewTab({
                   thread={thread}
                   busy={commentMutation.isPending || statusMutation.isPending}
                   mentionSearch={mentionSearch}
+                  imageTarget={imageTarget}
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
                   organizationId={pr.organizationId}
@@ -423,6 +429,7 @@ export function ReviewTab({
           placeholder="Add a comment…"
           busy={commentMutation.isPending}
           mentionSearch={mentionSearch}
+          imageTarget={imageTarget}
           onSubmit={(content) =>
             commentMutation.mutateAsync({ ...prLocator(pr), content }).then(() => undefined)
           }

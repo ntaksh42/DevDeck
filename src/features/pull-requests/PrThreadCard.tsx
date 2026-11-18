@@ -5,6 +5,7 @@ import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { MarkdownView } from "@/lib/markdown";
 import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
+import type { CommentImageTarget } from "@/lib/commands/commentImages";
 import { CommentComposer } from "./CommentComposer";
 import { markdownMentionsToEditable } from "@/features/work-items/mentionEditDraft";
 
@@ -240,6 +241,7 @@ export function PrThreadCard({
   onDeleteComment,
   mentionSearch,
   resolveImageSource,
+  imageTarget,
   baseUrl,
   organizationId,
 }: {
@@ -252,6 +254,7 @@ export function PrThreadCard({
   onEditComment?: (commentId: number, content: string) => Promise<void>;
   onDeleteComment?: (commentId: number) => Promise<void>;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  imageTarget?: CommentImageTarget;
   resolveImageSource?: (url: string) => Promise<string | null>;
   baseUrl?: string | null;
   organizationId?: string;
@@ -401,6 +404,7 @@ export function PrThreadCard({
                       autoFocus
                       busy={busy}
                       mentionSearch={mentionSearch}
+                imageTarget={imageTarget}
                       onSubmit={(content) => onEditComment(comment.id, content)}
                       onCancel={() => {
                         setEditingId(null);
@@ -434,6 +438,7 @@ export function PrThreadCard({
                 autoFocus
                 busy={busy}
                 mentionSearch={mentionSearch}
+                imageTarget={imageTarget}
                 onSubmit={onReply}
                 onCancel={() => {
                   setReplying(false);

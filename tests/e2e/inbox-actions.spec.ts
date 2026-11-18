@@ -90,3 +90,26 @@ test("shows the commented code and the PR summary without leaving Inbox", async 
   await expect(context.locator('[data-commented-line="true"]')).toContainText("options.refreshIntervalMs ?? 30000");
   await expect(context).toContainText("open conversation");
 });
+
+test("pastes a clipboard image and posts a PR reply with the keyboard", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const row = page.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
+  await row.click();
+  const reply = page.getByPlaceholder("Reply…", { exact: true });
+  await reply.fill("Screenshot:");
+  await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    const png = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PNG encoding failed")));
+    });
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+  });
+  await reply.press("End");
+  await reply.press("Control+V");
+  await expect(reply).toHaveValue(/Screenshot:\s+!\[Pasted image\]/);
+  await expect(reply).toBeFocused();
+  await reply.press("Control+Enter");
+  await expect(row).toHaveCount(0);
+});

@@ -89,6 +89,11 @@ export function ThreadPanel({
             submitLabel="Reply"
             busy={busy}
             mentionSearch={mentionSearch}
+            imageTarget={item.repositoryId && item.webUrl?.includes("/_git/") ? {
+              organizationId: item.organizationId,
+              projectId: item.projectId,
+              pr: { repositoryId: item.repositoryId, pullRequestId: item.subjectId },
+            } : undefined}
             onSubmit={onReply}
             onAltSubmit={thread.isResolved ? undefined : onReplyAndResolve}
             altSubmitHint={thread.isResolved ? undefined : "Ctrl+Shift+Enter to post & resolve"}
@@ -257,6 +262,7 @@ export function WorkItemPanel({
             initialMentions={replyTo ? workItemReplyDraft(replyTo.comment).mentions : undefined}
             busy={busy}
             mentionSearch={mentionSearch}
+            imageTarget={{ organizationId: item.organizationId, projectId: item.projectId }}
             onSubmit={onComment}
             onSubmitted={() => setReplyTo(null)}
           />

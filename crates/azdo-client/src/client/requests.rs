@@ -17,6 +17,8 @@ use super::helpers::{
 use super::throttle::{parse_rate_limit_delay, Gate};
 use super::{AdoClient, BinaryResponse};
 
+mod upload;
+
 impl AdoClient {
     pub(crate) async fn get_json<T: DeserializeOwned>(
         &self,
