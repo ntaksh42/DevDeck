@@ -109,7 +109,7 @@ export function AssigneePicker({
                       else inputRef.current?.focus();
                     }
                   }}
-                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus-visible:outline-offset-[-2px]"
                 >
                   <CandidateAvatar displayName={candidate.displayName} />
                   <span className="flex min-w-0 flex-col">
