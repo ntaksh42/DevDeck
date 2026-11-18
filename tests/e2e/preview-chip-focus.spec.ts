@@ -13,8 +13,11 @@ test("keyboard assignee pick draws the focus ring on the field chip, not the tri
   await page.keyboard.press("Enter");
   await page.keyboard.press("a");
   await expect(page.getByPlaceholder("Search assignee…")).toBeFocused();
-  await expect(page.getByRole("button", { name: /Alice Johnson/ })).toBeVisible();
+  const candidate = page.getByRole("button", { name: /Alice Johnson/ });
+  await expect(candidate).toBeVisible();
   await page.keyboard.press("ArrowDown");
+  await expect(candidate).toBeFocused();
+  await expect(candidate).toHaveCSS("outline-offset", "-2px");
   await page.keyboard.press("Enter");
 
   const trigger = page.getByRole("button", { name: "Change assignee" });
