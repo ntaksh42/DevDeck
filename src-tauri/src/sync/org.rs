@@ -302,9 +302,21 @@ async fn sync_org_work_items(
         return outcome;
     }
     outcome.record_success();
-    emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
     match db.list_my_work_items(&org.id) {
         Ok(current_my_work_items) => {
+            // Revive snoozed work items past their deadline or with a newer
+            // ChangedDate; remember which stay snoozed.
+            let snoozed_ids = match snooze
+                .reconcile_work_items(&org.id, client, budget, &current_my_work_items, now)
+                .await
+            {
+                Ok(reconcile) => still_snoozed_work_item_ids(&reconcile.still_snoozed),
+                Err(e) => {
+                    tracing::warn!(org = %org.name, error = ?e, "sync: WI snooze reconcile failed");
+                    HashSet::new()
+                }
+            };
+            emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
             if settings.auto_agent_enabled && baseline_established {
                 if let Ok(previous) = &previous_my_work_items {
                     let ids: HashSet<_> = previous.iter().map(|wi| wi.id).collect();
@@ -336,19 +348,6 @@ async fn sync_org_work_items(
                 &crate::db::WI_INSIGHT_KINDS,
                 Default::default(),
             );
-            // Revive snoozed work items past their deadline or with a newer
-            // ChangedDate; remember which stay snoozed.
-            let snoozed_ids = match snooze.reconcile_work_items(
-                &org.id,
-                &current_my_work_items,
-                now,
-            ) {
-                Ok(reconcile) => still_snoozed_work_item_ids(&reconcile.still_snoozed),
-                Err(e) => {
-                    tracing::warn!(org = %org.name, error = ?e, "sync: WI snooze reconcile failed");
-                    HashSet::new()
-                }
-            };
             if should_collect {
                 let mut items = work_item_notification_items(
                     previous_my_work_items.as_deref().unwrap_or_default(),

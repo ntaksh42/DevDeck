@@ -329,7 +329,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "count_work_item_query": {
       const input = (args as { input?: RunWorkItemQueryInput } | undefined)?.input;
-      return demoRunWorkItemQuery(input).length;
+      const snoozed = demoSnoozedKeys("work_item");
+      return demoRunWorkItemQuery(input).filter((item) => !snoozed.has(String(item.id))).length;
     }
     case "get_work_item_preview": {
       const input = (args as { input?: GetWorkItemPreviewInput } | undefined)?.input;

@@ -404,13 +404,13 @@ function AppShell() {
     setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
     setView("pullRequestSearch");
   }
-
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <AppSidebar
         ref={sidebarRef}
         activeView={activeView}
         organizationsLength={organizations.length}
+        organizationId={badgeOrganizationId}
         capabilities={capabilities}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}

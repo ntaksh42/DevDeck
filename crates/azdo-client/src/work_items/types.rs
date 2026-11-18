@@ -49,6 +49,8 @@ pub struct WorkItemsBatchRequest {
     pub fields: Option<Vec<String>>,
     #[serde(rename = "$expand", skip_serializing_if = "Option::is_none")]
     pub expand: Option<WorkItemExpand>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_policy: Option<&'static str>,
 }
 
 /// The `$expand` value for a work items batch request. Only the variants this

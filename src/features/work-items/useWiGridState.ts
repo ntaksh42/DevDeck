@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listSnoozedItems, snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
-import { activeSnoozedKeys } from '@/lib/snoozePresets';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
+import { useActiveWorkItemSnoozes } from './useActiveWorkItemSnoozes';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { moveColumnBy, showColumn } from '@/lib/useColumnVisibility';
 import { moveColumnTo } from '@/lib/columnDrag';
 import type { CustomPreviewField } from './previewFieldsStorage';
 import { loadCustomPreviewFields } from './previewFieldsStorage';
-import { workItemQueryKeys } from './queryKeys';
+import { invalidateWorkItemSnoozeCaches } from './queryKeys';
 import {
   DEFAULT_WI_COLUMN_WIDTHS,
   WI_COLUMN_MIN_WIDTHS,
@@ -128,25 +128,11 @@ export function useWiGridState({
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
   const snoozeTargetRef = useRef<WorkItemSummary[]>([]);
-  // Same key as SnoozedItemsPanel so a snooze/unsnooze refreshes both at once.
-  const snoozedQuery = useQuery({
-    queryKey: ["snoozedItems", "work_item", snoozeOrganizationId],
-    queryFn: () => listSnoozedItems({ organizationId: snoozeOrganizationId, itemType: "work_item" }),
-    enabled: snoozeEnabled,
-    staleTime: 60_000,
-  });
-  const snoozedKeys = useMemo(
-    () => activeSnoozedKeys(snoozedQuery.data ?? []),
-    [snoozedQuery.data],
-  );
+  const snoozedKeys = useActiveWorkItemSnoozes(snoozeOrganizationId);
   const snoozeMutation = useMutation({
     mutationFn: snoozeItems,
     onSuccess: () => {
-      if (snoozeOrganizationId) {
-        void queryClient.invalidateQueries({
-          queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),
-        });
-      }
+      if (snoozeOrganizationId) invalidateWorkItemSnoozeCaches(queryClient, snoozeOrganizationId);
       void queryClient.invalidateQueries({
         queryKey: ["snoozedItems", "work_item"],
       });

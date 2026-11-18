@@ -156,6 +156,7 @@ impl AdoClient {
                         ids: chunk.to_vec(),
                         fields: fields.clone(),
                         expand,
+                        error_policy: None,
                     },
                 )
                 .await?;

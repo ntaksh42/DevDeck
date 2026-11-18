@@ -207,18 +207,32 @@ impl WorkItemService {
         // With a limit, fetch one extra id so the frontend can render "limit+"
         // when results overflow. Without one, the exact count is returned.
         let probe = work_item_query_limit(input.limit).map(|limit| limit + 1);
-        let count = if is_link_wiql(wiql) {
+        let ids = if is_link_wiql(wiql) {
             let links = client
                 .query_work_item_links(&input.project_id, wiql, probe)
                 .await?;
-            flatten_work_item_links(links, probe).0.len()
+            flatten_work_item_links(links, probe).0
         } else {
-            let ids = client
+            client
                 .query_work_item_ids(&input.project_id, wiql, probe)
-                .await?;
-            probe.map_or(ids.len(), |probe| ids.len().min(probe))
+                .await?
         };
-        Ok(count)
+        let now = chrono::Utc::now();
+        let snoozed: std::collections::HashSet<i64> = self
+            .db
+            .list_snoozed_items(&organization.id, crate::snooze::ITEM_TYPE_WORK_ITEM)?
+            .into_iter()
+            .filter(|row| crate::snooze::snooze_is_active(now, &row.snooze_until))
+            .filter_map(|row| row.item_key.parse().ok())
+            .collect();
+        let limit = work_item_query_limit(input.limit).unwrap_or(ids.len());
+        let count = ids
+            .iter()
+            .take(limit)
+            .filter(|id| !snoozed.contains(id))
+            .count();
+        let overflow = count == limit && ids.get(limit).is_some_and(|id| !snoozed.contains(id));
+        Ok(count + usize::from(overflow))
     }
 
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {

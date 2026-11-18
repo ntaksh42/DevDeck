@@ -14,7 +14,7 @@ import { MemoWorkItemPreviewPanel } from './MemoWorkItemPreviewPanel';
 import type { WorkItemDuplicateDraft } from './workItemChanges';
 import { WorkItemResultSection } from './WorkItemResultSection';
 import { storeCustomPreviewFields, type CustomPreviewField } from './previewFieldsStorage';
-import { workItemQueryKeys } from './queryKeys';
+import { invalidateWorkItemSnoozeCaches } from './queryKeys';
 import {
   DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
   MAX_WORK_ITEM_PREVIEW_WIDTH,
@@ -179,9 +179,7 @@ export function WorkItemsGrid({
           itemType="work_item"
           fallbackItems={snoozeFallbackItems}
           onUnsnoozed={() =>
-            state.queryClient.invalidateQueries({
-              queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),
-            })
+            invalidateWorkItemSnoozeCaches(state.queryClient, snoozeOrganizationId)
           }
         />
       ) : (

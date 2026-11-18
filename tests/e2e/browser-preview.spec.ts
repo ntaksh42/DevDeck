@@ -177,7 +177,16 @@ test("adds a searched field as a Work Item View column from the Columns menu", a
   await expect(page.locator('[data-primary-grid="true"]')).toBeFocused();
 });
 
-test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ page }) => {
+test("snoozes a Work Item View row with Z and updates its board and pinned count", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("azdodeck:workItemQueryViews", JSON.stringify([{
+      id: "snooze-test",
+      name: "Snooze test",
+      projectId: "platform",
+      pinned: true,
+      wiql: "SELECT [System.Id] FROM WorkItems",
+    }]));
+  });
   await page.goto("/");
   const main = page.getByRole("main");
   await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
@@ -189,6 +198,12 @@ test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ 
   await firstRow.click();
   await expect(firstRow).toBeFocused();
   const rowCount = await grid.getByRole("row").count();
+  const rowLabel = await firstRow.getByRole("checkbox").getAttribute("aria-label");
+  const itemNumber = rowLabel?.replace("Select ", "") ?? "";
+  const pinned = page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("button", { name: /^Snooze test(?:, |$)/ });
+  await expect(pinned).toHaveAccessibleName(/^Snooze test, \d+$/);
+  const originalCount = Number((await pinned.getAttribute("aria-label"))?.split(", ")[1]);
 
   await page.keyboard.press("z");
   const menu = page.getByRole("menu", { name: "Snooze until" });
@@ -200,12 +215,22 @@ test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ 
     .poll(() => grid.evaluate((node) => node.contains(document.activeElement)))
     .toBe(true);
 
+  await expect(pinned).toHaveAccessibleName(`Snooze test, ${originalCount - 1}`);
+  await main.getByRole("button", { name: "Board", exact: true }).click();
+  const board = main.getByRole("group", { name: /^Work item board/ });
+  await expect(board).toBeVisible();
+  await expect(board.getByRole("button", { name: itemNumber, exact: true })).toHaveCount(0);
+  await main.getByRole("button", { name: "List", exact: true }).click();
+
   await main.getByRole("button", { name: /^Snoozed \d+$/ }).click();
   const unsnooze = main.getByRole("button", { name: "Unsnooze" });
   await expect(unsnooze).toHaveCount(1);
   await unsnooze.click();
   await main.getByRole("button", { name: /^Snoozed \d+$/ }).click();
   await expect(grid.getByRole("row")).toHaveCount(rowCount);
+  await expect(pinned).toHaveAccessibleName(`Snooze test, ${originalCount}`);
+  await main.getByRole("button", { name: "Board", exact: true }).click();
+  await expect(board.getByRole("button", { name: itemNumber, exact: true })).toBeVisible();
 });
 
 test("asks the agent about selected result text with R then C", async ({ page }) => {

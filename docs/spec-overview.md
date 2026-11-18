@@ -134,7 +134,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   タイトル/状態などのスナップショットを保持) であり、サーバ側の通知購読とは連動しない。
   My Work Items パネルに「Assigned to me / Followed」の切替トグルがあり、フォロー中の項目を
   一覧できる (`list_followed_work_items`)。
-- **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの `Snoozed N` ボタン (N は有効なスヌーズ件数) で一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (アクティビティ判定は My Items の同期キャッシュに基づくため、My Items 外の項目は期限でのみ復帰)。ボード表示とピン留めビューの件数バッジはスヌーズを考慮しない。
+- **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの `Snoozed N` ボタン (N は有効なスヌーズ件数) で一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (Work Item は同期時に ChangedDate を照合する。My Items 外のスヌーズ項目は ID を指定してまとめて取得し、スヌーズ後に更新されていれば期限前に復帰させる)。ボード表示と保存済みビューの件数（ピン留めのバッジを含む）にも、一覧と同じスヌーズ除外を適用する。
   ただし PR のコメント活動による早期復帰は `pr_comment_seen` カーソルに依存し、同カーソルは
   コメント返信通知の処理時（`notify_pr_comment_replies` が有効。`desktop_notifications_enabled`
   には依存しない）のみ進むため、同トグルがオフの間はコメント活動では早期復帰せず期限で復帰する。

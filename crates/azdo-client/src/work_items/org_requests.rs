@@ -63,6 +63,26 @@ impl AdoClient {
         ids: Vec<i64>,
         fields: Vec<String>,
     ) -> Result<Vec<WorkItem>> {
+        self.get_work_items_batch_org_with_policy(ids, fields, None)
+            .await
+    }
+
+    /// Fetches accessible work items and omits deleted or inaccessible IDs.
+    pub async fn get_visible_work_items_batch_org(
+        &self,
+        ids: Vec<i64>,
+        fields: Vec<String>,
+    ) -> Result<Vec<WorkItem>> {
+        self.get_work_items_batch_org_with_policy(ids, fields, Some("omit"))
+            .await
+    }
+
+    async fn get_work_items_batch_org_with_policy(
+        &self,
+        ids: Vec<i64>,
+        fields: Vec<String>,
+        error_policy: Option<&'static str>,
+    ) -> Result<Vec<WorkItem>> {
         let mut items = Vec::with_capacity(ids.len());
         for chunk in ids.chunks(ORG_BATCH_LIMIT) {
             let response: crate::git::ListResponse<WorkItem> = self
@@ -73,6 +93,7 @@ impl AdoClient {
                         ids: chunk.to_vec(),
                         fields: Some(fields.clone()),
                         expand: None,
+                        error_policy,
                     },
                 )
                 .await?;
