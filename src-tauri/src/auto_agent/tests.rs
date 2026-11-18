@@ -243,11 +243,17 @@ fn changed_region_of_an_added_file_is_the_whole_file() {
 
 #[test]
 fn another_organization_can_queue_while_the_first_is_still_pending() {
-    let first = super::BatchGuard::reserve("queue-test|org-a".into()).unwrap();
-    assert!(super::BatchGuard::reserve("queue-test|org-a".into()).is_none());
-    let second = super::BatchGuard::reserve("queue-test|org-b".into()).unwrap();
-    drop(first);
-    assert!(super::BatchGuard::reserve("queue-test|org-a".into()).is_some());
+    let mut first =
+        super::BatchGuard::reserve("queue-test|org-a".into(), Default::default()).unwrap();
+    assert!(super::BatchGuard::reserve("queue-test|org-a".into(), Default::default()).is_none());
+    let second = super::BatchGuard::reserve("queue-test|org-b".into(), Default::default()).unwrap();
+    let assignment = (NoteTarget::WorkItem, "project".into(), 42);
+    assert!(
+        super::BatchGuard::reserve("queue-test|org-a".into(), [assignment.clone()].into(),)
+            .is_none()
+    );
+    assert_eq!(first.take(), [assignment].into());
+    assert!(super::BatchGuard::reserve("queue-test|org-a".into(), Default::default()).is_some());
     drop(second);
 }
 
