@@ -65,7 +65,7 @@ const KINDS: [&str; 5] = ["fix", "question", "redo", "investigate", "summarize"]
 /// is a free-standing request (from any view, about a pipeline run, a wiki
 /// page or nothing in particular): its "item id" is a timestamp the frontend
 /// picks, and it needs no result folder.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum NoteTarget {
     WorkItem,
