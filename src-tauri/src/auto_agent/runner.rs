@@ -480,7 +480,7 @@ fn result_stamp(folder: &Path, item: &AutoItem) -> Result<Option<(PathBuf, Syste
 }
 
 mod wait;
-use wait::wait_child;
+pub(super) use wait::wait_child;
 
 #[cfg(test)]
 mod tests;

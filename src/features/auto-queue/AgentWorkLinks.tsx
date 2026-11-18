@@ -23,7 +23,9 @@ type Link = {
 
 /** O: the item inside DevDeck. */
 export function openEntryInApp(entry: AgentWorkEntry) {
-  if (entry.target === "pull-request") {
+  if (entry.target === "pipeline") {
+    openEntryInBrowser(entry);
+  } else if (entry.target === "pull-request") {
     navigateToPullRequest({ organizationId: entry.organizationId, repositoryId: entry.scopeId, pullRequestId: entry.id });
   } else {
     navigateToWorkItem({ organizationId: entry.organizationId, workItemId: entry.id });
@@ -64,7 +66,7 @@ function useLinks(entry: AgentWorkEntry): { links: Link[]; loading: boolean } {
   const wiPreview = useQuery({
     queryKey: workItemQueryKeys.preview(entry.organizationId, entry.scopeId, entry.id, ""),
     queryFn: () => getWorkItemPreview({ organizationId: entry.organizationId, projectId: entry.scopeId, workItemId: entry.id }),
-    enabled: !isPr,
+    enabled: entry.target === "work-item",
     staleTime: 30_000,
   });
 
@@ -125,6 +127,13 @@ function Row({ kind, id, title, relation, onOpen, webUrl, self }: Omit<Link, "re
 
 export function AgentWorkLinks({ entry }: { entry: AgentWorkEntry }) {
   const { links, loading } = useLinks(entry);
+  if (entry.target === "pipeline") {
+    return entry.webUrl ? (
+      <button type="button" className={linkButton} onClick={() => openEntryInBrowser(entry)}>
+        Open run in Azure DevOps
+      </button>
+    ) : null;
+  }
   const kind = entry.target === "pull-request" ? "PR" : "WI";
   return (
     <section aria-label="Target and linked items" className="shrink-0 rounded border border-border text-xs">

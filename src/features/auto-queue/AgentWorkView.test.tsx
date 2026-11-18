@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NAVIGATE_PULL_REQUEST_EVENT } from "@/lib/crossLinks";
 import { OPEN_AGENT_PANEL_EVENT } from "@/components/agent/agentSubject";
+import type { AgentWorkEntry } from "@/lib/azdoCommands";
 import { resetDemoAgentWork } from "@/lib/demo/agentWork";
 import { openExternalUrl } from "@/lib/openExternal";
 import { AgentWorkView } from "./AgentWorkView";
@@ -13,8 +14,9 @@ vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn(), openLocalPath: 
 // The view reads the browser demo's Agent Work: !42 running, !99 waiting,
 // !103 failed, !189 and #123 done, !101 partial, #118 excluded.
 
-function mount() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function mount(entries?: AgentWorkEntry[]) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: entries ? Infinity : 0 } } });
+  if (entries) client.setQueryData(["agentWork"], entries);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
@@ -128,4 +130,37 @@ describe("AgentWorkView", () => {
     fireEvent.keyDown(runs, { key: "x" });
     await waitFor(() => expect(within(runs).queryByRole("option", { name: /#118.*\(excluded\)/ })).toBeNull());
   });
+});
+
+it("opens the tracked pipeline request and exposes its failure on the keyboard path", async () => {
+  mount([{
+    organizationId: "contoso",
+    organizationName: "Contoso",
+    target: "pipeline",
+    id: 42,
+    scopeId: "platform",
+    projectId: "platform",
+    title: "CI build",
+    scope: "Platform",
+    webUrl: "https://dev.azure.com/contoso/platform/_build/results?buildId=42",
+    status: "failed",
+    excluded: false,
+    startedAt: "2026-10-31T00:00:00Z",
+    finishedAt: "2026-10-31T00:01:00Z",
+    failures: 1,
+    nextRetryAt: null,
+    error: "Agent exited with status 1",
+    exitCode: 1,
+    hasLog: false,
+    askId: 42_000,
+  }]);
+  fireEvent.keyDown(await screen.findByRole("listbox", { name: "Auto queue candidates" }), { key: "2" });
+  const runs = await list("Runs");
+  expect(within(runs).getByRole("option", { name: /CI.*42.*CI build/ })).toBeTruthy();
+  expect(screen.getByText("Agent exited with status 1")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /Retry now/ })).toBeTruthy();
+  const opened = vi.fn();
+  window.addEventListener(OPEN_AGENT_PANEL_EVENT, opened, { once: true });
+  fireEvent.keyDown(runs, { key: "q" });
+  expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ askId: 42_000 });
 });

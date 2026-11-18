@@ -7,7 +7,7 @@ import { invokeCommand } from "./runtime";
 const agentWorkEntrySchema = z.object({
   organizationId: z.string(),
   organizationName: z.string(),
-  target: z.enum(["pull-request", "work-item"]),
+  target: z.enum(["pull-request", "work-item", "pipeline"]),
   id: z.number().int(),
   scopeId: z.string(),
   title: z.string(),
@@ -23,18 +23,35 @@ const agentWorkEntrySchema = z.object({
   error: z.string().nullable().default(null),
   exitCode: z.number().int().nullable().default(null),
   hasLog: z.boolean(),
+  askId: z.number().int().nullable().optional(),
 });
 
 export type AgentWorkEntry = z.infer<typeof agentWorkEntrySchema>;
 export type AgentWorkStatus = AgentWorkEntry["status"];
 export type AgentWorkTarget = Pick<AgentWorkEntry, "organizationId" | "target" | "id" | "scopeId">;
 
-export function agentWorkKey(item: Pick<AgentWorkEntry, "organizationId" | "target" | "id">): string {
-  return `${item.organizationId}:${item.target}:${item.id}`;
+export function agentWorkKey(item: Pick<AgentWorkEntry, "organizationId" | "target" | "id" | "scopeId">): string {
+  return `${item.organizationId}:${item.target}:${item.scopeId}:${item.id}`;
 }
 
-function targetOf(entry: AgentWorkTarget): AgentWorkTarget {
-  return { organizationId: entry.organizationId, target: entry.target, id: entry.id, scopeId: entry.scopeId };
+function targetOf(entry: AgentWorkTarget) {
+  return { organizationId: entry.organizationId, target: entry.target === "pipeline" ? "ask" as const : entry.target, id: entry.id, scopeId: entry.scopeId };
+}
+
+export async function submitPipelineInvestigation(input: {
+  organizationId: string;
+  projectId: string;
+  buildId: number;
+  title: string;
+  projectName: string | null;
+  webUrl: string | null;
+  body: string;
+  context: string;
+  contextDocument: string;
+}): Promise<boolean> {
+  return z.boolean().parse(await invokeCommand("start_pipeline_investigation", {
+    input: { ...input, projectName: input.projectName ?? input.projectId },
+  }));
 }
 
 export async function listAgentWork(): Promise<AgentWorkEntry[]> {

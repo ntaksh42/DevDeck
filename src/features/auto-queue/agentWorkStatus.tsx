@@ -7,6 +7,7 @@ import type { AgentSubject } from "@/components/agent/agentSubject";
  * whose project is unknown (an old history the sync no longer has) has none.
  */
 export function agentWorkSubject(entry: AgentWorkEntry): AgentSubject | null {
+  if (entry.target === "pipeline") return null;
   if (entry.target === "work-item") {
     return {
       kind: "work-item",

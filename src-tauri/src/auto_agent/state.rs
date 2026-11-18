@@ -156,10 +156,10 @@ pub(super) fn history_path(
             .map(|b| format!("{b:02x}"))
             .collect::<String>()
     };
-    let kind = if target == NoteTarget::PullRequest {
-        "pr"
-    } else {
-        "wi"
+    let kind = match target {
+        NoteTarget::PullRequest => "pr",
+        NoteTarget::WorkItem => "wi",
+        NoteTarget::Ask => "pipeline",
     };
     db.data_dir()
         .join("auto-agent")

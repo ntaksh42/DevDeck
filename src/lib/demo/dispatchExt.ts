@@ -300,6 +300,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
       return ((args as { input?: unknown[] } | undefined)?.input ?? []).length;
     case "run_auto_queue":
       return demoRunAutoQueue((args as { input: AutoQueueTarget[] }).input);
+    case "start_pipeline_investigation":
+      return false;
     case "list_agent_work":
       return demoListAgentWork();
     case "read_agent_work_log":

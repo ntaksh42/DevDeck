@@ -17,6 +17,7 @@ fn save_label(path: &Path, title: &str) {
         scope: "repo".into(),
         project_id: Some("p".into()),
         web_url: None,
+        ask_id: None,
     };
     fs::write(meta_path(path), serde_json::to_vec(&label).unwrap()).unwrap();
 }

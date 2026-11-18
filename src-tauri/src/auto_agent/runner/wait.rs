@@ -3,7 +3,7 @@
 
 use crate::error::{AppError, Result};
 
-pub(super) fn wait_child(
+pub(crate) fn wait_child(
     mut child: crate::agent_notes::launch::TrackedChild,
     timeout_secs: u64,
 ) -> Result<std::process::ExitStatus> {

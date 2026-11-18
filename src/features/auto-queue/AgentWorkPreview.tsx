@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { readAgentWorkLog, type AgentWorkEntry } from "@/lib/azdoCommands";
+import { listAgentNotes, readAgentWorkLog, type AgentWorkEntry } from "@/lib/azdoCommands";
 import { ResultTab } from "@/features/pull-requests/PrSecondaryTabs";
 import { WorkItemResultSection } from "@/features/work-items/WorkItemResultSection";
+import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
 import { PreviewEmptyState } from "@/components/StateDisplay";
 import { AgentWorkLinks } from "./AgentWorkLinks";
 import { StatusBadge, timeLabel } from "./agentWorkStatus";
@@ -49,7 +50,7 @@ function Facts({ entry }: { entry: AgentWorkEntry }) {
 
 function Log({ entry }: { entry: AgentWorkEntry }) {
   const logQuery = useQuery({
-    queryKey: ["agentWorkLog", entry.organizationId, entry.target, entry.id, entry.startedAt],
+    queryKey: ["agentWorkLog", entry.organizationId, entry.target, entry.scopeId, entry.id, entry.startedAt],
     queryFn: () => readAgentWorkLog(entry),
     refetchInterval: entry.status === "running" ? 5_000 : false,
   });
@@ -68,8 +69,29 @@ function Log({ entry }: { entry: AgentWorkEntry }) {
  * The Result panel: the result HTML, with its pins and C to ask the agent
  * about a selection, like the PR Result tab and the work item Result panel.
  */
+function PipelineResult({ askId, status }: { askId: number; status: AgentWorkEntry["status"] }) {
+  const result = useQuery({
+    queryKey: ["agentWorkPipelineResult", askId, status],
+    queryFn: () => listAgentNotes({ target: "ask", itemId: askId }),
+    refetchInterval: status === "running" || status === "waiting" ? 5_000 : false,
+  });
+  if (result.isError) return <PreviewEmptyState message="Could not load the agent response." />;
+  const replies = result.data?.flatMap((note) => note.replies) ?? [];
+  if (!replies.length) return <PreviewEmptyState message={result.isPending ? "Loading…" : "No response yet."} />;
+  return (
+    <div className="h-full overflow-auto p-3">
+      {replies.map((reply, index) => (
+        <NoteMarkdown key={index} text={reply.body} className="mb-3 text-sm" />
+      ))}
+    </div>
+  );
+}
+
 export function AgentWorkResult({ entry }: { entry: AgentWorkEntry | null }) {
   if (!entry) return <PreviewEmptyState message="Select an item to see its result." />;
+  if (entry.target === "pipeline") return entry.askId ? (
+    <PipelineResult askId={entry.askId} status={entry.status} />
+  ) : <PreviewEmptyState message="No response yet." />;
   return entry.target === "pull-request" ? (
     <ResultTab selectedPr={{ pullRequestId: entry.id }} />
   ) : (
@@ -103,7 +125,7 @@ export function AgentWorkPreview({
         </h2>
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>
-            {entry.target === "pull-request" ? "Pull request" : "Work item"} · {entry.organizationName}
+            {entry.target === "pipeline" ? "Pipeline run" : entry.target === "pull-request" ? "Pull request" : "Work item"} · {entry.organizationName}
             {entry.scope ? ` · ${entry.scope}` : ""}
           </span>
           <StatusBadge status={entry.status} />
@@ -117,7 +139,7 @@ export function AgentWorkPreview({
           className={actionButton}
           onClick={actions.ask}
           disabled={!actions.canAsk}
-          title={actions.canAsk ? "Ask the agent about this item in the Agent panel" : "The project of this pull request is unknown until it syncs again"}
+          title={actions.canAsk ? "Open this conversation in the Agent panel" : "No conversation is available yet"}
         >
           Ask the agent <kbd className="text-muted-foreground">Q</kbd>
         </button>
@@ -126,10 +148,10 @@ export function AgentWorkPreview({
             Retry now <kbd className="text-muted-foreground">R</kbd>
           </button>
         ) : null}
-        <button type="button" className={actionButton} onClick={actions.toggleExcluded}>
+        {entry.target !== "pipeline" ? <button type="button" className={actionButton} onClick={actions.toggleExcluded}>
           {entry.excluded ? "Include in automatic runs" : "Exclude from automatic runs"}{" "}
           <kbd className="text-muted-foreground">X</kbd>
-        </button>
+        </button> : null}
       </div>
       {logVisible ? <Log entry={entry} /> : null}
     </div>

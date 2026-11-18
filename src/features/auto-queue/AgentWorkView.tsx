@@ -116,12 +116,13 @@ export function AgentWorkView() {
     },
     toggleExcluded: () => {
       focusList();
-      if (focused && !exclude.isPending) exclude.mutate(focused);
+      if (focused && focused.target !== "pipeline" && !exclude.isPending) exclude.mutate(focused);
     },
     ask: () => {
-      if (subject) openAgentPanel({ subject });
+      if (focused?.askId) openAgentPanel({ askId: focused.askId });
+      else if (subject) openAgentPanel({ subject });
     },
-    canAsk: subject !== null,
+    canAsk: subject !== null || !!focused?.askId,
     retrying: retry.isPending,
   };
 
@@ -187,7 +188,7 @@ export function AgentWorkView() {
             >
               <StatusBadge status={item.status} />
               <span className={`text-xs font-bold ${item.target === "pull-request" ? "text-link" : "text-success"}`}>
-                {item.target === "pull-request" ? "PR" : "WI"}
+                {item.target === "pipeline" ? "CI" : item.target === "pull-request" ? "PR" : "WI"}
               </span>
               <span className="truncate">
                 <span className="text-muted-foreground tabular-nums">

@@ -1,11 +1,9 @@
 import { buildContextDocument } from "@/components/agent/contextDocument";
 import { contextLine } from "@/components/agent/agentSubject";
-import { newAskId } from "@/components/agent/useAgentPanelData";
 import {
-  createAgentNote,
   listFlakyTests,
   listPipelineTestResults,
-  runAgent,
+  submitPipelineInvestigation,
   type PipelineRunSummary,
 } from "@/lib/azdoCommands";
 import { flakyBadge, flakyHint, flakyStatsByName } from "./flakyTestPresentation";
@@ -17,60 +15,8 @@ import { pipelineRunSubject } from "./pipelineAgent";
 // "ask") with the run's material and the failed tests compared with recent
 // runs. The agent's reply raises the usual "Agent replied" notification.
 
-const STORAGE_KEY = "azdodeck:pipelines:autoInvestigated";
-/** Investigations started per rolling hour, across all watched pipelines. */
-export const AUTO_INVESTIGATIONS_PER_HOUR = 5;
-const HOUR_MS = 60 * 60 * 1000;
-/** Runs remembered as investigated (so a restart does not start them again). */
-const REMEMBERED = 200;
-const KEEP_MS = 14 * 24 * HOUR_MS;
-/** Same cap as the Agent panel's material, plus room for the failed tests. */
 const MAX_DOCUMENT_CHARS = 400_000;
 const MAX_TESTS_CHARS = 40_000;
-
-type Claim = { key: string; at: number };
-
-function loadClaims(): Claim[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is Claim =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof (entry as Claim).key === "string" &&
-        typeof (entry as Claim).at === "number",
-    );
-  } catch {
-    return [];
-  }
-}
-
-function saveClaims(claims: Claim[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(claims));
-  } catch {
-    // Storage unavailable: the in-memory rate limit of this session still applies.
-  }
-}
-
-export function investigationKey(run: Pick<PipelineRunSummary, "organizationId" | "projectId" | "buildId">): string {
-  return `${run.organizationId}/${run.projectId}/${run.buildId}`;
-}
-
-/**
- * Records that `key` is being investigated, unless it already was or the
- * hourly limit is reached. Returns whether the caller may start it.
- */
-export function claimInvestigation(key: string, now = Date.now()): boolean {
-  const claims = loadClaims().filter((claim) => now - claim.at < KEEP_MS);
-  if (claims.some((claim) => claim.key === key)) return false;
-  if (claims.filter((claim) => now - claim.at < HOUR_MS).length >= AUTO_INVESTIGATIONS_PER_HOUR) {
-    return false;
-  }
-  saveClaims([...claims, { key, at: now }].slice(-REMEMBERED));
-  return true;
-}
 
 /** A finished run worth investigating: it failed (not canceled, not partially succeeded). */
 export function isInvestigableFailure(
@@ -136,39 +82,22 @@ export async function failedTestsSection(run: PipelineRunSummary): Promise<strin
 }
 
 /** Creates the request and starts the default agent on it. */
-export async function startPipelineInvestigation(run: PipelineRunSummary): Promise<void> {
+export async function startPipelineInvestigation(run: PipelineRunSummary): Promise<boolean> {
   const subject = pipelineRunSubject(run, run.organizationId, run.projectId);
   const material = await buildContextDocument(subject);
   const tests = await failedTestsSection(run);
-  const item = { target: "ask" as const, itemId: newAskId() };
-  await createAgentNote({
-    ...item,
+  return submitPipelineInvestigation({
+    organizationId: run.organizationId,
+    projectId: run.projectId,
+    buildId: run.buildId,
+    title: [run.definitionName, run.buildNumber].filter(Boolean).join(" · "),
+    projectName: run.projectName,
+    webUrl: run.webUrl,
     body: INVESTIGATION_REQUEST,
-    kind: "investigate",
     context: contextLine(subject),
     contextDocument: [material, tests.slice(0, MAX_TESTS_CHARS)]
       .filter(Boolean)
       .join("\n\n")
       .slice(0, MAX_DOCUMENT_CHARS),
   });
-  await runAgent(item);
-}
-
-// Requests are started one at a time, a second apart, because a request's id
-// is its creation time in seconds.
-let queue: Promise<void> = Promise.resolve();
-
-export function enqueuePipelineInvestigation(
-  run: PipelineRunSummary,
-  onStarted: () => void,
-  start: (run: PipelineRunSummary) => Promise<void> = startPipelineInvestigation,
-): Promise<void> {
-  queue = queue
-    .then(async () => {
-      await start(run);
-      onStarted();
-      await new Promise((resolve) => setTimeout(resolve, 1100));
-    })
-    .catch((error) => console.error("Failed to start the pipeline investigation", error));
-  return queue;
 }

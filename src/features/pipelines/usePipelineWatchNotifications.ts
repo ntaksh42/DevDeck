@@ -3,12 +3,7 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { type AppSettings, listPipelineRuns, recordNotification } from "@/lib/azdoCommands";
 import { showPipelineWatchNotification } from "@/lib/desktopNotifications";
 import { isInProgressStatus, pipelineRunVisual, shortBranch } from "./pipelineStatus";
-import {
-  claimInvestigation,
-  enqueuePipelineInvestigation,
-  investigationKey,
-  isInvestigableFailure,
-} from "./pipelineAutoInvestigate";
+import { isInvestigableFailure, startPipelineInvestigation } from "./pipelineAutoInvestigate";
 import {
   loadPipelineSubscriptions,
   pipelineSubscriptionHistoryQueryKey,
@@ -127,14 +122,15 @@ export function usePipelineWatchNotifications(settings: AppSettings | null): voi
       if (
         settingsValue.autoAgentPipelinesEnabled &&
         !settingsValue.readOnlyValidationModeEnabled &&
-        isInvestigableFailure(transition, latest) &&
-        claimInvestigation(investigationKey(latest))
+        isInvestigableFailure(transition, latest)
       ) {
-        void enqueuePipelineInvestigation(latest, () => {
+        void startPipelineInvestigation(latest).then((accepted) => {
+          if (!accepted) return;
+          void queryClient.invalidateQueries({ queryKey: ["agentWork"] });
           recordNotification({
             organizationId: sub.organizationId,
             kind: "pipelineInvestigationStarted",
-            title: `Agent investigating: ${sub.definitionName}`,
+            title: `Agent investigation queued: ${sub.definitionName}`,
             body: latest.buildNumber
               ? `#${latest.buildNumber} failed\n${sub.projectName}`
               : sub.projectName,
@@ -148,7 +144,7 @@ export function usePipelineWatchNotifications(settings: AppSettings | null): voi
           })
             .then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }))
             .catch((error) => console.error("Failed to record investigation notification", error));
-        });
+        }).catch((error) => console.error("Failed to submit pipeline investigation", error));
       }
       if (!settingsValue.desktopNotificationsEnabled) return;
       const visual = pipelineRunVisual(latest.status, latest.result);

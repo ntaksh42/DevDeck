@@ -29,6 +29,7 @@ pub(super) struct ItemLabel {
     pub scope: String,
     pub project_id: Option<String>,
     pub web_url: Option<String>,
+    pub ask_id: Option<i64>,
 }
 
 impl ItemLabel {
@@ -39,12 +40,14 @@ impl ItemLabel {
                 scope: pr.repository_name.clone(),
                 project_id: Some(pr.project_id.clone()),
                 web_url: pr.web_url.clone(),
+                ask_id: None,
             },
             AutoItem::WorkItem(wi) => Self {
                 title: wi.title.clone(),
                 scope: wi.project_name.clone(),
                 project_id: Some(wi.project_id.clone()),
                 web_url: wi.web_url.clone(),
+                ask_id: None,
             },
         }
     }
@@ -55,7 +58,8 @@ type Key = (String, &'static str, i64);
 fn target_str(target: NoteTarget) -> &'static str {
     match target {
         NoteTarget::PullRequest => "pull-request",
-        _ => "work-item",
+        NoteTarget::WorkItem => "work-item",
+        NoteTarget::Ask => "pipeline",
     }
 }
 
@@ -77,17 +81,21 @@ fn meta_path(history: &Path) -> PathBuf {
 /// Saves the item's title and scope before an attempt, so the history stays
 /// readable after the item leaves the synced data. Best effort.
 pub(super) fn remember(db: &AppDatabase, org: &Organization, item: &AutoItem) {
-    let path = meta_path(&item.history_path(db, org));
-    let saved = path
-        .parent()
-        .map_or(Ok(()), fs::create_dir_all)
-        .and_then(|()| {
-            let bytes = serde_json::to_vec_pretty(&ItemLabel::of(item)).unwrap_or_default();
-            fs::write(&path, bytes)
-        });
+    let saved = save_label(&item.history_path(db, org), &ItemLabel::of(item));
     if let Err(error) = saved {
         tracing::warn!(id = item.id(), %error, "agent work: could not save the item label");
     }
+}
+
+pub(super) fn save_label(history: &Path, label: &ItemLabel) -> Result<()> {
+    let path = meta_path(history);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let bytes =
+        serde_json::to_vec(label).map_err(|error| AppError::InvalidInput(error.to_string()))?;
+    fs::write(path, bytes)?;
+    Ok(())
 }
 
 fn read_label(history: &Path) -> Option<ItemLabel> {
@@ -129,6 +137,7 @@ pub struct AgentWorkEntry {
     pub error: Option<String>,
     pub exit_code: Option<i32>,
     pub has_log: bool,
+    pub ask_id: Option<i64>,
 }
 
 fn decode_hex(text: &str) -> Option<String> {
@@ -143,10 +152,12 @@ fn decode_hex(text: &str) -> Option<String> {
 }
 
 /// `pr-12.json` / `wi-34.json`; the label, temp and log files are skipped.
-fn parse_history_name(name: &str) -> Option<(NoteTarget, i64)> {
+pub(super) fn parse_history_name(name: &str) -> Option<(NoteTarget, i64)> {
     let stem = name.strip_suffix(".json")?;
     let (target, id) = if let Some(id) = stem.strip_prefix("pr-") {
         (NoteTarget::PullRequest, id)
+    } else if let Some(id) = stem.strip_prefix("pipeline-") {
+        (NoteTarget::Ask, id)
     } else {
         (NoteTarget::WorkItem, stem.strip_prefix("wi-")?)
     };
@@ -191,6 +202,9 @@ impl SyncedLabels {
         scope_id: &str,
         id: i64,
     ) -> Option<ItemLabel> {
+        if target == NoteTarget::Ask {
+            return None;
+        }
         let item = if target == NoteTarget::PullRequest {
             let prs = self
                 .prs
@@ -267,12 +281,16 @@ pub fn list(db: &AppDatabase) -> Result<Vec<AgentWorkEntry>> {
             scope: label.scope,
             project_id: label.project_id,
             web_url: label.web_url,
-            status: status_of(&history, waiting, now),
+            status: super::pipeline::active_status(&path)
+                .unwrap_or_else(|| status_of(&history, waiting, now)),
             excluded: excluded_keys.contains(&key),
             started_at: last.map(|r| r.started_at),
             finished_at: last.and_then(|r| r.finished_at),
             failures: history.failures(),
-            next_retry_at: history.retry_at(),
+            next_retry_at: (target != NoteTarget::Ask)
+                .then(|| history.retry_at())
+                .flatten(),
+            ask_id: label.ask_id,
             error: last.and_then(|r| r.error.clone()),
             exit_code: last.and_then(|r| r.exit_code),
             has_log: last
@@ -303,6 +321,7 @@ pub fn list(db: &AppDatabase) -> Result<Vec<AgentWorkEntry>> {
                 scope: e.scope,
                 project_id: None,
                 web_url: None,
+                ask_id: None,
             };
             entries.push(bare_entry(
                 &key,
@@ -345,11 +364,12 @@ fn bare_entry(
         error: None,
         exit_code: None,
         has_log: false,
+        ask_id: None,
     }
 }
 
 /// `(organization ID, repository or project ID, path)` of every history file.
-fn history_files(db: &AppDatabase) -> Vec<(String, String, PathBuf)> {
+pub(super) fn history_files(db: &AppDatabase) -> Vec<(String, String, PathBuf)> {
     let root = db.data_dir().join("auto-agent");
     let dirs = |path: &Path| -> Vec<PathBuf> {
         fs::read_dir(path)
@@ -395,7 +415,7 @@ pub struct AgentWorkTarget {
 }
 
 impl AgentWorkTarget {
-    fn history_path(&self, db: &AppDatabase) -> PathBuf {
+    pub(super) fn history_path(&self, db: &AppDatabase) -> PathBuf {
         state::history_path(
             db,
             &self.organization_id,
@@ -426,6 +446,9 @@ pub fn read_log(db: &AppDatabase, target: AgentWorkTarget) -> Result<String> {
 
 /// Starts a failed item again now, without waiting for its backoff.
 pub fn retry(db: &AppDatabase, target: AgentWorkTarget) -> Result<()> {
+    if target.target == NoteTarget::Ask {
+        return super::pipeline::retry(db, target);
+    }
     let path = target.history_path(db);
     let mut history = History::read(&path)?;
     if status_of(&history, None, Utc::now()) != "failed" {

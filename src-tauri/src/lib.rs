@@ -190,6 +190,7 @@ pub fn run() {
             commands::auto_queue::run_assigned_work_item_investigations,
             commands::auto_queue::run_work_item_investigations,
             commands::auto_queue::list_agent_work,
+            commands::auto_queue::start_pipeline_investigation,
             commands::auto_queue::read_agent_work_log,
             commands::auto_queue::retry_agent_work,
             commands::auto_queue::set_agent_work_excluded,

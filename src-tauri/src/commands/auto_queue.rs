@@ -9,6 +9,16 @@ use crate::auto_agent::work::{self, AgentWorkEntry, AgentWorkTarget, SetExcluded
 use crate::error::Result;
 
 #[tauri::command]
+#[tracing::instrument(skip(state, input))]
+pub async fn start_pipeline_investigation(
+    input: crate::auto_agent::pipeline::PipelineInvestigation,
+    state: State<'_, AppState>,
+) -> Result<bool> {
+    let db = state.db.clone();
+    run_blocking(move || crate::auto_agent::pipeline::start(&db, input)).await
+}
+
+#[tauri::command]
 #[tracing::instrument(skip(state))]
 pub async fn list_agent_work(state: State<'_, AppState>) -> Result<Vec<AgentWorkEntry>> {
     let db = state.db.clone();
