@@ -11,6 +11,8 @@ mod diagnostics;
 mod error;
 mod github;
 mod inbox_insight;
+#[cfg(test)]
+mod ipc_contract;
 mod orgs;
 mod pipelines;
 mod pr_review;
