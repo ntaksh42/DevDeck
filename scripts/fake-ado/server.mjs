@@ -82,6 +82,27 @@ export function startFakeAdo({ scenario, org, port, options, log = console.log }
       const pr = state.prs.find((p) => p.pullRequestId === Number(m[1]));
       return { count: pr?.threads.length ?? 0, value: pr?.threads ?? [] };
     }],
+    ["POST", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)\/threads$/, (m, _url, body) => {
+      const pr = state.prs.find((p) => p.pullRequestId === Number(m[1]));
+      if (!pr) return null;
+      const added = {
+        id: Math.max(0, ...pr.threads.map((thread) => thread.id)) + 1,
+        status: 'active',
+        isDeleted: false,
+        threadContext: body.threadContext ?? null,
+        comments: (body.comments ?? []).map((comment) => ({
+          id: ++commentSeq,
+          parentCommentId: comment.parentCommentId ?? 0,
+          content: comment.content ?? '',
+          commentType: 'text',
+          author: ME,
+          publishedDate: new Date().toISOString(),
+          isDeleted: false,
+        })),
+      };
+      pr.threads.push(added);
+      return added;
+    }],
     ["POST", /^\/[^/]+\/_apis\/git\/repositories\/[^/]+\/pullrequests\/(\d+)\/threads\/(\d+)\/comments$/, (m, _url, body) => {
       const thread = state.prs.find((p) => p.pullRequestId === Number(m[1]))?.threads.find((t) => t.id === Number(m[2]));
       if (!thread) return null;

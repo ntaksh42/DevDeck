@@ -37,9 +37,21 @@ The default executable is `target/debug/azdo-dashboard.exe`; `CARGO_TARGET_DIR`
 is respected, or set `DEVDECK_E2E_APP` to an explicit executable. Rebuild after
 application changes: the test command does not build automatically.
 
-The smoke test registers a fresh fake organization through the UI, submits
-the form using Tab/Enter, opens My Reviews, requests sync with Ctrl+E and checks
-that PR 101 (`Retry policy for the gateway client`) appears inside the grid.
+Each test registers a fresh fake organization through the UI, submitting the
+form using Tab/Enter. The four independent tests cover:
+
+- My Reviews: sync with Ctrl+E and display PR 101 (`Retry policy for the gateway client`).
+- My Pull Requests: display authored PR 102 (`Add health endpoint`) and exclude
+  the review-only PR 101.
+- Assigned Work Items: display item 201 (`Gateway timeout investigation`),
+  exclude item 202 assigned to someone else, and open the selected item's preview.
+- PR comments: create a new discussion with Ctrl+Enter, reload the WebView to
+  discard React Query state, and display the posted comment after fetching
+  threads again. The test also checks that POST and subsequent GET reached REST.
+
+`tests/desktop/steps.mjs` shares connection and grid waits across the tests.
+The fake server stores newly created PR threads in its per-run scenario state;
+this state survives WebView reloads, but is discarded when the test ends.
 
 Each run starts its own loopback fake server and WebDriver ports and gets a
 unique data directory and organization name. The fake PAT goes through the
@@ -54,7 +66,7 @@ driver and fake-server request logs, isolated SQLite data, and a failure
 screenshot/page source/backend diagnostic when available. These files are
 ignored by Git. Browser E2E remains `pnpm test:e2e`.
 
-For the fake-server pagination regression test alone:
+For the fake-server pagination and comment persistence regression tests alone:
 
 ```powershell
 node --test scripts/fake-ado/server.test.mjs
