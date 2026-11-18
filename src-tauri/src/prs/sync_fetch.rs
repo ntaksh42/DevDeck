@@ -80,6 +80,66 @@ pub(crate) async fn fetch_active_prs_for_project(
 
     let capped = prs.len() >= PROJECT_PR_SYNC_TOP as usize;
 
+    let (cached, shared_reviewers) = map_active_prs(&org, &project, prs);
+
+    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers);
+
+    PrProjectFetch {
+        project_id,
+        label,
+        result: Ok(cached),
+        capped,
+        reviewers: shared_reviewers,
+    }
+}
+
+pub(super) async fn fetch_active_with_authored(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    force_refresh: bool,
+) -> (PrProjectFetch, Result<bool>) {
+    let mut fetch =
+        fetch_active_prs_for_project(client.clone(), org.clone(), project.clone(), force_refresh)
+            .await;
+    let (Some(user), true, Ok(prs)) = (
+        org.authenticated_user_id.as_deref(),
+        fetch.capped,
+        &mut fetch.result,
+    ) else {
+        return (fetch, Ok(false));
+    };
+    let authored = match client
+        .list_pull_requests_by_creator(&project.id, user, 200)
+        .await
+    {
+        Ok(authored) => authored,
+        Err(error) => return (fetch, Err(error.into())),
+    };
+    let authored_keys: HashSet<_> = prs
+        .iter()
+        .filter(|pr| {
+            pr.created_by_id
+                .as_deref()
+                .is_some_and(|id| id.eq_ignore_ascii_case(user))
+        })
+        .map(|pr| (pr.repository_id.clone(), pr.pull_request_id))
+        .collect();
+    prs.retain(|pr| !authored_keys.contains(&(pr.repository_id.clone(), pr.pull_request_id)));
+    fetch
+        .reviewers
+        .retain(|row| !authored_keys.contains(&(row.repository_id.clone(), row.pull_request_id)));
+    let (authored, reviewers) = map_active_prs(&org, &project, authored);
+    prs.extend(authored);
+    fetch.reviewers.extend(reviewers);
+    (fetch, Ok(true))
+}
+
+fn map_active_prs(
+    org: &Organization,
+    project: &TeamProject,
+    prs: Vec<GitPullRequest>,
+) -> (Vec<CachedPr>, Vec<SharedReviewer>) {
     // Reviewers are read from `prs` by reference before the by-value pass
     // below consumes each `pr` to build `CachedPr`; both passes read the same
     // API response, just for different destinations (DevDeck's own cache vs
@@ -146,15 +206,7 @@ pub(crate) async fn fetch_active_prs_for_project(
         })
         .collect();
 
-    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers);
-
-    PrProjectFetch {
-        project_id,
-        label,
-        result: Ok(cached),
-        capped,
-        reviewers: shared_reviewers,
-    }
+    (cached, shared_reviewers)
 }
 
 /// `None` when the shared cache is missing, unreadable, or not fresh enough

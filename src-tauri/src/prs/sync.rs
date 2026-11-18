@@ -107,6 +107,8 @@ struct ActivePrsFetch {
     synced_project_ids: Vec<String>,
     /// Projects whose result hit the query cap; their rows are merged, not replaced.
     capped: Vec<String>,
+    refreshed_creator_projects: Vec<String>,
+    creator_failures: Vec<String>,
     skipped: Vec<String>,
     last_skip_error: Option<AppError>,
     reviewers: Vec<SharedReviewer>,
@@ -169,7 +171,13 @@ pub(crate) async fn do_sync_prs(
         .iter()
         .map(String::as_str)
         .collect();
-    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
+    db.replace_pull_request_snapshot(
+        &org.id,
+        &synced_ids,
+        review_user.as_deref(),
+        &active.refreshed_creator_projects,
+        &active.cached_prs,
+    )?;
     db.save_pr_reviewer_counts(
         &org.id,
         &reviewer_counts(&active.cached_prs, &active.reviewers),
@@ -189,6 +197,13 @@ pub(crate) async fn do_sync_prs(
             "{} project(s) have {PROJECT_PR_SYNC_TOP} or more active PRs; cached PRs outside the fetched window were kept: {}.",
             active.capped.len(),
             active.capped.join(", ")
+        ));
+    }
+
+    if !active.creator_failures.is_empty() {
+        warning_parts.push(format!(
+            "My Pull Requests may be incomplete for: {}.",
+            active.creator_failures.join(", ")
         ));
     }
 
@@ -328,7 +343,7 @@ async fn fetch_all_active_prs(
     budget: &SyncBudget,
     force_refresh: bool,
 ) -> Result<ActivePrsFetch> {
-    let mut tasks: JoinSet<PrProjectFetch> = JoinSet::new();
+    let mut tasks = JoinSet::new();
     for project in projects {
         let client = client.clone();
         let org = org.clone();
@@ -336,16 +351,26 @@ async fn fetch_all_active_prs(
         let budget = budget.clone();
         tasks.spawn(async move {
             let _permit = budget.acquire_owned().await;
-            fetch_active_prs_for_project(client, org, project, force_refresh).await
+            super::sync_fetch::fetch_active_with_authored(client, org, project, force_refresh).await
         });
     }
 
     let mut out = ActivePrsFetch::default();
     while let Some(joined) = tasks.join_next().await {
-        let fetch =
+        let (fetch, authored) =
             joined.map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?;
         match fetch.result {
             Ok(prs) => {
+                match authored {
+                    Ok(true) => out
+                        .refreshed_creator_projects
+                        .push(fetch.project_id.clone()),
+                    Err(error) => {
+                        tracing::warn!(project = %fetch.label, %error, "authored PR sync failed");
+                        out.creator_failures.push(fetch.label.clone());
+                    }
+                    Ok(false) => {}
+                }
                 if fetch.capped {
                     out.capped.push(fetch.label);
                 } else {
