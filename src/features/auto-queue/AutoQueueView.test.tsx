@@ -61,6 +61,21 @@ describe("AutoQueueView", () => {
     );
   });
 
+  it("extends and shrinks the keyboard range before running selected candidates", async () => {
+    mount();
+    const list = await screen.findByRole("listbox", { name: "Auto queue candidates" });
+    await waitFor(() => expect(document.activeElement).toBe(list));
+    fireEvent.keyDown(list, { key: "ArrowDown", shiftKey: true });
+    fireEvent.keyDown(list, { key: "ArrowDown", shiftKey: true });
+    expect(screen.getAllByRole("option", { selected: true })).toHaveLength(3);
+    fireEvent.keyDown(list, { key: "ArrowUp", shiftKey: true });
+    expect(screen.getAllByRole("option", { selected: true })).toHaveLength(2);
+    fireEvent.keyDown(list, { key: "Enter", ctrlKey: true });
+    await waitFor(() =>
+      expect(runAutoQueue).toHaveBeenCalledWith([item(1, "First change"), item(2, "Second change")]),
+    );
+  });
+
   it("hides the candidates handed to the agent right away", async () => {
     mount();
     const list = await screen.findByRole("listbox", { name: "Auto queue candidates" });
