@@ -329,11 +329,12 @@ fn picking_an_item_whose_number_another_scope_uses_says_why_it_is_not_started() 
 
 #[test]
 fn the_note_asks_for_review_criteria_or_an_investigation_approach() {
-    let review = super::context::note_body(NoteTarget::PullRequest, r"C:\r");
+    let review = super::context::note_body(NoteTarget::PullRequest, r"C:\r", r"C:\s\SKILL.md");
     assert!(review.contains("レビューの観点"));
     assert!(review.contains("`unverified`"));
     assert!(review.contains(r"C:\r\AGENTS.md"));
-    let investigation = super::context::note_body(NoteTarget::WorkItem, r"C:\w");
+    assert!(review.contains(r"C:\s\SKILL.md"));
+    let investigation = super::context::note_body(NoteTarget::WorkItem, r"C:\w", r"C:\s\SKILL.md");
     assert!(investigation.contains("調査の進め方"));
     assert!(investigation.contains("コード未確認"));
     assert!(!investigation.contains("レビューの観点"));

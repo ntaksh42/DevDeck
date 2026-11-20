@@ -395,5 +395,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         // Inbox: "remind me if no one replies".
         super::reply_reminders::migrate_v31(conn)?;
     }
+    if current < 32 {
+        // Home Bot: Look around runs, suggestions, Orchestrator chat, workers.
+        super::home_bot::migrate_v32(conn)?;
+    }
+    if current < 33 {
+        super::home_bot::migrate_v33(conn)?;
+    }
     Ok(())
 }

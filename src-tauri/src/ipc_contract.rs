@@ -4,6 +4,10 @@ use serde_json::{json, Value};
 
 use crate::auto_agent::work::AgentWorkEntry;
 use crate::db::AppDatabase;
+use crate::home_bot::{
+    HomeBotSettings, HomeBotView, HomeChatMessage, HomeChatView, HomeLookState, HomeSuggestion,
+    HomeWorker,
+};
 use crate::pipelines::PipelineRunSummary;
 use crate::prs::{MyCreatedPullRequestSummary, MyCreatedPullRequestsResult};
 use crate::work_items::{WorkItemCustomField, WorkItemSummary};
@@ -103,12 +107,68 @@ fn ipc_response_contract() {
         ask_id: Some(1_790_856_000_000),
     };
 
+    let at = || TIMESTAMP.parse().unwrap();
+    let home_bot = HomeBotView {
+        settings: HomeBotSettings::default(),
+        look: HomeLookState {
+            running: false,
+            last_looked_at: Some(at()),
+            took_ms: Some(48_000),
+            next_at: Some(at()),
+            error: None,
+            failures_in_a_row: 0,
+        },
+        brief: vec!["Two reviews wait on you.".into()],
+        suggestions: vec![HomeSuggestion {
+            id: "s-1".into(),
+            title: "Review !101".into(),
+            why: "Requested three days ago.".into(),
+            ask: "Summarize the diff of !101.".into(),
+            target: Some(format!("pr:{ORG}/fixture-repo/101")),
+            target_label: Some("!101".into()),
+            web_url: None,
+            kind: "pr".into(),
+            is_new: true,
+            created_at: at(),
+        }],
+        new_count: 1,
+    };
+    let home_chat = HomeChatView {
+        chat_id: "chat-20261001120000000".into(),
+        messages: vec![HomeChatMessage {
+            id: 1,
+            author: "orchestrator".into(),
+            body: "Started a worker on !101.".into(),
+            worker_ids: vec!["d-1".into()],
+            created_at: at(),
+        }],
+        workers: vec![HomeWorker {
+            id: "d-1".into(),
+            target_label: "!101".into(),
+            title: "Summarize the diff".into(),
+            agent: "codex".into(),
+            model: None,
+            status: "running".into(),
+            ask_id: 1_790_856_000_000,
+            note_target: "ask".into(),
+            subject: None,
+            created_at: at(),
+            started_at: Some(at()),
+            ended_at: None,
+        }],
+        state: "waiting".into(),
+        waiting_on: 1,
+        error: None,
+    };
+
     let actual = json!({
         "get_app_settings": settings,
         "list_my_created_pull_requests": pull_requests,
         "run_work_item_query": [work_item],
         "list_pipeline_runs": [pipeline],
         "list_agent_work": [agent_work],
+        "get_home_bot": home_bot,
+        "get_home_chat": home_chat,
     });
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/ipc-responses.json");
     // Use this only after reviewing an intentional IPC response change.

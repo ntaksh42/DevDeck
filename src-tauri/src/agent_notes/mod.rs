@@ -32,6 +32,7 @@ mod migrate;
 mod ops;
 mod proposals;
 mod replies;
+pub(crate) mod review_skill;
 mod skill;
 mod summary;
 

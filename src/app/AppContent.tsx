@@ -16,6 +16,7 @@ import {
   PullRequestSearch,
   MyPullRequestsGrid,
   CrossOrgSummaryView,
+  HomeView,
   NotificationsView,
   InboxView,
   AgentWorkView,
@@ -109,6 +110,8 @@ export function AppContent({
           <PipelinesView />
         ) : activeView === "inbox" ? (
           <InboxView />
+        ) : activeView === "home" ? (
+          <HomeView />
         ) : activeView === "autoQueue" ? (
           <AgentWorkView />
         ) : activeView === "notifications" ? (

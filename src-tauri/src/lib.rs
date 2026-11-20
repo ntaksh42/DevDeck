@@ -10,6 +10,7 @@ mod dev_overrides;
 mod diagnostics;
 mod error;
 mod github;
+mod home_bot;
 mod inbox_insight;
 #[cfg(test)]
 mod ipc_contract;
@@ -162,6 +163,13 @@ pub fn run() {
                 sync_trigger: sync_tx,
                 active_provider: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
             });
+            let handle = app.handle().clone();
+            let notifier: home_bot::Notifier = std::sync::Arc::new(move || {
+                let _ = tauri::Emitter::emit(&handle, "home:updated", serde_json::json!({}));
+            });
+            let home_bot = home_bot::HomeBot::new(db.clone(), Some(notifier));
+            home_bot.start();
+            app.manage(home_bot);
             tauri::async_runtime::spawn(
                 SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
             );
@@ -192,6 +200,18 @@ pub fn run() {
             commands::auto_queue::run_assigned_work_item_investigations,
             commands::auto_queue::run_work_item_investigations,
             commands::auto_queue::list_agent_work,
+            commands::home_bot::get_home_bot,
+            commands::home_bot::run_home_look_now,
+            commands::home_bot::mark_home_seen,
+            commands::home_bot::dismiss_home_suggestion,
+            commands::home_bot::start_home_suggestion,
+            commands::home_bot::save_home_bot_settings,
+            commands::home_bot::clear_home_dismissed,
+            commands::home_bot::count_home_dismissed,
+            commands::home_bot::get_home_chat,
+            commands::home_bot::send_home_message,
+            commands::home_bot::new_home_chat,
+            commands::home_bot::stop_home_worker,
             commands::auto_queue::start_pipeline_investigation,
             commands::auto_queue::read_agent_work_log,
             commands::auto_queue::retry_agent_work,

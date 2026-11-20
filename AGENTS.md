@@ -21,7 +21,9 @@ Key areas:
   module per area: `prs.rs`, `repos/` (repository and branch listings),
   `orgs.rs`, `projects.rs`, `settings.rs`, `search.rs` (cross-kind
   command-palette search), `sync.rs` (background cache refresh),
-  `pipelines.rs`, `pr_review.rs` (PR threads/diffs), and `snooze.rs`. Work items are large enough to be their
+  `pipelines.rs`, `pr_review.rs` (PR threads/diffs), `snooze.rs`, and `home_bot/`
+  (Home: Look around suggestions and the Orchestrator chat, see
+  `docs/spec-home-bot.md`). Work items are large enough to be their
   own module directory: `src-tauri/src/work_items/` (`sync`, `mutations`,
   `candidates`, `conversions`, `types`).
 - `crates/azdo-client/` is a standalone Azure DevOps REST client crate. Keep it
@@ -125,7 +127,7 @@ XService {
 `settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
 via `rusqlite`. Schema migrations live in `src-tauri/src/db/migrate.rs:migrate()` and
 use `PRAGMA user_version`; the current schema version is the `SCHEMA_VERSION`
-constant in `src-tauri/src/db/mod.rs` (currently `31`). `migrate()` applies each
+constant in `src-tauri/src/db/mod.rs` (currently `33`). `migrate()` applies each
 `if current < N` step in order and must stay repeatable; add a new numbered
 step rather than editing an existing one.
 

@@ -15,6 +15,7 @@ import type {
   AgentNoteTarget,
   UpdateAgentNoteInput,
 } from "@/lib/azdoCommands";
+import { dispatchHomeBot } from "@/lib/demo/homeBot";
 import {
   demoPipelineApprovals,
   demoPipelineDefinitionDetail,
@@ -68,6 +69,8 @@ import {
 } from "@/lib/demo/agentNotes";
 
 export function dispatchExt(command: string, args: unknown): unknown {
+  const home = dispatchHomeBot(command, args);
+  if (home !== undefined) return home;
   switch (command) {
     // ── Pipelines ──────────────────────────────────────────────────────────
     case "list_pipeline_projects":

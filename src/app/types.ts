@@ -11,6 +11,7 @@ export type View =
   | "pipelines"
   | "notifications"
   | "inbox"
+  | "home"
   | "autoQueue"
   | "crossOrgSummary"
   | "settings";
@@ -38,6 +39,7 @@ export const GOTO_BINDING_VIEWS = {
   gotoPipelines: "pipelines",
   gotoNotifications: "notifications",
   gotoInbox: "inbox",
+  gotoHome: "home",
   gotoCrossOrgSummary: "crossOrgSummary",
   gotoAutoQueue: "autoQueue",
   gotoSettings: "settings",

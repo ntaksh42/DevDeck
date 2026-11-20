@@ -41,6 +41,11 @@ export const CrossOrgSummaryView = lazy(() =>
     default: m.CrossOrgSummaryView,
   })),
 );
+export const HomeView = lazy(() =>
+  import("@/features/home/HomeView").then((m) => ({
+    default: m.HomeView,
+  })),
+);
 export const InboxView = lazy(() =>
   import("@/features/inbox/InboxView").then((m) => ({
     default: m.InboxView,

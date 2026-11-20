@@ -375,7 +375,13 @@ async fn execute_attempt(
     }
     history.begin(material.base.clone(), material.head.clone(), Utc::now());
     history.save(path)?;
-    let mut body = context::note_body(item.target(), &material.folder.display().to_string());
+    let review_skill =
+        crate::agent_notes::review_skill::skill_path(&crate::agent_notes::notes_root(db));
+    let mut body = context::note_body(
+        item.target(),
+        &material.folder.display().to_string(),
+        &review_skill.display().to_string(),
+    );
     body.push_str(&format!(
         "\n- Review range: {} -> {}. Review ONLY this supplied range. Re-evaluate previous findings touched by this range and mark them fixed or still present; retain unrelated findings as previously observed, without claiming they were re-reviewed.\n- Record both commit IDs and coverage omissions in the HTML. Do not claim omitted files were reviewed.\n- If the range is empty, update the HTML to record that there are no new code changes.\n- Do not fetch or check out another revision to replace the supplied snapshot.",
         material.base.as_deref().unwrap_or("initial PR base"), material.head.as_deref().unwrap_or("work item")
