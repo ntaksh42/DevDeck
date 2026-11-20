@@ -11,10 +11,8 @@ import {
 import {
   Bell,
   BookOpen,
-  Bot,
   GitBranch,
   GitPullRequest,
-  Inbox,
   Layers,
   ListChecks,
   Settings,
@@ -27,6 +25,7 @@ import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/n
 import { isEditableTarget } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { NavButton, NavSection, NavSubGroup, NavSubItem } from "@/components/Nav";
+import { SidebarPinnedNav } from "./SidebarPinnedNav";
 import type { WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
 import type { View, NavSectionId } from "./types";
 import { DEFAULT_SIDEBAR_WIDTH } from "./types";
@@ -403,23 +402,12 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         className="flex flex-1 flex-col p-2"
         onKeyDown={handleNavKeyDown}
       >
-        <div className="mb-1">
-          <NavButton
-            active={activeView === "inbox"}
-            disabled={organizationsLength === 0}
-            icon={<Inbox className="h-4 w-4" aria-hidden="true" />}
-            label="Inbox"
-            badge={inboxBadge}
-            onClick={() => onNavigate("inbox")}
-          />
-          <NavButton
-            active={activeView === "autoQueue"}
-            disabled={organizationsLength === 0}
-            icon={<Bot className="h-4 w-4" aria-hidden="true" />}
-            label="Agent Work"
-            onClick={() => onNavigate("autoQueue")}
-          />
-        </div>
+        <SidebarPinnedNav
+          activeView={activeView}
+          disabled={organizationsLength === 0}
+          inboxBadge={inboxBadge}
+          onNavigate={onNavigate}
+        />
         <div className="space-y-1">
           {navOrder
             .filter(

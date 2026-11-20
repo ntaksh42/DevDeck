@@ -24,6 +24,7 @@ const MANAGED: &str =
 /// Places or refreshes the skill for every installed agent. Best effort: a
 /// folder that cannot take it must not block starting the app.
 pub(crate) fn ensure_skills(notes_root: &Path) {
+    super::review_skill::ensure_review_skill(notes_root);
     for skills_dir in skill_dirs() {
         if let Err(err) = ensure_skill(&skills_dir, notes_root) {
             tracing::warn!(dir = %skills_dir.display(), error = %err, "could not place agent notes skill");

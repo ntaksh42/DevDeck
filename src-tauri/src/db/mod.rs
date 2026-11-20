@@ -8,6 +8,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 
 mod action_inbox;
+mod home_bot;
 mod inbox_insight;
 mod inbox_threads;
 mod merge_readiness;
@@ -63,7 +64,7 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 31;
+pub(crate) const SCHEMA_VERSION: i64 = 33;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

@@ -57,6 +57,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
     combo("gotoWorkItemViews"),
     combo("gotoNotifications"),
     combo("gotoInbox"),
+    combo("gotoHome"),
     combo("gotoSettings"),
   ].join("/");
 

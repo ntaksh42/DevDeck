@@ -15,6 +15,7 @@
 mod clone;
 mod context;
 mod diffs;
+pub(crate) mod material;
 pub(crate) mod pipeline;
 pub(crate) mod queue;
 mod runner;

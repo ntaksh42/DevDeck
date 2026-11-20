@@ -61,7 +61,15 @@ fn render(target: NoteTarget, notes_root: &Path) -> String {
     // free-standing request has no result HTML.
     let result_format = match target {
         NoteTarget::Ask => String::new(),
-        _ => format!("\n{}", include_str!("result_format.md")),
+        _ => format!(
+            "\n{}",
+            include_str!("result_format.md").replace(
+                "{pr_review_skill}",
+                &super::review_skill::skill_path(notes_root)
+                    .display()
+                    .to_string()
+            )
+        ),
     };
     format!(
         "このフォルダの Note ({kind}): `{}\\{}-{{番号}}\\*.md`\n\n{}{result_format}",

@@ -16,22 +16,22 @@ const MAX_BYTES: usize = 480_000;
 /// same words may appear inside a diff.
 pub(super) const TRUNCATED: &str = "[Context truncated: remaining metadata was omitted.]";
 
-pub(super) fn note_body(target: NoteTarget, result_folder: &str) -> String {
-    let (what, folder, approach): (_, _, &[&str]) = match target {
+/// The review criteria and PR layout live in the user's `devdeck-pr-review`
+/// skill (`review_skill`, an absolute path), so they can be tuned without a build.
+pub(super) fn note_body(target: NoteTarget, result_folder: &str, review_skill: &str) -> String {
+    let skill_line = format!(
+        "レビューの観点・変更の種類 (機能追加 / バグ修正) に応じた図・章立ては、devdeck-pr-review スキル (`{review_skill}`) を最初に読んで従う。確信が持てない指摘は `unverified` に分ける。"
+    );
+    let (what, folder, approach): (_, _, Vec<&str>) = match target {
         NoteTarget::PullRequest => (
             "この PR をレビュー",
             "Review result folder",
-            &[
-                "レビューの観点 (優先順): 1 正しさ (バグ・境界条件・エラー処理・並行性)、2 セキュリティ (入力検証・認可・秘密情報)、3 テスト (変更に見合うテストがあるか)、4 既存コードや規約との整合、5 保守性。",
-                "指摘の対象は差分の中に限る。周辺コードは、呼び出し元や前提の確認のために手元のクローンで読んでよい。",
-                "実際にそうなると確かめられた指摘だけを `Must` / `Should` にする。確信が持てないものは `unverified` に分ける。",
-                "好みや些末な書式は `Nit` に留め、指摘を水増ししない。問題が見つからなければ、見つからなかったと根拠つきで書く。",
-            ],
+            vec![skill_line.as_str()],
         ),
         _ => (
             "この Work Item を調査",
             "Work item result folder",
-            &[
+            vec![
                 "調査の進め方: 再現条件と期待・実際を資料から整理し、関係するコードを手元のクローンで探して原因の候補を挙げる。",
                 "事実 (コードやコメントで確かめたこと) と推測は分ける。推測は `unverified` にする。",
                 "手元にコードが無い、または該当箇所が見つからないときは、「コード未確認」と明記し、原因を断定しない。",

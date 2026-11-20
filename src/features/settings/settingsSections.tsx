@@ -19,6 +19,7 @@ import { NotificationRulesSettings } from './NotificationRulesSettings';
 import { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
 import { WorkItemResultFolderSettings } from './WorkItemResultFolderSettings';
 import { AgentCommandSettings } from './AgentCommandSettings';
+import { HomeBotSettingsPanel } from './HomeBotSettings';
 import { ReviewStaleThresholdSettings, WorkItemStaleThresholdSettings } from './StaleThresholdSettings';
 import { ShowWindowHotkeySettings } from './ShowWindowHotkeySettings';
 import { KeyboardShortcutSettings } from './KeyboardShortcutSettings';
@@ -125,6 +126,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Agent command",
         keywords: "agent notes run claude codex shell ai",
         render: () => <AgentCommandSettings />,
+      },
+      {
+        id: "home-bot",
+        title: "Home Bot",
+        keywords: "home look around suggestions orchestrator chat claude codex bot",
+        render: () => <HomeBotSettingsPanel />,
       },
       {
         id: "quick-pipelines",
