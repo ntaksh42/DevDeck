@@ -16,8 +16,9 @@ async function expectRowsCoverViewportBeforePaint(grid: Locator) {
     const gaps: { top: number; bottom: number; scrollTop: number }[] = [];
     let samples = 0;
     const measure = () => {
+      // Group headers are a wrapper holding a drag handle and the toggle button.
       const rows = Array.from(body.children).filter((node) =>
-        node.matches('[role="row"], button[aria-expanded]'),
+        node.matches('[role="row"], button[aria-expanded], :has(> button[aria-expanded])'),
       );
       const bounds = scroller.getBoundingClientRect();
       const top = rows[0].getBoundingClientRect().top
