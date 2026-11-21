@@ -6,6 +6,7 @@ import { focusPrimaryGrid } from "@/lib/utils";
 import { bindFramePaneFocus } from "@/lib/paneFocus";
 import { openExternalUrl } from "@/lib/openExternal";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
+import { handleResultLinkClick, prepareResultLinks, RESULT_COMMENT_CSS, type CommentPoster } from "./resultComment";
 import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
 // Renders the investigation result in a script-less sandboxed iframe and layers
@@ -52,12 +53,15 @@ type Props = {
   onComment: (request: CommentRequest) => void;
   onRevealNote: (id: string) => void;
   onOpenNote: (id: string) => void;
+  /** Posts a finding link's comment to the pull request. Without it, such links just open. */
+  commentPoster?: CommentPoster;
 };
 
 export function ResultFrame({
   html, title, frameRef, frame, onFrameLoad, anchors, activeId, pendingRange,
-  onComment, onRevealNote, onOpenNote,
+  onComment, onRevealNote, onOpenNote, commentPoster,
 }: Props) {
+  const commentPosterRef = useLatestRef(commentPoster);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [blockMode, setBlockMode] = useState(false);
   const [blockIdx, setBlockIdx] = useState(0);
@@ -163,17 +167,21 @@ export function ResultFrame({
     const doc = frameRef.current?.contentDocument;
     if (doc?.head) {
       const style = doc.createElement("style");
-      style.textContent = HIGHLIGHT_CSS;
+      style.textContent = HIGHLIGHT_CSS + RESULT_COMMENT_CSS;
       doc.head.appendChild(style);
     }
     // The sandbox blocks navigation, so web links open in the user's browser.
+    // A finding link with a comment posts it on that line first (once).
     doc?.addEventListener("click", (event) => {
       const link = (event.target as Element | null)?.closest?.("a[href]");
       const href = link?.getAttribute("href") ?? "";
-      if (!/^https?:\/\//i.test(href)) return;
+      if (!link || !/^https?:\/\//i.test(href)) return;
       event.preventDefault();
-      void openExternalUrl(href).catch(() => undefined);
+      void handleResultLinkClick(link, href, commentPosterRef.current, (url) => {
+        void openExternalUrl(url).catch(() => undefined);
+      });
     });
+    if (doc) prepareResultLinks(doc, commentPosterRef.current);
     onFrameLoad();
   }
 

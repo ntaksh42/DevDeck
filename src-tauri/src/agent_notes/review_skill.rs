@@ -99,8 +99,8 @@ mod tests {
         place(&path, None).unwrap();
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.starts_with("---\nname: devdeck-pr-review"));
-        assert!(text.contains("バグの起きる仕組み"));
-        assert!(text.contains("追加された機能"));
+        assert!(text.contains("ポイントの図"));
+        assert!(text.contains("data-ado-comment"));
         fs::write(&path, "my own").unwrap();
         place(&path, None).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "my own");
