@@ -24,6 +24,7 @@ type SelectionStateInput = {
   setReturnedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
   setUpdatedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
   resultKeysSignature: string;
+  hasGroupReorderFocus?: () => boolean;
   organizationId: string;
   selectRequest: MyReviewsSelectRequest | null | undefined;
   onSelectRequestHandled: (() => void) | undefined;
@@ -41,6 +42,7 @@ export function useMyReviewsSelectionState({
   setReturnedKeys,
   setUpdatedKeys,
   resultKeysSignature,
+  hasGroupReorderFocus,
   selectRequest,
   onSelectRequestHandled,
   onClearForSelectRequest,
@@ -195,6 +197,7 @@ export function useMyReviewsSelectionState({
       containerRef,
       restoreSignature: `${resultKeysSignature}#${selectedIndex}`,
       restoreFocus: () => {
+        if (hasGroupReorderFocus?.()) return true;
         scrollPrIntoView(selectedIndex);
         const node = rowRefs.current[selectedIndex];
         // Rows are stored by absolute index and the array is never shortened,

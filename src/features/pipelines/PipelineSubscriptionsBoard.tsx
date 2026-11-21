@@ -1,5 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
+import { ChevronDown, ChevronRight, GripVertical, Loader2, RefreshCw, X } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
@@ -29,6 +29,7 @@ import {
   type PipelineSubscription,
 } from "./pipelineSubscriptionsStorage";
 import { useElementWidth } from "./useElementWidth";
+import { usePipelineManualOrder } from "./usePipelineManualOrder";
 
 const ACTIVE_REFRESH_INTERVAL_MS = 15_000;
 const IDLE_REFRESH_INTERVAL_MS = 60_000;
@@ -81,6 +82,7 @@ export function PipelineSubscriptionsBoard({
   const [sort, setSort] = useState<BoardSort>(() => loadBoardSort());
   const [rootEl, setRootEl] = useState<HTMLElement | null>(null);
   const width = useElementWidth(rootEl);
+  const { manualOrder, pipelineDrag, reorderPipeline } = usePipelineManualOrder(subscriptions, rootEl);
   // Width 0 means "not measured yet" (first paint, no layout engine): show the
   // history cells but keep the compact columns.
   const showSpark = width === 0 || width >= SPARK_MIN_WIDTH;
@@ -163,9 +165,10 @@ export function PipelineSubscriptionsBoard({
   const runningCount = allRows.filter(isRunningRow).length;
   const failedCount = allRows.filter(isFailedRow).length;
   const boardRows = useMemo(
-    () => filterBoardRows(sortBoardRows(allRows, sort), statusFilter),
-    [allRows, sort, statusFilter],
+    () => filterBoardRows(sortBoardRows(allRows, sort, manualOrder), statusFilter),
+    [allRows, sort, manualOrder, statusFilter],
   );
+  const canReorder = sort === "manual" && boardRows.length > 1;
 
   const defaultRun = (boardRows.find(isRunningRow) ?? boardRows.find((row) => row.latest))?.latest;
   const defaultOrganizationId = defaultRun?.organizationId;
@@ -210,6 +213,14 @@ export function PipelineSubscriptionsBoard({
   const rovingKey = boardRows.some(({ key }) => key === activeKey) ? activeKey : boardRows[0]?.key;
 
   function onHeaderKeyDown(event: KeyboardEvent<HTMLButtonElement>, sub: (typeof boardRows)[number]["sub"]) {
+    if (canReorder && event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
+      const target = boardRows[boardRows.findIndex((row) => row.key === key) + (event.key === "ArrowUp" ? -1 : 1)];
+      if (target) reorderPipeline(key, target.key, true);
+      return;
+    }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const headers = Array.from(rootEl?.querySelectorAll<HTMLElement>("[data-board-header]") ?? []);
     const current = headers.indexOf(event.currentTarget);
@@ -285,6 +296,7 @@ export function PipelineSubscriptionsBoard({
         <option value="status">Sort: Status</option>
         <option value="name">Sort: Name</option>
         <option value="lastRun">Sort: Last run</option>
+        <option value="manual">Sort: Manual</option>
       </select>
       <button
         type="button"
@@ -316,24 +328,29 @@ export function PipelineSubscriptionsBoard({
         ) : null}
         {boardRows.map(({ sub, key, query, runs, latest, visual, isRunning }) => {
           const isOpen = expanded.has(key);
+          const drag = canReorder ? pipelineDrag(key) : undefined;
           return (
             <div key={key} className="border-b border-border last:border-b-0">
               <div
-                className={`flex items-center gap-2 border-l-2 px-2 py-1.5 hover:bg-muted/40 ${
+                {...drag?.cell}
+                className={`flex items-center gap-2 border-l-2 px-2 py-1.5 hover:bg-muted/40 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-inset data-[drop-target=true]:ring-primary ${
                   isRunning ? "border-l-info bg-info/10" : "border-l-transparent"
                 }`}
               >
                 <button
+                  {...drag?.handle}
                   type="button"
                   onClick={() => toggle(key)}
                   onFocus={() => setActiveKey(key)}
                   onKeyDown={(event) => onHeaderKeyDown(event, sub)}
                   tabIndex={key === rovingKey ? 0 : -1}
-                  data-board-header=""
+                  data-board-header={key}
                   data-grid-focus-fallback={key === rovingKey ? "true" : undefined}
                   aria-expanded={isOpen}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  aria-keyshortcuts={canReorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
+                  className={`flex min-w-0 flex-1 items-center gap-2 text-left ${drag ? "cursor-grab" : ""}`}
                 >
+                  {drag ? <span title="Drag to reorder or press Alt + Up / Down"><GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /></span> : null}
                   {isOpen ? (
                     <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   ) : (

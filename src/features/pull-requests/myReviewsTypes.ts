@@ -119,6 +119,7 @@ export function isFilterableColumn(column: SortKey): column is FilterableColumn 
 
 // ── View state ──────────────────────────────────────────────────────────────
 export type MyReviewsGridViewState = {
+  groupOrder: Record<ReviewGroupBy, string[]>;
   collapsedSections: Set<ReviewSection>;
   /** Collapsed repository groups (repositoryId) while grouping by repository. */
   collapsedRepos: Set<string>;

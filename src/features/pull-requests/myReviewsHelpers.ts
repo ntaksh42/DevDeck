@@ -108,8 +108,15 @@ export function compareReviewPrs(
   }
 }
 
+function readGroupOrder(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((key): key is string => typeof key === 'string'))]
+    : [];
+}
+
 export function defaultMyReviewsGridViewState(): MyReviewsGridViewState {
   return {
+    groupOrder: { status: [], repository: [] },
     collapsedSections: new Set(DEFAULT_COLLAPSED_SECTIONS),
     collapsedRepos: new Set(),
     columnFilters: {},
@@ -163,6 +170,10 @@ export function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       }
     }
     return {
+      groupOrder: {
+        status: readGroupOrder(parsed.groupOrder?.status),
+        repository: readGroupOrder(parsed.groupOrder?.repository),
+      },
       collapsedSections,
       collapsedRepos: Array.isArray(parsed.collapsedRepos)
         ? new Set(

@@ -202,15 +202,15 @@ describe("App — Reviews", () => {
 
     // Section headers always show; "Needs your review" is expanded by default
     // while the other sections start collapsed (their rows hidden).
-    expect(await main.findByRole("button", { name: /Needs your review/ })).toBeTruthy();
+    expect(await main.findByRole("button", { name: /^Needs your review/ })).toBeTruthy();
     expect(main.getByText("Needs review")).toBeTruthy();
-    expect(main.getByRole("button", { name: /Waiting for author/ })).toBeTruthy();
-    expect(main.getByRole("button", { name: /Rejected by you/ })).toBeTruthy();
+    expect(main.getByRole("button", { name: /^Waiting for author/ })).toBeTruthy();
+    expect(main.getByRole("button", { name: /^Rejected by you/ })).toBeTruthy();
     expect(main.queryByText("Waiting on author")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
 
     // Expanding a section reveals its rows.
-    fireEvent.click(main.getByRole("button", { name: /Waiting for author/ }));
+    fireEvent.click(main.getByRole("button", { name: /^Waiting for author/ }));
     expect(await main.findByText("Waiting on author")).toBeTruthy();
     expect(main.getByText("Conflicts")).toBeTruthy();
 

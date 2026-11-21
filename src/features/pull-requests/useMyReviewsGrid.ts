@@ -56,6 +56,7 @@ import {
   type SortState,
 } from './myReviewsTypes';
 import { buildReviewRows, compareReviewGroups, reviewGroupKeyOf } from './myReviewsGrouping';
+import { useReviewGroupReorder } from './useReviewGroupReorder';
 import { useMyReviewsSelectionState } from './useMyReviewsSelectionState';
 
 export function useMyReviewsGrid({
@@ -78,6 +79,7 @@ export function useMyReviewsGrid({
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
     initialViewState.collapsedSections,
   );
+  const [groupOrder, setGroupOrder] = useState(initialViewState.groupOrder);
   const [groupBy, setGroupBy] = useState<ReviewGroupBy>(initialViewState.groupBy);
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
     initialViewState.collapsedRepos,
@@ -241,19 +243,23 @@ export function useMyReviewsGrid({
     [baseFiltered, columnFilters],
   );
 
+  const groupRanks = useMemo(
+    () => new Map(groupOrder[groupBy].map((key, index) => [key, index])),
+    [groupOrder, groupBy],
+  );
   const sortedPrs = useMemo(
     () =>
       filtered
         .map((pr, index) => ({ pr, index }))
         .sort((a, b) => {
-          const groupDelta = compareReviewGroups(a.pr, b.pr, groupBy);
+          const groupDelta = compareReviewGroups(a.pr, b.pr, groupBy, groupRanks);
           if (groupDelta !== 0) return groupDelta;
           const result = compareReviewPrs(a.pr, b.pr, sort.key);
           const directed = sort.direction === 'asc' ? result : -result;
           return directed || a.index - b.index;
         })
         .map(({ pr }) => pr),
-    [filtered, sort, groupBy],
+    [filtered, sort, groupBy, groupRanks],
   );
 
   const { reviewRows, prFlatIndexes } = useMemo(
@@ -263,7 +269,7 @@ export function useMyReviewsGrid({
 
   // Virtualizer — must come after reviewRows is computed.
   const {
-    scrollerRef,
+    scrollerRef, scrollerEl,
     firstRow: firstVirtualRow,
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
@@ -277,6 +283,9 @@ export function useMyReviewsGrid({
   });
 
   const virtualRows = reviewRows.slice(firstVirtualRow, lastVirtualRow);
+  const { groupReorderProps, hasGroupReorderFocus } = useReviewGroupReorder({
+    allPrs, groupBy, setGroupOrder, reviewRows, scrollerEl, scrollRowIntoView,
+  });
 
   const visibleSortedIndexes = useMemo(() => {
     const result: number[] = [];
@@ -306,6 +315,7 @@ export function useMyReviewsGrid({
     setReturnedKeys,
     setUpdatedKeys,
     resultKeysSignature,
+    hasGroupReorderFocus,
     organizationId,
     selectRequest,
     onSelectRequestHandled,
@@ -323,8 +333,7 @@ export function useMyReviewsGrid({
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
     storeMyReviewsGridViewState({
-      collapsedSections,
-      collapsedRepos,
+      groupOrder, collapsedSections, collapsedRepos,
       columnFilters,
       groupBy,
       organizationId,
@@ -332,7 +341,7 @@ export function useMyReviewsGrid({
       sort,
       visibleColumns,
     });
-  }, [collapsedSections, collapsedRepos, columnFilters, groupBy, organizationId, showDrafts, sort, visibleColumns]);
+  }, [groupOrder, collapsedSections, collapsedRepos, columnFilters, groupBy, organizationId, showDrafts, sort, visibleColumns]);
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -475,7 +484,7 @@ export function useMyReviewsGrid({
     // presentation
     visiblePrs, noVoteCount, activeFilterCount, isFiltered,
     // handlers
-    toggleSection, voteSelected, applySnooze, openFilter,
+    groupReorderProps, toggleSection, voteSelected, applySnooze, openFilter,
     toggleFilter, clearColumnFilter, uncheckAllColumnFilter, clearAllFilters, applySort,
     // selection (spread from sub-hook)
     ...selection,

@@ -1,5 +1,6 @@
-import { Loader2, Pin, TriangleAlert } from 'lucide-react';
+import { GripVertical, Loader2, Pin, TriangleAlert } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
+import type { ColumnDragProps } from '@/lib/columnDrag';
 import { viewCountBaseline, type WorkItemQueryView } from './workItemViewsStorage';
 import { viewCountHistory } from './workItemViewsDisplayStorage';
 import { ViewCountSparkline } from './ViewCountSparkline';
@@ -51,7 +52,9 @@ function selectionClasses(selected: boolean, alerting: boolean): string {
     : "border-border bg-card hover:bg-muted/60";
 }
 
-const OPTION_KEY_SHORTCUTS = "ArrowUp ArrowDown ArrowLeft ArrowRight Home End Delete N E R";
+const OPTION_KEY_SHORTCUTS = "ArrowUp ArrowDown ArrowLeft ArrowRight Home End Delete N E R Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown";
+const REORDER_CLASSES = "cursor-grab active:cursor-grabbing data-[drop-target=true]:border-primary data-[drop-target=true]:bg-primary/15";
+const REORDER_HINT = "Drag to reorder or press Shift + an arrow key";
 
 type ViewItemProps = {
   view: WorkItemQueryView;
@@ -61,6 +64,7 @@ type ViewItemProps = {
   buttonRef: (element: HTMLButtonElement | null) => void;
   onSelect: () => void;
   onEdit: () => void;
+  drag?: ColumnDragProps;
 };
 
 export function ViewCard({
@@ -71,9 +75,12 @@ export function ViewCard({
   buttonRef,
   onSelect,
   onEdit,
+  drag,
 }: ViewItemProps) {
   return (
     <button
+      {...drag?.handle}
+      {...drag?.cell}
       ref={buttonRef}
       type="button"
       role="option"
@@ -81,7 +88,7 @@ export function ViewCard({
       aria-keyshortcuts={OPTION_KEY_SHORTCUTS}
       onClick={onSelect}
       onDoubleClick={onEdit}
-      className={`rounded-md border px-2.5 py-1.5 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${selectionClasses(
+      className={`rounded-md border px-2.5 py-1.5 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${drag ? REORDER_CLASSES : ""} ${selectionClasses(
         selected,
         stats.alerting,
       )}`}
@@ -91,6 +98,7 @@ export function ViewCard({
           {view.name}
         </span>
         <span className="flex shrink-0 items-center gap-1">
+          {drag ? <span title={REORDER_HINT}><GripVertical className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /></span> : null}
           {view.pinned ? <Pin className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> : null}
           {query?.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -146,6 +154,7 @@ export function ViewCompactRow({
   buttonRef,
   onSelect,
   onEdit,
+  drag,
   chip = false,
 }: ViewItemProps & { chip?: boolean }) {
   const metaTitle = [
@@ -159,6 +168,8 @@ export function ViewCompactRow({
 
   return (
     <button
+      {...drag?.handle}
+      {...drag?.cell}
       ref={buttonRef}
       type="button"
       role="option"
@@ -171,11 +182,12 @@ export function ViewCompactRow({
         chip
           ? "h-8 shrink-0 gap-1.5 rounded-md border px-2.5"
           : "w-fit max-w-full gap-2 justify-self-start rounded border px-2 py-1"
-      } ${selectionClasses(
+      } ${drag ? REORDER_CLASSES : ""} ${selectionClasses(
         selected,
         stats.alerting,
       )}`}
     >
+      {drag ? <span title={REORDER_HINT}><GripVertical className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /></span> : null}
       <span
         className={`flex shrink-0 items-center justify-center ${
           chip && !query?.isFetching && !stats.alerting && !view.pinned ? "hidden" : "h-3.5 w-3.5"

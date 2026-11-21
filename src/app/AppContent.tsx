@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type Dispatch, type SetStateAction } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
@@ -36,7 +36,8 @@ export interface AppContentProps {
   onMyReviewsSelectHandled: () => void;
   onSelectedViewChange: (id: string | null) => void;
   onSelectedViewRequestHandled: () => void;
-  onWorkItemNavViewsChange: (views: WorkItemQueryView[]) => void;
+  workItemNavViews: WorkItemQueryView[];
+  setWorkItemNavViews: Dispatch<SetStateAction<WorkItemQueryView[]>>;
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
   onOpenView: (view: "pipelines" | "settings" | "myReviews" | "myWorkItems") => void;
@@ -55,7 +56,8 @@ export function AppContent({
   onMyReviewsSelectHandled,
   onSelectedViewChange,
   onSelectedViewRequestHandled,
-  onWorkItemNavViewsChange,
+  workItemNavViews,
+  setWorkItemNavViews,
   onOpenSettings,
   onOpenPullRequest,
   onOpenView,
@@ -104,7 +106,8 @@ export function AppContent({
             selectedViewRequestId={selectedWorkItemViewRequestId}
             onSelectedViewChange={onSelectedViewChange}
             onSelectedViewRequestHandled={onSelectedViewRequestHandled}
-            onViewsChange={onWorkItemNavViewsChange}
+            views={workItemNavViews}
+            setViews={setWorkItemNavViews}
           />
         ) : activeView === "pipelines" ? (
           <PipelinesView />

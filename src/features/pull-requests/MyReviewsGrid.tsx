@@ -365,6 +365,7 @@ export function MyReviewsGrid({
                             preview={row.preview}
                             section={g.groupBy === 'status' ? (row.key as ReviewSection) : undefined}
                             onToggle={() => g.toggleSection(row.key)}
+                            {...g.groupReorderProps(row.key)}
                           />
                         );
                       }

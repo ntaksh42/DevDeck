@@ -33,7 +33,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { ToastHost } from "@/components/ToastHost";
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
 import {
-  loadWorkItemQueryViews,
+  loadWorkItemQueryViews, saveWorkItemQueryViews,
   type WorkItemQueryView,
 } from "@/features/work-items/workItemViewsStorage";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
@@ -92,9 +92,8 @@ function AppShell() {
   const paletteReturnRef = useRef<HTMLElement | null>(null);
   const helpReturnRef = useRef<HTMLElement | null>(null);
   const sidebarRef = useRef<AppSidebarHandle | null>(null);
-  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
-    loadWorkItemQueryViews(),
-  );
+  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(loadWorkItemQueryViews);
+  useEffect(() => saveWorkItemQueryViews(workItemNavViews), [workItemNavViews]);
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
@@ -415,7 +414,7 @@ function AppShell() {
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
         setSidebarWidth={setSidebarWidth}
-        workItemNavViews={workItemNavViews}
+        workItemNavViews={workItemNavViews} setWorkItemNavViews={setWorkItemNavViews}
         activeWorkItemViewId={activeWorkItemViewId}
         myReviewsBadge={myReviewsBadge}
         myWorkItemsBadge={myWorkItemsBadge}
@@ -460,7 +459,7 @@ function AppShell() {
           onMyReviewsSelectHandled={() => setMyReviewsSelectRequest(null)}
           onSelectedViewChange={setActiveWorkItemViewId}
           onSelectedViewRequestHandled={() => setSelectedWorkItemViewRequestId(null)}
-          onWorkItemNavViewsChange={setWorkItemNavViews}
+          workItemNavViews={workItemNavViews} setWorkItemNavViews={setWorkItemNavViews}
           onOpenSettings={() => setView("settings")}
           onOpenPullRequest={openPullRequestSearch}
           onOpenView={setView}
