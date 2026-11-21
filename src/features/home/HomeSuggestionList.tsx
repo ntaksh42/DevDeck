@@ -22,9 +22,13 @@ export const HomeSuggestionList = forwardRef<
     showAll: boolean;
     onShowAll: () => void;
     onSelect: (id: string) => void;
+    /** Puts the selected suggestion's ask in the Orchestrator input (Q). */
+    onStart: () => void;
+    /** Dismisses the selected suggestion (E). */
+    onDismiss: () => void;
     onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   }
->(function HomeSuggestionList({ brief, briefMeta, suggestions, selectedId, showAll, onShowAll, onSelect, onKeyDown }, ref) {
+>(function HomeSuggestionList({ brief, briefMeta, suggestions, selectedId, showAll, onShowAll, onSelect, onStart, onDismiss, onKeyDown }, ref) {
   const visible = showAll ? suggestions : suggestions.slice(0, HOME_SUGGESTIONS_SHOWN);
   const hidden = suggestions.length - visible.length;
   return (
@@ -77,6 +81,34 @@ export const HomeSuggestionList = forwardRef<
                   <span className="truncate">{suggestion.title}</span>
                 </div>
                 <div className={`text-xs text-muted-foreground ${selected ? "" : "truncate"}`}>{suggestion.why}</div>
+                {selected ? (
+                  // Mouse path for Q / E; the keys stay the keyboard path, so the buttons skip the tab order.
+                  <div className="mt-1 flex items-center gap-1.5 pb-0.5">
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onStart();
+                      }}
+                      title="Put this ask in the Orchestrator input; edit it, then press Enter to send"
+                      className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      Ask Orchestrator <kbd className="rounded bg-white/20 px-1 font-sans text-2xs">Q</kbd>
+                    </button>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDismiss();
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
+                    >
+                      Dismiss <kbd className="rounded bg-muted px-1 font-sans text-2xs">E</kbd>
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <span className="text-xs tabular-nums text-link">{suggestion.targetLabel ?? ""}</span>
             </div>

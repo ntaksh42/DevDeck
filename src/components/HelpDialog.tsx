@@ -245,7 +245,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
 
           <p {...sectionProps("home")}>Home</p>
           <div className={row}><span>Move suggestion</span><kbd className={kbd}>↑ ↓</kbd></div>
-          <div className={row}><span>Start (puts the ask in the chat input) / dismiss</span><kbd className={kbd}>Q / E</kbd></div>
+          <div className={row}><span>Ask Orchestrator (puts the ask in the chat input; Enter sends) / dismiss</span><kbd className={kbd}>Q / E</kbd></div>
           <div className={row}><span>Look now</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Chat input / Workers / new chat</span><kbd className={kbd}>M / W / N</kbd></div>
           <div className={row}><span>Open the target in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>

@@ -215,6 +215,11 @@ export function HomeView() {
           setSelectedId(id);
           focusList();
         }}
+        onStart={() => void start()}
+        onDismiss={() => {
+          dismissSelected();
+          focusList();
+        }}
         onKeyDown={onListKeyDown}
       />
       <ListStatusBar
@@ -225,7 +230,7 @@ export function HomeView() {
         ]}
         helpSection="home"
       >
-        <span className="text-2xs text-muted-foreground">Q start ・ E dismiss ・ L look</span>
+        <span className="text-2xs text-muted-foreground">Q ask ・ E dismiss ・ L look</span>
       </ListStatusBar>
     </div>
   );
