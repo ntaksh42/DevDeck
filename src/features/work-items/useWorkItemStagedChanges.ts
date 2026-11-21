@@ -397,6 +397,8 @@ export function useWorkItemStagedChanges({
     setApplyError(null);
     setUndoState(null);
     updateFieldsMutation.reset();
+    deleteCommentMutation.reset();
+    editCommentMutation.reset();
     if (undoTimerRef.current !== null) {
       window.clearTimeout(undoTimerRef.current);
       undoTimerRef.current = null;

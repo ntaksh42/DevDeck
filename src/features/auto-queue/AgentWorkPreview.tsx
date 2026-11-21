@@ -93,7 +93,7 @@ export function AgentWorkResult({ entry }: { entry: AgentWorkEntry | null }) {
     <PipelineResult askId={entry.askId} status={entry.status} />
   ) : <PreviewEmptyState message="No response yet." />;
   return entry.target === "pull-request" ? (
-    <ResultTab selectedPr={{ pullRequestId: entry.id }} />
+    <ResultTab selectedPr={{ organizationId: entry.organizationId, pullRequestId: entry.id }} />
   ) : (
     <WorkItemResultSection workItemId={entry.id} />
   );

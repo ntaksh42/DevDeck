@@ -107,10 +107,7 @@ async fn submit_pull_request_vote_preserves_required_reviewer() {
             "isRequired": true
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "user-42",
-            "displayName": "Me",
-            "vote": 10,
-            "isRequired": true
+            "id": "user-42", "displayName": "Me", "vote": 10, "isRequired": true
         })))
         .mount(&server)
         .await;
@@ -131,19 +128,18 @@ async fn set_pull_request_reviewer_required_puts_is_required() {
         .and(path(
             "/project-1/_apis/git/repositories/repo-1/pullRequests/42/reviewers/user-42",
         ))
-        .and(body_partial_json(serde_json::json!({ "isRequired": true })))
+        .and(body_partial_json(
+            serde_json::json!({ "isRequired": true, "vote": 10 }),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "user-42",
-            "displayName": "Me",
-            "vote": 0,
-            "isRequired": true
+            "id": "user-42", "displayName": "Me", "vote": 10, "isRequired": true
         })))
         .mount(&server)
         .await;
 
     let reviewer = test_client(&server)
         .await
-        .set_pull_request_reviewer_required("project-1", "repo-1", 42, "user-42", true)
+        .set_pull_request_reviewer_required("project-1", "repo-1", 42, "user-42", true, Some(10))
         .await
         .unwrap();
     assert!(reviewer.is_required);

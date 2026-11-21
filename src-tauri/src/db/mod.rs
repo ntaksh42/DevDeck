@@ -10,6 +10,7 @@ use crate::error::Result;
 mod action_inbox;
 mod home_bot;
 mod inbox_insight;
+mod inbox_refs;
 mod inbox_threads;
 mod merge_readiness;
 mod migrate;
@@ -50,10 +51,13 @@ mod tests_reply_reminders;
 #[cfg(test)]
 mod tests_work_item_follows;
 #[cfg(test)]
+mod tests_work_item_search;
+#[cfg(test)]
 mod tests_work_items;
 
 pub use action_inbox::*;
 pub use inbox_insight::{InboxInsight, InsightEvidence, PR_INSIGHT_KINDS, WI_INSIGHT_KINDS};
+pub use inbox_refs::*;
 pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;

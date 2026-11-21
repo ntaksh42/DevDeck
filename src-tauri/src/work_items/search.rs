@@ -37,13 +37,17 @@ impl WorkItemService {
                 None,
             )?
         } else {
-            let mut results = self.db.search_work_items_fts(&organization.id, &query)?;
-            results.retain(|item| {
-                filter_matches(&project_ids, Some(item.project_id.as_str()))
-                    && filter_matches(&states, item.state.as_deref())
-                    && filter_matches(&work_item_types, item.work_item_type.as_deref())
-            });
-            results
+            // Filters run in SQL before the result cap, so a match is not lost
+            // behind 200 unrelated hits.
+            self.db.search_work_items_text(
+                &organization.id,
+                &query,
+                WorkItemFilters {
+                    project_ids: project_ids.as_deref(),
+                    states: states.as_deref(),
+                    work_item_types: work_item_types.as_deref(),
+                },
+            )?
         };
 
         Ok(cached.into_iter().map(cached_wi_to_summary).collect())

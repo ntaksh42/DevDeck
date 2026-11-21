@@ -286,6 +286,68 @@ mod tests {
         assert!(group_review_prs(&active, &reviewers, &groups(&[]), &[], "me").is_empty());
     }
 
+    #[tokio::test]
+    async fn a_failed_lookup_keeps_the_last_known_groups() {
+        use std::sync::Arc;
+
+        use azdo_client::PatProvider;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        use crate::db::OrganizationDraft;
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/identities"))
+            .respond_with(ResponseTemplate::new(400))
+            .mount(&server)
+            .await;
+        let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(url::Url::parse(&format!("{}/", server.uri())).unwrap());
+        let tf = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db
+            .upsert_organization(OrganizationDraft {
+                id: "contoso".into(),
+                name: "contoso".into(),
+                display_name: None,
+                base_url: "https://dev.azure.com/contoso".into(),
+                auth_provider: "pat".into(),
+                credential_key: "azdodeck:org:contoso:pat".into(),
+                authenticated_user_id: Some("me".into()),
+                authenticated_user_display_name: None,
+                authenticated_user_unique_name: None,
+                provider_kind: "azdo".into(),
+            })
+            .unwrap();
+
+        // Nothing known yet: group reviews cannot be resolved.
+        let lookup = member_group_ids(&db, &client, &org, "me").await;
+        assert!(lookup.ids.is_empty());
+        assert!(!lookup.known);
+        assert!(lookup.warning.unwrap().contains("could not be resolved"));
+
+        // Groups read an hour ago and now expired.
+        let expired = Instant::now()
+            .checked_sub(GROUP_TTL * 2)
+            .unwrap_or_else(Instant::now);
+        entries().lock().unwrap().insert(
+            (
+                crate::cache_epoch::current(),
+                db.cache_key(),
+                org.id.clone(),
+                "me".into(),
+            ),
+            (expired, vec!["team".into()]),
+        );
+        let lookup = member_group_ids(&db, &client, &org, "me").await;
+        assert_eq!(lookup.ids, groups(&["team"]));
+        assert!(lookup.known);
+        assert!(lookup.warning.unwrap().contains("previous result"));
+    }
+
     fn review_row(project: &str, id: i64, created: &str) -> CachedReviewPr {
         CachedReviewPr {
             project_id: project.into(),

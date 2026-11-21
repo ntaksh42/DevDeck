@@ -136,14 +136,13 @@ pub(crate) fn handled_check<'a>(
         if agent_notes::notes_dir(root, target, id).exists() {
             return true;
         }
-        let found = match target {
-            NoteTarget::PullRequest => {
-                review_folder.map(|folder| result_files::find_review_result_file(folder, id))
-            }
-            _ => {
-                work_item_folder.map(|folder| result_files::find_work_item_result_file(folder, id))
-            }
-        };
+        let found =
+            match target {
+                NoteTarget::PullRequest => review_folder
+                    .map(|folder| result_files::find_review_result_file(folder, id, None)),
+                _ => work_item_folder
+                    .map(|folder| result_files::find_work_item_result_file(folder, id)),
+            };
         found.is_none_or(|found| !matches!(found, Ok(None)))
     }
 }

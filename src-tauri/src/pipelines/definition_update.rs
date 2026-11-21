@@ -54,8 +54,14 @@ fn apply_variables(raw: &mut Value, variables: &[PipelineVariableUpdate]) -> Res
             next.insert((*name).to_string(), value.clone());
         }
     }
+    // Azure DevOps variable names are case-insensitive: `deployapikey` is the
+    // same variable as the secret `DeployApiKey` and must not replace it.
+    let secret_keys: HashSet<String> = secret_names
+        .iter()
+        .map(|name| name.to_ascii_lowercase())
+        .collect();
     for variable in variables {
-        if secret_names.contains(variable.name.as_str()) {
+        if secret_keys.contains(&variable.name.to_ascii_lowercase()) {
             return Err(AppError::InvalidInput(format!(
                 "cannot modify secret variable \"{}\"",
                 variable.name
@@ -167,6 +173,15 @@ mod tests {
 
         let err =
             apply_definition_update(&mut raw, &[variable("DeployApiKey", "leaked", false)], None)
+                .unwrap_err();
+        assert!(matches!(err, AppError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn apply_variables_rejects_a_secret_named_in_another_case() {
+        let mut raw = json!({ "variables": { "DeployApiKey": { "isSecret": true } } });
+        let err =
+            apply_definition_update(&mut raw, &[variable("deployapikey", "leaked", false)], None)
                 .unwrap_err();
         assert!(matches!(err, AppError::InvalidInput(_)));
     }

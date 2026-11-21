@@ -253,7 +253,8 @@ impl AdoClient {
     }
 
     /// Marks an existing reviewer as required or optional (PUT on the same
-    /// reviewers endpoint as voting).
+    /// reviewers endpoint as voting). The PUT replaces the reviewer entry, so a
+    /// vote the caller may set (its own) is passed in `keep_vote` to survive.
     pub async fn set_pull_request_reviewer_required(
         &self,
         project_id: &str,
@@ -261,11 +262,15 @@ impl AdoClient {
         pull_request_id: i64,
         reviewer_id: &str,
         is_required: bool,
+        keep_vote: Option<i32>,
     ) -> Result<IdentityRefWithVote> {
         let path = format!(
             "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/reviewers/{reviewer_id}"
         );
-        let body = json!({ "id": reviewer_id, "isRequired": is_required });
+        let mut body = json!({ "id": reviewer_id, "isRequired": is_required });
+        if let Some(vote) = keep_vote {
+            body["vote"] = json!(vote);
+        }
         self.put_json(&path, &[("api-version", "7.1-preview")], &body)
             .await
     }

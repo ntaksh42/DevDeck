@@ -248,6 +248,32 @@ async fn sync_work_items_runs_full_sync_when_interval_elapsed() {
     assert!(delta_sync_since(&db, &org).is_none());
 }
 
+/// A project that failed holds the delta mark back, so once it recovers the
+/// delta still covers what it missed, even though later syncs completed.
+#[tokio::test]
+async fn delta_sync_starts_from_the_mark_held_back_by_a_failed_project() {
+    let db_file = tempfile::NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(db_file.path().to_path_buf());
+    db.initialize().unwrap();
+    let org = db.upsert_organization(make_org_draft()).unwrap();
+
+    let now = Utc::now();
+    let held_back = now - chrono::Duration::hours(20);
+    for (scope, at) in [
+        (format!("work_items:{}", org.id), now),
+        (full_sync_scope(&org.id), now),
+        (delta_mark_scope(&org.id), held_back),
+    ] {
+        db.update_sync_state(&scope, &org.id, Some(&at.to_rfc3339()), 0, None, None)
+            .unwrap();
+    }
+
+    let expected = (held_back - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    assert_eq!(delta_sync_since(&db, &org), Some(expected));
+}
+
 #[tokio::test]
 async fn sync_work_items_batches_more_than_two_hundred_ids() {
     let server = MockServer::start().await;

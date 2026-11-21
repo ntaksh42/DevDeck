@@ -16,6 +16,7 @@ import {
   Rows3,
 } from 'lucide-react';
 import { type WorkItemQueryView, type WorkItemViewLayout } from './workItemViewsStorage';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import type { WorkItemViewsCardMode } from './workItemViewsDisplayStorage';
 import {
   ViewCard,
@@ -90,7 +91,8 @@ export function ViewsListPanel({
   onEditView,
   onKeyDown,
 }: ViewsListPanelProps) {
-  const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index]));
+  const organizationId = useActiveOrganizationId();
+  const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index], organizationId));
   const viewDrag = useColumnDrag(onReorderView);
 
   // In the one-row chip display the row scrolls sideways; keep the selected

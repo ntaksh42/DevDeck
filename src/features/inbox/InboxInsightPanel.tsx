@@ -24,7 +24,8 @@ export function InboxInsightPanel({
   /** Folding is per item: a different item starts folded again. */
   itemId: number;
   insight: InboxInsight | null;
-  onUseDraft: (text: string) => void;
+  /** Unset in read-only validation mode, where nothing can be posted. */
+  onUseDraft?: (text: string) => void;
   /** Set when notes can be written on request (summaries on, open comment item). */
   onGenerate?: () => void;
 }) {
@@ -91,7 +92,7 @@ export function InboxInsightPanel({
           >
             {expanded ? "▾" : "▸"} {detailsLabel}
           </button>
-          {insight.replyDraft ? (
+          {insight.replyDraft && onUseDraft ? (
             <button
               type="button"
               onClick={() => onUseDraft(insight.replyDraft ?? "")}

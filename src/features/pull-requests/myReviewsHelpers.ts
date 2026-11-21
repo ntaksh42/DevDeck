@@ -228,3 +228,16 @@ export function sectionPreview(prs: readonly ReviewPullRequestSummary[]): string
     .map((pr) => `#${pr.pullRequestId} ${pr.title}`)
     .join(' · ');
 }
+
+/**
+ * Dock panels render through portals, so keys typed in the preview, the linked
+ * work items or the Agent panel bubble up to the grid too. They are not the
+ * grid's: ↓ in a reply box, Esc in a select or `a` on a button there must not
+ * move the row, clear the filters or vote.
+ */
+export function isFromSidePanel(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    !!target.closest("[data-review-preview], [data-linked-work-items], [data-agent-panel]")
+  );
+}

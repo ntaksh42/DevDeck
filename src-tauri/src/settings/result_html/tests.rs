@@ -120,6 +120,7 @@ fn both_services_decode_shift_jis_and_return_large_file_path() {
     let review = service
         .review_result_preview(GetReviewResultPreviewInput {
             pull_request_id: 42,
+            repository_name: None,
         })
         .unwrap()
         .unwrap();
@@ -143,6 +144,7 @@ fn both_services_decode_shift_jis_and_return_large_file_path() {
     let review = service
         .review_result_preview(GetReviewResultPreviewInput {
             pull_request_id: 42,
+            repository_name: None,
         })
         .unwrap()
         .unwrap();

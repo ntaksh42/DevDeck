@@ -24,7 +24,7 @@ import { MemoReviewPrRow } from './MemoReviewPrRow';
 import { ReviewFilterBar } from './ReviewFilterBar';
 import { ReviewStatusBar } from './ReviewStatusBar';
 import { OverlapPopup } from './OverlapPopup';
-import { reviewTriageKey, reviewTriageSnapshot } from './myReviewsHelpers';
+import { isFromSidePanel, reviewTriageKey, reviewTriageSnapshot } from './myReviewsHelpers';
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
   isFilterableColumn,
@@ -87,6 +87,7 @@ export function MyReviewsGrid({
   });
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (isFromSidePanel(e.target)) return;
     const editable = isEditableTarget(e.target);
     if (e.key === 'Escape' && !editable && !g.openFilterCol && (g.showDone || g.showSnoozed)) {
       e.preventDefault();

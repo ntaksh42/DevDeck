@@ -1,7 +1,7 @@
 import { GripVertical, Loader2, Pin, TriangleAlert } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import type { ColumnDragProps } from '@/lib/columnDrag';
-import { viewCountBaseline, type WorkItemQueryView } from './workItemViewsStorage';
+import { viewCountBaseline, viewCountKey, type WorkItemQueryView } from './workItemViewsStorage';
 import { viewCountHistory } from './workItemViewsDisplayStorage';
 import { ViewCountSparkline } from './ViewCountSparkline';
 
@@ -23,12 +23,14 @@ export type ViewCardStats = {
 export function viewCardStats(
   view: WorkItemQueryView,
   query: ViewCountQueryResult | undefined,
+  organizationId: string,
 ): ViewCardStats {
+  const countKey = viewCountKey(organizationId, view.id);
   const count = query?.data ?? 0;
   // An unbounded view reports its exact count, so there is no overflow marker.
   const overflow =
     view.limit !== undefined && typeof query?.data === "number" && query.data > view.limit;
-  const baseline = viewCountBaseline(view.id);
+  const baseline = viewCountBaseline(countKey);
   return {
     displayCount: overflow ? `${view.limit}+` : count,
     delta:
@@ -37,7 +39,7 @@ export function viewCardStats(
       typeof view.alertThreshold === "number" &&
       typeof query?.data === "number" &&
       query.data >= view.alertThreshold,
-    history: viewCountHistory(view.id),
+    history: viewCountHistory(countKey),
   };
 }
 

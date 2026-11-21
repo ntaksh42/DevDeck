@@ -169,7 +169,13 @@ fn existing_created_at(conn: &Connection, id: &str) -> Result<Option<String>> {
 }
 
 fn delete_organization(conn: &Connection, id: &str) -> Result<()> {
-    conn.execute("DELETE FROM organizations WHERE id = ?1", [id])?;
+    let tx = conn.unchecked_transaction()?;
+    // Notification history has no foreign key to the organization (sync
+    // failures carry none), so its rows are removed here; otherwise they keep
+    // counting as unread and jump to items of a connection that is gone.
+    tx.execute("DELETE FROM notifications WHERE organization_id = ?1", [id])?;
+    tx.execute("DELETE FROM organizations WHERE id = ?1", [id])?;
+    tx.commit()?;
     Ok(())
 }
 

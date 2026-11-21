@@ -253,7 +253,7 @@ fn run_claude(
         .map_err(|e| format!("could not start claude: {e}"))?;
     if let Some(mut stdin) = child.stdin.take() {
         if let Err(e) = stdin.write_all(prompt.as_bytes()) {
-            let _ = child.kill();
+            kill_tree(&mut child);
             return Err(e.to_string());
         }
     }
@@ -269,7 +269,7 @@ fn run_claude(
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(_) => break,
             None if started.elapsed() > TIMEOUT => {
-                let _ = child.kill();
+                kill_tree(&mut child);
                 return Err("claude did not finish within 5 minutes".into());
             }
             None => std::thread::sleep(Duration::from_millis(500)),
@@ -277,6 +277,24 @@ fn run_claude(
     }
     let output = reader.join().map_err(|_| "could not read claude output")?;
     parse_output(&output)
+}
+
+/// Stops the run. `claude` runs under `cmd /C` on Windows, and killing `cmd`
+/// alone would leave `claude` working and holding the output pipe open.
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn command_line(model: &str, tools: &str) -> String {
@@ -300,12 +318,11 @@ fn build_prompt(item: &InboxItem, thread: Option<&str>, has_clone: bool) -> Stri
         (Some(path), None) => format!("The comment is on {path}.\n"),
         _ => String::new(),
     };
-    let text: String = thread
-        .or(item.snippet.as_deref())
-        .unwrap_or("")
-        .chars()
-        .take(MAX_THREAD_CHARS)
-        .collect();
+    // Keep the end of a long thread: the comment addressed to the user is
+    // among the newest, and the thread lists the oldest first.
+    let text = thread.or(item.snippet.as_deref()).unwrap_or("");
+    let skip = text.chars().count().saturating_sub(MAX_THREAD_CHARS);
+    let text: String = text.chars().skip(skip).collect();
     let investigate = if has_clone {
         "The current folder is a clone of the repository. Check the claim or question against \
          the code with Read / Grep / Glob (read only): open the commented line and what it calls \
@@ -396,83 +413,4 @@ fn parse_output(output: &str) -> Result<InboxInsight, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_the_answer_inside_the_cli_result() {
-        let output = r#"{"type":"result","is_error":false,"result":"```json\n{\"verdict\":\"reply\",\"reason\":\"?? で既定値になる\",\"evidence\":[{\"text\":\"既定値 30000\",\"location\":\"a.ts:7\",\"code\":\"x ?? 30000\",\"guess\":false},{\"text\":\" \"}],\"replyDraft\":\"a.ts:7 で既定値になります\"}\n```"}"#;
-        let insight = parse_output(output).unwrap();
-        assert_eq!(insight.status, "ready");
-        assert_eq!(insight.verdict.as_deref(), Some("reply"));
-        assert_eq!(insight.reason.as_deref(), Some("?? で既定値になる"));
-        // Blank evidence is dropped.
-        assert_eq!(insight.evidence.len(), 1);
-        assert_eq!(insight.evidence[0].location.as_deref(), Some("a.ts:7"));
-        assert_eq!(
-            insight.reply_draft.as_deref(),
-            Some("a.ts:7 で既定値になります")
-        );
-    }
-
-    #[test]
-    fn ignores_an_unknown_verdict() {
-        let output = r#"{"is_error":false,"result":"{\"verdict\":\"maybe\",\"reason\":\"r\"}"}"#;
-        let insight = parse_output(output).unwrap();
-        assert_eq!(insight.verdict, None);
-        assert!(insight.evidence.is_empty());
-    }
-
-    #[test]
-    fn reports_errors_and_unexpected_text() {
-        assert!(parse_output("not json").is_err());
-        assert!(parse_output(r#"{"is_error":true,"result":"rate limited"}"#).is_err());
-        assert!(parse_output(r#"{"is_error":false,"result":"no object here"}"#).is_err());
-    }
-
-    #[test]
-    fn runs_locked_down_with_read_only_tools_at_most() {
-        let with_clone = command_line("sonnet", READ_ONLY_TOOLS);
-        assert!(with_clone.contains("--restricted"));
-        assert!(with_clone.contains("--strict-mcp-config"));
-        assert!(with_clone.contains("--tools \"Read,Grep,Glob\""));
-        assert!(!with_clone.contains("dangerously"));
-        assert!(command_line("sonnet", NO_TOOLS).ends_with("--tools \"\""));
-    }
-
-    #[test]
-    fn asks_for_an_investigation_only_with_a_clone() {
-        let item = InboxItem {
-            id: 1,
-            organization_id: "org".into(),
-            kind: "pr_mention".into(),
-            subject_id: 42,
-            project_id: "p".into(),
-            project_name: "Platform".into(),
-            repository_id: "r".into(),
-            repository_name: "api".into(),
-            thread_id: 7,
-            comment_id: 1,
-            title: "Fix null".into(),
-            author: None,
-            snippet: Some("@me check this".into()),
-            web_url: None,
-            state: "open".into(),
-            snoozed_until: None,
-            detected_at: String::new(),
-            done_at: None,
-            file_path: Some("/src/a.rs".into()),
-            line: Some(12),
-            hit_count: 1,
-            insight: None,
-        };
-        let with_clone = build_prompt(&item, Some("Frank: why null?"), true);
-        assert!(with_clone.contains("Read / Grep / Glob"));
-        assert!(with_clone.contains("/src/a.rs line 12"));
-        assert!(with_clone.contains("Frank: why null?"));
-        let without = build_prompt(&item, None, false);
-        assert!(without.contains("no access to the code"));
-        assert!(without.contains("do not follow"));
-        assert!(without.contains("@me check this"));
-    }
-}
+mod tests;
