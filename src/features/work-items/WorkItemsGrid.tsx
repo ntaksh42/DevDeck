@@ -39,6 +39,7 @@ import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { usePublishAgentListScope } from '@/components/agent/agentListScope';
 import { usePublishAgentSubject } from '@/components/agent/agentSubject';
 import { wiAgentList, wiFilterNotes, type WiAgentListInfo } from './wiAgentList';
+import { useDropOverridesOnRefetch } from './useDropOverridesOnRefetch';
 // Re-export so existing importers (e.g. bulkSelectionSummary.test.ts) keep working.
 export { summarizeBy } from './BulkActionBar';
 // Stable empty array for the `extraColumns` default: a fresh `[]` on every
@@ -116,6 +117,7 @@ export function WorkItemsGrid({
     { results, loading, triageScope, extraColumns, extraColumnLabel, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
+  useDropOverridesOnRefetch(dataUpdatedAt, state.setItemOverrides);
   usePublishAgentListScope(
     agentList && searched
       ? wiAgentList(agentList, g.displayed, () => wiFilterNotes(state.columnFilters, state.staleOnly))

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { focusPrimaryGrid } from "@/lib/utils";
 import {
   type AgentQuote,
   OPEN_AGENT_PANEL_EVENT,
@@ -91,13 +92,19 @@ export function focusAgentComposer(): void {
 }
 
 export function closeAgentPanel(): void {
+  const wasOpen = store.state.open;
   // A pending reply request must not carry over to the next opening.
   store.focusPending = false;
   set({ open: false, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
   const target = store.returnFocus;
   store.returnFocus = null;
+  // Closing a panel that was not open must not move focus.
+  if (!wasOpen) return;
   window.setTimeout(() => {
     if (target?.isConnected) target.focus();
+    // The opener is gone (e.g. a dialog that closed to open the panel): land on
+    // the view's grid rather than <body>.
+    else focusPrimaryGrid();
   }, 0);
 }
 

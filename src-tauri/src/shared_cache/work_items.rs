@@ -227,4 +227,14 @@ mod tests {
         );
         assert!(read_work_items(&conn, "org", "old").unwrap().is_empty());
     }
+
+    #[test]
+    fn write_takes_over_and_drops_the_old_project_row_of_an_item_moved_from_another_project() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        schema(&conn);
+        write_work_items(&mut conn, "org", "proj-a", &[sample(1)]).unwrap();
+        write_work_items(&mut conn, "org", "proj-b", &[sample(1), sample(2)]).unwrap();
+        assert!(read_work_items(&conn, "org", "proj-a").unwrap().is_empty());
+        assert_eq!(read_work_items(&conn, "org", "proj-b").unwrap().len(), 2);
+    }
 }

@@ -200,3 +200,31 @@ fn insert_prunes_rows_beyond_max_count() {
         .unwrap();
     assert_eq!(newest_kind, "kind1004");
 }
+
+#[test]
+fn deleting_an_organization_removes_its_notifications() {
+    let tf = NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(tf.path().to_path_buf());
+    db.initialize().unwrap();
+    db.insert_notifications(&[
+        new_notification("prReviewRequested", Some("org1")),
+        new_notification("wiAssigned", Some("org2")),
+        new_notification("syncFailed", None),
+    ])
+    .unwrap();
+
+    db.delete_organization("org1").unwrap();
+
+    let kinds: Vec<String> = db
+        .list_notifications(10, None, false, None, None)
+        .unwrap()
+        .items
+        .into_iter()
+        .map(|item| item.kind)
+        .collect();
+    assert_eq!(
+        kinds,
+        vec!["syncFailed".to_string(), "wiAssigned".to_string()]
+    );
+    assert_eq!(db.unread_notifications_count().unwrap(), 2);
+}

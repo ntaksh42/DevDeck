@@ -314,6 +314,8 @@ pub(crate) async fn search_from_input(
     // filters silently did nothing on a GitHub connection.
     let qualifiers = PrSearchQualifiers::from_input(&input)?;
     let mut results = search_pull_requests(org, secrets, &query, state, &qualifiers, 100).await?;
+    // The search hit its result cap, so more matches exist upstream.
+    let truncated = results.len() >= 100;
     // GitHub's closed state covers both merged (completed) and unmerged
     // (abandoned) PRs, so keep only the requested ones.
     results.retain(|pr| statuses.contains(&pr.status));
@@ -330,7 +332,7 @@ pub(crate) async fn search_from_input(
     Ok(PullRequestSearchResult {
         pull_requests: results,
         total,
-        truncated: false,
+        truncated,
         warnings: Vec::new(),
         ..Default::default()
     })

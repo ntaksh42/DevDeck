@@ -14,7 +14,8 @@ export function ResultTab({
   selectedPr,
   commentModeRequest = 0,
 }: {
-  selectedPr: Pick<ReviewPullRequestSummary, "pullRequestId">;
+  selectedPr: Pick<ReviewPullRequestSummary, "pullRequestId"> &
+    Partial<Pick<ReviewPullRequestSummary, "organizationId" | "repositoryId" | "repositoryName">>;
   commentModeRequest?: number;
 }) {
   const settingsQuery = useQuery({
@@ -24,8 +25,17 @@ export function ResultTab({
   });
 
   const previewQuery = useQuery({
-    queryKey: ["reviewResultPreview", selectedPr.pullRequestId],
-    queryFn: () => getReviewResultPreview({ pullRequestId: selectedPr.pullRequestId }),
+    queryKey: [
+      "reviewResultPreview",
+      selectedPr.organizationId,
+      selectedPr.repositoryId,
+      selectedPr.pullRequestId,
+    ],
+    queryFn: () =>
+      getReviewResultPreview({
+        pullRequestId: selectedPr.pullRequestId,
+        repositoryName: selectedPr.repositoryName,
+      }),
   });
 
   const hasFolder = !!settingsQuery.data?.reviewResultFolderPath;

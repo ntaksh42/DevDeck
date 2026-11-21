@@ -206,9 +206,10 @@ pub(crate) fn spawn_agent(
 ) -> Result<Child> {
     let command = expand(agent, command, launch, target, item_id)?;
     let work_dir = launch.work_dir();
-
+    // Before the folder is marked running: a failure here must not leave it marked.
     let az_dir = launch.notes_root.join(ISOLATED_AZ_DIR);
     std::fs::create_dir_all(&az_dir)?;
+
     let mut cmd = shell_command(&command);
     cmd.env("AZURE_CONFIG_DIR", &az_dir);
     // Git config entries given to this process only (GIT_CONFIG_COUNT/KEY/VALUE).

@@ -144,7 +144,7 @@ export function InboxPreview({
       </div>
 
       {!detail.isLoading && !detail.error ? <InboxContextSummary {...contextProps} /> : null}
-      <InboxInsightPanel itemId={item.id} insight={item.insight} onUseDraft={onUseDraft} onGenerate={onGenerateInsight} />
+      <InboxInsightPanel itemId={item.id} insight={item.insight} onUseDraft={readOnly ? undefined : onUseDraft} onGenerate={onGenerateInsight} />
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {tab === "open" ? (

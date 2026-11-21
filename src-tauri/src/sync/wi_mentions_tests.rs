@@ -70,6 +70,7 @@ fn new_mentions_by_others_are_reported_oldest_first() {
 fn a_later_comment_by_me_answers_the_mention() {
     let open = [
         StateInboxRef {
+            project_id: String::new(),
             id: 1,
             kind: KIND_WI_MENTION.into(),
             repository_id: String::new(),
@@ -77,6 +78,7 @@ fn a_later_comment_by_me_answers_the_mention() {
             comment_id: 10,
         },
         StateInboxRef {
+            project_id: String::new(),
             id: 2,
             kind: KIND_WI_MENTION.into(),
             repository_id: String::new(),
@@ -102,6 +104,7 @@ fn mentions_of_finished_work_items_are_finished() {
         relations: Vec::new(),
     };
     let open = [(1, 42), (2, 43), (3, 44)].map(|(id, subject_id)| StateInboxRef {
+        project_id: String::new(),
         id,
         kind: KIND_WI_MENTION.into(),
         repository_id: String::new(),

@@ -283,12 +283,16 @@ async fn scan_candidates(
                 line: None,
             })
             .collect();
-        match db.insert_inbox_items(&new_items) {
-            Ok(count) => update.added += count,
-            Err(e) => {
-                tracing::warn!(org = %org.name, error = ?e, "inbox: failed to store work item mentions")
+        let stored = match db.insert_inbox_items(&new_items) {
+            Ok(count) => {
+                update.added += count;
+                true
             }
-        }
+            Err(e) => {
+                tracing::warn!(org = %org.name, error = ?e, "inbox: failed to store work item mentions");
+                false
+            }
+        };
 
         let mine: Vec<&StateInboxRef> = open
             .iter()
@@ -304,6 +308,10 @@ async fn scan_candidates(
             }
         }
 
+        // Unstored mentions are read again on the next sync.
+        if !stored {
+            continue;
+        }
         if let Err(e) = db.set_inbox_cursor(
             &org.id,
             WORK_ITEM_CURSOR_KEY,

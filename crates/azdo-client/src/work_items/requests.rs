@@ -196,7 +196,7 @@ impl AdoClient {
             "path": "/relations/-",
             "value": { "rel": rel, "url": url }
         }]);
-        self.patch_json(
+        self.patch_json_once(
             &path,
             &[("api-version", "7.1-preview")],
             "application/json-patch+json",
@@ -215,7 +215,7 @@ impl AdoClient {
     ) -> Result<WorkItem> {
         let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
         let body = json!([{ "op": "remove", "path": format!("/relations/{index}") }]);
-        self.patch_json(
+        self.patch_json_once(
             &path,
             &[("api-version", "7.1-preview")],
             "application/json-patch+json",

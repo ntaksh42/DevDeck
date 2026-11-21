@@ -125,7 +125,7 @@ impl GitHubClient {
     ) -> Result<T> {
         let url = self
             .base_url
-            .join(path)
+            .join(&escape_path(path))
             .map_err(|e| GitHubError::Auth(e.to_string()))?;
 
         for attempt in 1..=self.retry_policy.attempts() {
@@ -159,7 +159,9 @@ impl GitHubClient {
 
                     if is_rate_limited(status, resp.headers()) {
                         return Err(GitHubError::RateLimited(
-                            retry_after.unwrap_or(Duration::from_secs(60)),
+                            retry_after
+                                .or_else(|| rate_limit_reset(resp.headers()))
+                                .unwrap_or(Duration::from_secs(60)),
                         ));
                     }
 
@@ -196,7 +198,7 @@ impl GitHubClient {
     ) -> Result<reqwest::Response> {
         let url = self
             .base_url
-            .join(path)
+            .join(&escape_path(path))
             .map_err(|e| GitHubError::Auth(e.to_string()))?;
         let mut request = self.http.request(method, url);
         if let Some(body) = body {
@@ -213,7 +215,9 @@ impl GitHubClient {
         if is_rate_limited(status, resp.headers()) {
             let retry_after = parse_retry_after(resp.headers());
             return Err(GitHubError::RateLimited(
-                retry_after.unwrap_or(Duration::from_secs(60)),
+                retry_after
+                    .or_else(|| rate_limit_reset(resp.headers()))
+                    .unwrap_or(Duration::from_secs(60)),
             ));
         }
         let body = resp.text().await.unwrap_or_default();
@@ -312,6 +316,13 @@ impl GitHubClient {
 }
 
 /// Parses `Retry-After` (seconds) when present.
+/// Escapes the characters that would end the path of a URL: a branch or file
+/// name containing `#` or `?` (e.g. `fix#12`) would otherwise turn the rest
+/// into a fragment or query and hit another endpoint.
+fn escape_path(path: &str) -> String {
+    path.replace('#', "%23").replace('?', "%3F")
+}
+
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     headers
         .get("Retry-After")
@@ -320,20 +331,33 @@ fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
         .map(Duration::from_secs)
 }
 
-/// GitHub returns 403 (primary) or 429 (secondary) for rate limits. A 403 is a
-/// rate limit only when the remaining quota header is zero, otherwise it is a
-/// genuine permission error.
+/// GitHub returns 403 or 429 for rate limits. A 403 is a rate limit when the
+/// remaining quota header is zero (primary limit) or it carries `Retry-After`
+/// (secondary limit); otherwise it is a genuine permission error.
 fn is_rate_limited(status: StatusCode, headers: &HeaderMap) -> bool {
     if status == StatusCode::TOO_MANY_REQUESTS {
         return true;
     }
     if status == StatusCode::FORBIDDEN {
-        return headers
+        let exhausted = headers
             .get("X-RateLimit-Remaining")
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.trim().parse::<u64>().ok())
-            .map(|remaining| remaining == 0)
-            .unwrap_or(false);
+            .is_some_and(|remaining| remaining == 0);
+        return exhausted || headers.contains_key("Retry-After");
     }
     false
+}
+
+/// Time until the primary quota resets (`X-RateLimit-Reset`, epoch seconds).
+fn rate_limit_reset(headers: &HeaderMap) -> Option<Duration> {
+    let reset = headers
+        .get("X-RateLimit-Reset")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(Duration::from_secs(reset.saturating_sub(now).max(1)))
 }

@@ -63,19 +63,24 @@ fn review_comment_thread(comments: Vec<ReviewComment>, me: &str) -> PrThread {
     let first = comments.first();
     let id = first.map(|c| c.id as i64).unwrap_or(0);
     let file_path = first.and_then(|c| c.path.clone());
-    let right_line = first.and_then(|c| c.line);
+    let line = first.and_then(|c| c.line);
+    // A comment on a deleted line sits on the base (left) side.
+    let (left_line, right_line) = match first.and_then(|c| c.side.as_deref()) {
+        Some("LEFT") => (line, None),
+        _ => (None, line),
+    };
     PrThread {
         id,
         status: Some("active".to_string()),
         is_resolved: false,
         file_path,
         right_line,
-        left_line: None,
+        left_line,
         comments: comments
             .into_iter()
             .map(|c| {
                 let author = c.user.map(|u| u.login);
-                let is_mine = author.as_deref() == Some(me);
+                let is_mine = is_me(author.as_deref(), me);
                 PrComment {
                     id: c.id as i64,
                     parent_comment_id: c.in_reply_to_id.map(|v| v as i64),
@@ -100,27 +105,14 @@ pub async fn set_thread_status(
     let resolve = input.status.eq_ignore_ascii_case("closed");
 
     // Find the GraphQL node id of the thread whose root comment matches.
-    const QUERY: &str = r#"
-    query($owner:String!,$repo:String!,$number:Int!){
-      repository(owner:$owner,name:$repo){
-        pullRequest(number:$number){
-          reviewThreads(first:100){
-            nodes{ id isResolved comments(first:1){ nodes{ databaseId } } }
-          }
-        }
-      }
-    }"#;
-    let value = client
-        .graphql(
-            QUERY,
-            json!({ "owner": owner, "repo": repo, "number": input.pr.pull_request_id }),
-        )
-        .await?;
-    let nodes = value
-        .pointer("/data/repository/pullRequest/reviewThreads/nodes")
-        .and_then(|n| n.as_array())
-        .cloned()
-        .unwrap_or_default();
+    let nodes = review_thread_nodes(
+        &client,
+        &owner,
+        &repo,
+        input.pr.pull_request_id,
+        "id isResolved comments(first:1){ nodes{ databaseId } }",
+    )
+    .await?;
     let node_id = nodes
         .iter()
         .find(|n| {
@@ -289,19 +281,23 @@ pub async fn edit_comment(
     let (owner, repo) = split_owner_repo(&input.pr.repository_id)?;
     let client = client(organization, secrets)?;
     let me = login_for(organization);
-    // A thread whose id equals the comment id is a flat conversation comment;
-    // otherwise it is an inline review comment.
+    // A thread whose id equals the comment id is a flat conversation comment,
+    // or the first comment of an inline thread (whose id is that comment's):
+    // a 404 from the conversation endpoint means the latter.
     if input.thread_id == input.comment_id {
-        let comment = client
+        match client
             .update_issue_comment(&owner, &repo, input.comment_id, &input.content)
-            .await?;
-        Ok(issue_comment_thread(comment, &me))
-    } else {
-        let comment = client
-            .update_review_comment(&owner, &repo, input.comment_id, &input.content)
-            .await?;
-        Ok(review_comment_thread(vec![comment], &me))
+            .await
+        {
+            Ok(comment) => return Ok(issue_comment_thread(comment, &me)),
+            Err(GitHubError::Api { status: 404, .. }) => {}
+            Err(error) => return Err(error.into()),
+        }
     }
+    let comment = client
+        .update_review_comment(&owner, &repo, input.comment_id, &input.content)
+        .await?;
+    Ok(review_comment_thread(vec![comment], &me))
 }
 
 pub async fn delete_comment(
@@ -311,15 +307,20 @@ pub async fn delete_comment(
 ) -> Result<()> {
     let (owner, repo) = split_owner_repo(&input.pr.repository_id)?;
     let client = client(organization, secrets)?;
+    // See `edit_comment`: the first comment of an inline thread shares its id.
     if input.thread_id == input.comment_id {
-        client
+        match client
             .delete_issue_comment(&owner, &repo, input.comment_id)
-            .await?;
-    } else {
-        client
-            .delete_review_comment(&owner, &repo, input.comment_id)
-            .await?;
+            .await
+        {
+            Ok(()) => return Ok(()),
+            Err(GitHubError::Api { status: 404, .. }) => {}
+            Err(error) => return Err(error.into()),
+        }
     }
+    client
+        .delete_review_comment(&owner, &repo, input.comment_id)
+        .await?;
     Ok(())
 }
 

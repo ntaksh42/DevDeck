@@ -473,7 +473,7 @@ async fn execute_attempt(
 
 fn result_stamp(folder: &Path, item: &AutoItem) -> Result<Option<(PathBuf, SystemTime, u64)>> {
     let found = if item.target() == NoteTarget::PullRequest {
-        result_files::find_review_result_file(folder, item.id())?
+        result_files::find_review_result_file(folder, item.id(), None)?
     } else {
         result_files::find_work_item_result_file(folder, item.id())?
     };
