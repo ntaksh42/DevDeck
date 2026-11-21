@@ -1,5 +1,6 @@
 # Cargo
 /target/
+/target-check/
 
 # Logs
 logs

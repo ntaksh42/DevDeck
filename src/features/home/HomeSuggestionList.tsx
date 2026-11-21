@@ -2,8 +2,13 @@ import { forwardRef, type KeyboardEvent } from "react";
 import { PreviewEmptyState } from "@/components/StateDisplay";
 import type { HomeSuggestion } from "@/lib/azdoCommands";
 
-const KIND_LABEL: Record<string, string> = { pr: "PR", wi: "WI" };
-const KIND_CLASS: Record<string, string> = { pr: "text-link", wi: "text-success" };
+const KIND_LABEL: Record<string, string> = { pr: "PR", wi: "WI", pipe: "CI" };
+const KIND_CLASS: Record<string, string> = { pr: "text-link", wi: "text-success", pipe: "text-warning" };
+/** Only the urgent rows carry a tag; `later` stays plain. */
+const URGENCY_TAG: Record<string, { label: string; className: string }> = {
+  now: { label: "Now", className: "bg-destructive/10 text-destructive" },
+  today: { label: "Today", className: "bg-muted text-muted-foreground" },
+};
 
 /** How many suggestions show before "Show n more" (Orca's Up next shows 3). */
 export const HOME_SUGGESTIONS_SHOWN = 3;
@@ -78,6 +83,13 @@ export const HomeSuggestionList = forwardRef<
               <div className="min-w-0">
                 <div className="flex items-center gap-1 font-medium">
                   {suggestion.isNew ? <span aria-label="new" className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /> : null}
+                  {URGENCY_TAG[suggestion.urgency] ? (
+                    <span
+                      className={`shrink-0 rounded px-1 text-2xs font-semibold ${URGENCY_TAG[suggestion.urgency].className}`}
+                    >
+                      {URGENCY_TAG[suggestion.urgency].label}
+                    </span>
+                  ) : null}
                   <span className="truncate">{suggestion.title}</span>
                 </div>
                 <div className={`text-xs text-muted-foreground ${selected ? "" : "truncate"}`}>{suggestion.why}</div>

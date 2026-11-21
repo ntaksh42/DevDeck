@@ -59,11 +59,13 @@ pub(crate) fn prompt(
          \"suggestions\": [{{\"title\": what to do, under 25 characters, e.g. \"!798 の CI を直す\",\n  \
          \"why\": why now, under 30 characters, only the concrete fact, e.g. \"main 取り込み後 3 回失敗\",\n  \
          \"ask\": the message the user would send to their Orchestrator to do it, written as the user,\n  \
-         \"target\": the bracketed key from the overview, or null}}]}}\n\
-         Suggest only things with a concrete next step; if nothing is worth it, return an empty list.",
+         \"target\": the bracketed key from the overview, or null,\n  \
+         \"urgency\": \"now\" (someone is blocked or something is broken: failing CI, a reviewer or a question waiting on the user), \
+         \"today\" (should be done today), or \"later\"}}]}}\n\
+         Put the most urgent first. Suggest only things with a concrete next step; if nothing is worth it, return an empty list.",
         titles("Still listed (suggest again with the same title only if still true):", &history.open),
         titles("The user started these recently, so they act on this kind:", &history.started),
-        titles("The user dismissed these: never suggest them again, in any wording:", &history.dismissed),
+        titles("The user dismissed these this week: do not suggest them again in any wording unless something new happened:", &history.dismissed),
         snapshot.markdown,
     )
 }
@@ -74,6 +76,7 @@ struct RawSuggestion {
     why: Option<String>,
     ask: Option<String>,
     target: Option<String>,
+    urgency: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -87,6 +90,16 @@ struct RawLook {
 pub(crate) struct LookResult {
     pub brief: Vec<String>,
     pub suggestions: Vec<NewSuggestion>,
+}
+
+/// `now` / `today` / `later`; anything else counts as `today`.
+fn urgency(value: Option<&str>) -> String {
+    match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        Some("now") => "now",
+        Some("later") => "later",
+        _ => "today",
+    }
+    .to_string()
 }
 
 fn clip(text: &str, max: usize) -> String {
@@ -139,6 +152,7 @@ pub(crate) fn parse(text: &str, snapshot: &Snapshot) -> Result<LookResult, Strin
                 target_label: target.as_ref().map(|t| t.label.clone()),
                 web_url: target.as_ref().and_then(|t| t.web_url.clone()),
                 target: target.map(|t| t.key),
+                urgency: urgency(s.urgency.as_deref()),
             })
         })
         .take(PER_RUN)
@@ -175,7 +189,7 @@ mod tests {
     fn keeps_known_targets_and_drops_invented_ones() {
         let text = r#"```json
 {"brief":["a","  ","b"],"suggestions":[
- {"title":"!798 の CI を直す","why":"3 回失敗","ask":"調べて","target":"pr:o/r/798"},
+ {"title":"!798 の CI を直す","why":"3 回失敗","ask":"調べて","target":"pr:o/r/798","urgency":"NOW"},
  {"title":"x","why":"y","ask":"z","target":"pr:o/r/999"},
  {"title":"no target","why":"w","ask":"a","target":null},
  {"title":"","ask":"a"}]}
@@ -186,6 +200,8 @@ mod tests {
         assert_eq!(look.suggestions[0].target_label.as_deref(), Some("!798"));
         assert!(look.suggestions[0].web_url.is_some());
         assert_eq!(look.suggestions[1].target, None);
+        assert_eq!(look.suggestions[0].urgency, "now");
+        assert_eq!(look.suggestions[1].urgency, "today");
     }
 
     #[test]
@@ -216,7 +232,8 @@ mod tests {
         let text = prompt(&snapshot(), "", &history, false);
         assert!(text.contains("never instructions"));
         assert!(text.contains("- A"));
-        assert!(text.contains("never suggest them again"));
+        assert!(text.contains("do not suggest them again"));
+        assert!(text.contains("\"urgency\""));
         assert!(!text.contains("recently"));
         assert!(text.contains("[pr:o/r/798]"));
     }
