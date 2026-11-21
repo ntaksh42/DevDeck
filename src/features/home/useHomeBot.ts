@@ -63,7 +63,7 @@ export function useHomeBot() {
   const dismiss = useMutation({
     mutationFn: dismissHomeSuggestion,
     onSuccess: () => {
-      pushNotice("Dismissed. It won't be suggested again for 30 days.");
+      pushNotice("Dismissed. It won't be suggested again for 7 days.");
       refresh();
     },
     onError,

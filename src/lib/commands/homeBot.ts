@@ -32,7 +32,10 @@ const homeSuggestionSchema = z.object({
   target: z.string().nullable(),
   targetLabel: z.string().nullable(),
   webUrl: z.string().nullable(),
+  /** `pr` / `wi` / `pipe` / `other`. */
   kind: z.string(),
+  /** `now` / `today` / `later`; the list arrives ordered by it. */
+  urgency: z.string(),
   isNew: z.boolean(),
   createdAt: z.string(),
 });

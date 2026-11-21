@@ -117,7 +117,7 @@ export function HomeBotSettingsPanel() {
           >
             Save
           </button>
-          <span className="text-xs text-muted-foreground">Dismissed suggestions: {dismissedQuery.data ?? 0} (kept 30 days)</span>
+          <span className="text-xs text-muted-foreground">Dismissed suggestions: {dismissedQuery.data ?? 0} (each held back 7 days)</span>
           <button
             type="button"
             disabled={!dismissedQuery.data || clear.isPending}

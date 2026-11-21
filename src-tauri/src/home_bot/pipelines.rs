@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+use super::snapshot::Target;
 use super::store;
 use crate::db::AppDatabase;
 use crate::error::Result;
@@ -89,31 +90,53 @@ fn needs_attention(run: &PipelineRunSummary) -> bool {
     )
 }
 
-/// The overview section. Healthy pipelines are counted, not listed.
+/// The target a suggestion about a failing pipeline names; it opens the run.
+fn target(pipeline: &WatchedPipeline, run: &PipelineRunSummary) -> Target {
+    Target {
+        key: format!(
+            "pipe:{}/{}/{}",
+            pipeline.organization_id, pipeline.project_id, pipeline.definition_id
+        ),
+        label: pipeline.definition_name.clone(),
+        title: pipeline.definition_name.clone(),
+        repository: None,
+        web_url: Some(run.web_url.clone()),
+    }
+}
+
+/// The overview section and the failing pipelines as targets. Healthy
+/// pipelines are counted, not listed.
 pub(crate) fn section(
     rows: &[(
         WatchedPipeline,
         std::result::Result<Option<PipelineRunSummary>, String>,
     )],
-) -> String {
+) -> (String, Vec<Target>) {
     if rows.is_empty() {
-        return "\n## Watched pipelines\nThe user watches no pipelines.\n".to_string();
+        return (
+            "\n## Watched pipelines\nThe user watches no pipelines.\n".to_string(),
+            Vec::new(),
+        );
     }
     let mut md = String::from("\n## Watched pipelines: latest run of each\n");
+    let mut targets = Vec::new();
     let mut healthy = 0;
     for (pipeline, run) in rows {
         let name = format!("{} ({})", pipeline.definition_name, pipeline.project_name);
         match run {
             Ok(Some(run)) if needs_attention(run) => {
+                let target = target(pipeline, run);
                 let _ = writeln!(
                     md,
-                    "- {name}: run {} {} on {}, finished {}. {}",
+                    "- [{}] {name}: run {} {} on {}, finished {}. {}",
+                    target.key,
                     run.build_number.as_deref().unwrap_or("?"),
                     run.result.as_deref().unwrap_or("?"),
                     run.source_branch.as_deref().unwrap_or("?"),
                     run.finish_time.as_deref().unwrap_or("?"),
                     run.web_url
                 );
+                targets.push(target);
             }
             Ok(_) => healthy += 1,
             Err(error) => {
@@ -127,11 +150,11 @@ pub(crate) fn section(
             "- {healthy} other watched pipelines: latest run succeeded, is running, or has none."
         );
     }
-    md
+    (md, targets)
 }
 
 /// The section for a look: reads the watch list and the latest runs.
-pub(crate) fn overview(db: &AppDatabase) -> String {
+pub(crate) fn overview(db: &AppDatabase) -> (String, Vec<Target>) {
     let watch = db.open().map(|conn| load_watch(&conn)).unwrap_or_default();
     section(&latest_runs(db, &watch))
 }
@@ -173,17 +196,23 @@ mod tests {
 
     #[test]
     fn lists_failures_and_counts_the_rest() {
-        let md = section(&[
+        let (md, targets) = section(&[
             (pipeline("CI"), Ok(Some(run(Some("failed"))))),
             (pipeline("Nightly"), Ok(Some(run(Some("succeeded"))))),
             (pipeline("Docs"), Ok(None)),
             (pipeline("Release"), Err("401".into())),
         ]);
-        assert!(md.contains("- CI (Proj): run 20261121.3 failed on refs/heads/main"));
+        assert!(md.contains("- [pipe:o/p/1] CI (Proj): run 20261121.3 failed on refs/heads/main"));
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].label, "CI");
+        assert_eq!(
+            targets[0].web_url.as_deref(),
+            Some("https://dev.azure.com/o/p/_build/results?buildId=7")
+        );
         assert!(!md.contains("Nightly"));
         assert!(md.contains("Release (Proj): could not be read (401)"));
         assert!(md.contains("2 other watched pipelines"));
-        assert!(section(&[]).contains("watches no pipelines"));
+        assert!(section(&[]).0.contains("watches no pipelines"));
     }
 
     #[test]

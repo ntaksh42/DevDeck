@@ -128,6 +128,7 @@ fn ipc_response_contract() {
             target_label: Some("!101".into()),
             web_url: None,
             kind: "pr".into(),
+            urgency: "now".into(),
             is_new: true,
             created_at: at(),
         }],

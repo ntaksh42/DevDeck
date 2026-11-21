@@ -19,8 +19,10 @@ const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 pub(crate) const OPEN_FOR_MS: i64 = 3 * DAY_MS;
 /// Started suggestions are shown to the next looks this long, as what the user acts on.
 pub(crate) const STARTED_RECALL_MS: i64 = 14 * DAY_MS;
-/// A dismissed suggestion is never made again for this long.
-pub(crate) const DISMISSED_FOR_MS: i64 = 30 * DAY_MS;
+/// A dismissed suggestion is not made again for this long.
+pub(crate) const DISMISSED_FOR_MS: i64 = 7 * DAY_MS;
+/// Rows that are no longer open are deleted after this long.
+pub(crate) const KEEP_RESOLVED_MS: i64 = 30 * DAY_MS;
 
 pub(crate) fn get_kv(conn: &Connection, key: &str) -> Result<Option<String>> {
     Ok(conn
@@ -153,6 +155,17 @@ pub(crate) struct NewSuggestion {
     pub target: Option<String>,
     pub target_label: Option<String>,
     pub web_url: Option<String>,
+    /// `now` / `today` / `later`.
+    pub urgency: String,
+}
+
+/// Lower case with single spaces, for comparing titles.
+fn normalize_title(title: &str) -> String {
+    title
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// What makes two suggestions the same: their target, else their title
@@ -160,14 +173,7 @@ pub(crate) struct NewSuggestion {
 pub(crate) fn dedupe_key(title: &str, target: Option<&str>) -> String {
     match target {
         Some(target) => format!("target:{target}"),
-        None => format!(
-            "title:{}",
-            title
-                .to_lowercase()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-        ),
+        None => format!("title:{}", normalize_title(title)),
     }
 }
 
@@ -178,7 +184,8 @@ pub(crate) enum SuggestOutcome {
 }
 
 /// Adds a suggestion from run `run_id`, or refreshes the open one it repeats.
-/// One dismissed in the last 30 days is not made again.
+/// One with the same target and title dismissed in the last 7 days is not
+/// made again; another suggestion about the same target still is.
 pub(crate) fn suggest(
     conn: &Connection,
     run_id: i64,
@@ -186,25 +193,30 @@ pub(crate) fn suggest(
     now: i64,
 ) -> Result<SuggestOutcome> {
     let key = dedupe_key(&input.title, input.target.as_deref());
-    let dismissed: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM bot_suggestions WHERE dedupe_key = ?1 AND status = 'dismissed' AND resolved_at > ?2)",
-        params![key, now - DISMISSED_FOR_MS],
-        |row| row.get(0),
+    let title = normalize_title(&input.title);
+    let mut stmt = conn.prepare(
+        "SELECT title FROM bot_suggestions WHERE dedupe_key = ?1 AND status = 'dismissed' AND resolved_at > ?2",
     )?;
+    let dismissed = stmt
+        .query_map(params![key, now - DISMISSED_FOR_MS], |row| {
+            row.get::<_, String>(0)
+        })?
+        .filter_map(|row| row.ok())
+        .any(|dismissed| normalize_title(&dismissed) == title);
     if dismissed {
         return Ok(SuggestOutcome::Dismissed);
     }
     let updated = conn.execute(
-        "UPDATE bot_suggestions SET run_id = ?2, title = ?3, why = ?4, ask = ?5, target_label = ?6, web_url = ?7
+        "UPDATE bot_suggestions SET run_id = ?2, title = ?3, why = ?4, ask = ?5, target_label = ?6, web_url = ?7, urgency = ?8
          WHERE dedupe_key = ?1 AND status = 'open'",
-        params![key, run_id, input.title, input.why, input.ask, input.target_label, input.web_url],
+        params![key, run_id, input.title, input.why, input.ask, input.target_label, input.web_url, input.urgency],
     )?;
     if updated > 0 {
         return Ok(SuggestOutcome::Updated);
     }
     conn.execute(
-        "INSERT INTO bot_suggestions(id, run_id, dedupe_key, title, why, ask, target, target_label, web_url, status, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'open', ?10)",
+        "INSERT INTO bot_suggestions(id, run_id, dedupe_key, title, why, ask, target, target_label, web_url, urgency, status, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'open', ?11)",
         params![
             next_id("s", now),
             run_id,
@@ -215,6 +227,7 @@ pub(crate) fn suggest(
             input.target,
             input.target_label,
             input.web_url,
+            input.urgency,
             now
         ],
     )?;
@@ -238,15 +251,45 @@ pub(crate) fn expire(conn: &Connection, now: i64) -> Result<()> {
     )?;
     conn.execute(
         "DELETE FROM bot_suggestions WHERE status <> 'open' AND resolved_at < ?1",
-        [now - DISMISSED_FOR_MS],
+        [now - KEEP_RESOLVED_MS],
     )?;
     Ok(())
 }
 
+/// Closes open suggestions about a pull request or work item that no longer
+/// waits on the user: the sync cache dropped it (merged, abandoned, closed,
+/// handled). Pipeline and untargeted suggestions wait for the next look.
+pub(crate) fn close_gone(
+    conn: &Connection,
+    live: &std::collections::BTreeSet<String>,
+    now: i64,
+) -> Result<usize> {
+    let mut stmt = conn.prepare(
+        "SELECT id, target FROM bot_suggestions
+         WHERE status = 'open' AND (target LIKE 'pr:%' OR target LIKE 'wi:%')",
+    )?;
+    let gone: Vec<String> = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .filter_map(|row| row.ok())
+        .filter(|(_, target)| !live.contains(target))
+        .map(|(id, _)| id)
+        .collect();
+    for id in &gone {
+        conn.execute(
+            "UPDATE bot_suggestions SET status = 'replaced', resolved_at = ?2 WHERE id = ?1 AND status = 'open'",
+            params![id, now],
+        )?;
+    }
+    Ok(gone.len())
+}
+
 pub(crate) fn open_suggestions(conn: &Connection, seen_at: i64) -> Result<Vec<HomeSuggestion>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, why, ask, target, target_label, web_url, created_at
-         FROM bot_suggestions WHERE status = 'open' ORDER BY created_at ASC, rowid ASC",
+        "SELECT id, title, why, ask, target, target_label, web_url, created_at, urgency
+         FROM bot_suggestions WHERE status = 'open'
+         ORDER BY CASE urgency WHEN 'now' THEN 0 WHEN 'today' THEN 1 ELSE 2 END, created_at ASC, rowid ASC",
     )?;
     let rows = stmt.query_map([], |row| {
         let target: Option<String> = row.get(4)?;
@@ -258,6 +301,7 @@ pub(crate) fn open_suggestions(conn: &Connection, seen_at: i64) -> Result<Vec<Ho
         {
             Some("pr") => "pr",
             Some("wi") => "wi",
+            Some("pipe") => "pipe",
             _ => "other",
         };
         Ok(HomeSuggestion {
@@ -269,6 +313,7 @@ pub(crate) fn open_suggestions(conn: &Connection, seen_at: i64) -> Result<Vec<Ho
             target_label: row.get(5)?,
             web_url: row.get(6)?,
             kind: kind.into(),
+            urgency: row.get(8)?,
             is_new: created_at > seen_at,
             created_at: from_ms(created_at),
         })
