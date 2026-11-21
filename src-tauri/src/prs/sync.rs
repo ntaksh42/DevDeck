@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use azdo_client::{AdoClient, TeamProject};
 use chrono::Utc;
 use tokio::task::JoinSet;
@@ -8,7 +10,7 @@ use crate::error::{AppError, Result};
 use crate::shared_cache::SharedReviewer;
 use crate::sync::SyncBudget;
 
-use super::group_reviews::{group_review_prs, member_group_ids};
+use super::group_reviews::{carry_forward_reviews, group_review_prs, member_group_ids};
 use super::group_reviews_capped::fetch_capped_group_reviews;
 use super::sync_ci::enrich_review_ci_status;
 
@@ -25,8 +27,7 @@ pub(crate) struct PrProjectFetch {
     /// The live query returned `PROJECT_PR_SYNC_TOP` PRs, so the snapshot may be
     /// truncated and must not be used to delete the project's cached rows.
     pub(crate) capped: bool,
-    /// Reviewer entries of the fetched PRs (read from the shared cache when the
-    /// list came from there).
+    /// Reviewer entries of the fetched PRs (live or from the shared cache).
     pub(crate) reviewers: Vec<SharedReviewer>,
 }
 
@@ -135,9 +136,9 @@ pub(crate) async fn do_sync_prs(
     // Reviews requested from a group the user belongs to are found in the active
     // PR list, which needs live reviewer data, so the shared-cache shortcut is
     // skipped whenever the user has groups.
-    let (group_ids, group_warning) = match review_user.as_deref() {
-        Some(user_id) => member_group_ids(db, client, org, user_id).await,
-        None => (Default::default(), None),
+    let groups = match review_user.as_deref() {
+        Some(user_id) => Some(member_group_ids(db, client, org, user_id).await),
+        None => None,
     };
     let (active, review) = tokio::join!(
         fetch_all_active_prs(
@@ -145,7 +146,7 @@ pub(crate) async fn do_sync_prs(
             org,
             projects,
             budget,
-            force_refresh || !group_ids.is_empty()
+            force_refresh || groups.as_ref().is_some_and(|groups| !groups.ids.is_empty())
         ),
         async {
             match review_user.as_deref() {
@@ -184,7 +185,7 @@ pub(crate) async fn do_sync_prs(
     )?;
 
     let mut warning_parts: Vec<String> = Vec::new();
-    warning_parts.extend(group_warning);
+    warning_parts.extend(groups.as_ref().and_then(|groups| groups.warning.clone()));
     if !active.skipped.is_empty() {
         warning_parts.push(format!(
             "{} project(s) skipped due to PR sync errors: {}.",
@@ -219,8 +220,9 @@ pub(crate) async fn do_sync_prs(
         }
         Some(Ok(mut review)) => {
             let mut synced = std::mem::take(&mut review.synced_project_ids);
+            let groups = groups.as_ref().expect("review pass implies a known user");
             let review_synced: std::collections::HashSet<String> = synced.iter().cloned().collect();
-            if !group_ids.is_empty() {
+            if !groups.ids.is_empty() {
                 // Group reviews come from the active list, so a project is only
                 // replaced when that list was complete for it too; otherwise its
                 // previous rows (including group reviews) are kept.
@@ -228,7 +230,7 @@ pub(crate) async fn do_sync_prs(
                 let extra = group_review_prs(
                     &active.cached_prs,
                     &active.reviewers,
-                    &group_ids,
+                    &groups.ids,
                     &review.cached_reviews,
                     review_user.as_deref().unwrap_or_default(),
                 );
@@ -249,7 +251,7 @@ pub(crate) async fn do_sync_prs(
                         client,
                         org,
                         &capped_projects,
-                        &group_ids,
+                        &groups.ids,
                         review_user.as_deref().unwrap_or_default(),
                         budget,
                     )
@@ -296,6 +298,18 @@ pub(crate) async fn do_sync_prs(
                         synced.retain(|id| !capped_projects.iter().any(|p| &p.id == id));
                     }
                 }
+            }
+            // Without any group membership result, group reviews cannot be told
+            // apart from stale rows, so keep previous rows the direct query did not
+            // return; they neither vanish for a pass nor re-notify as new requests
+            // when the lookup recovers.
+            if !groups.known {
+                let unknown: HashMap<String, Option<String>> =
+                    synced.iter().map(|id| (id.clone(), None)).collect();
+                let previous = db.list_review_pull_requests(&org.id)?;
+                let carried =
+                    carry_forward_reviews(previous, &review.cached_reviews, &synced, &unknown);
+                review.cached_reviews.extend(carried);
             }
             if !review.failed_projects.is_empty() {
                 // Only the failed projects keep their previous rows; every other

@@ -4,6 +4,7 @@ mod agent_notes;
 mod app_state;
 mod auth;
 mod auto_agent;
+mod cache_epoch;
 mod commands;
 mod db;
 mod dev_overrides;

@@ -155,6 +155,26 @@ fn token_expires_in_prefers_unix_expires_on() {
 }
 
 #[test]
+fn cache_lifetime_keeps_a_floor_for_tokens_near_expiry() {
+    let fallback = Duration::from_secs(300);
+    assert_eq!(cache_lifetime(None, fallback), fallback);
+    assert_eq!(
+        cache_lifetime(Some(Duration::from_secs(3600)), fallback),
+        Duration::from_secs(3540)
+    );
+    // Inside the 60s margin: floored at 30s instead of zero...
+    assert_eq!(
+        cache_lifetime(Some(Duration::from_secs(45)), fallback),
+        Duration::from_secs(30)
+    );
+    // ...but never beyond the token's own remaining life.
+    assert_eq!(
+        cache_lifetime(Some(Duration::from_secs(10)), fallback),
+        Duration::from_secs(10)
+    );
+}
+
+#[test]
 fn token_expires_in_is_none_when_absent() {
     let value = serde_json::json!({ "accessToken": "t" });
     assert!(token_expires_in(&value).is_none());
@@ -169,8 +189,7 @@ struct ShortLivedTokenSource {
 impl AzureCliTokenSource for ShortLivedTokenSource {
     fn access_token(&self) -> Result<AzureCliToken> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        // expires_in below the margin → lifetime saturates to zero, so the
-        // very next call is a cache miss.
+        // A 1s token is cached for at most its own remaining second.
         Ok(AzureCliToken {
             token: "short".to_string(),
             expires_in: Some(Duration::from_secs(1)),
@@ -186,9 +205,9 @@ async fn azure_cli_provider_refetches_when_token_lifetime_elapsed() {
     let provider = AzureCliProvider::with_token_source(source.clone(), Duration::from_secs(300));
 
     provider.auth_header_value().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(1100)).await;
     provider.auth_header_value().await.unwrap();
 
-    // Lifetime (1s) minus the 60s margin saturates to zero, so the cached
-    // token is already stale and the second call refetches.
+    // The 1s lifetime has elapsed, so the second call refetches.
     assert_eq!(source.calls.load(Ordering::SeqCst), 2);
 }

@@ -146,10 +146,7 @@ impl AdoCredentialProvider for AzureCliProvider {
         let header = format!("Bearer {token}");
         // Cache until just before the CLI-reported expiry; fall back to the fixed
         // TTL when the CLI did not report (or we could not parse) one.
-        let lifetime = match fetched.expires_in {
-            Some(expires_in) => expires_in.saturating_sub(TOKEN_EXPIRY_MARGIN),
-            None => self.token_ttl,
-        };
+        let lifetime = cache_lifetime(fetched.expires_in, self.token_ttl);
         let mut cache = self
             .cache
             .lock()
@@ -195,6 +192,20 @@ struct CachedBearerToken {
 /// Refresh the token this long before its real expiry, so a request never goes
 /// out with a token that expires mid-flight.
 const TOKEN_EXPIRY_MARGIN: Duration = Duration::from_secs(60);
+
+/// Floor for the cache lifetime of a token close to expiry, so a burst of
+/// requests does not shell out to `az` once per request. Never longer than the
+/// token's own remaining life.
+const MIN_TOKEN_LIFETIME: Duration = Duration::from_secs(30);
+
+fn cache_lifetime(expires_in: Option<Duration>, fallback: Duration) -> Duration {
+    match expires_in {
+        Some(expires_in) => expires_in
+            .saturating_sub(TOKEN_EXPIRY_MARGIN)
+            .max(MIN_TOKEN_LIFETIME.min(expires_in)),
+        None => fallback,
+    }
+}
 
 /// An Azure CLI access token plus, when the CLI reported it, how long it stays
 /// valid. `expires_in` is `None` for older `az` versions or unparsable output,

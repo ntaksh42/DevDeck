@@ -462,7 +462,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 - **認証プロバイダ**: `auth_provider` は `pat` / `azure_cli` (アンダースコア形) / `github_pat`。
   - **組織名の入力 (Azure DevOps)**: 組織名のほか、貼り付けた組織 URL (`https://dev.azure.com/{org}/...` / `https://{org}.visualstudio.com/...`、`dev.azure.com/{org}` のようなスキーム省略形、末尾 `/`) から組織名を取り出して小文字に正規化する。それ以外のホストの URL は例付きのエラーにする。`base_url` はどの入力でも `https://dev.azure.com/{org}`。
   - **PAT (Azure DevOps)**: `Authorization: Basic base64(":{pat}")`。必要スコープは Code(Read)/Work Items(Read)/Project and Team(Read)。
-  - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック)。`az` の 1 回の実行は 30 秒でタイムアウトし (固まった `az` が全リクエストを止めないよう取得ロックを解放)、REST が 401 を返したらキャッシュを破棄して 1 回だけ再送する。
+  - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック。期限間近のトークンでもリクエストごとに `az` を起動しないよう、残り寿命を超えない範囲で最低 30 秒はキャッシュする)。トークンはプロセス共通で、Azure CLI 接続を追加したときは別アカウントの古いトークンを使わないよう破棄する。`az` の 1 回の実行は 30 秒でタイムアウトし (固まった `az` が全リクエストを止めないよう取得ロックを解放)、REST が 401 を返したらキャッシュを破棄して 1 回だけ再送する。
   - **GitHub PAT**: `Authorization: Bearer {pat}` (classic / fine-grained)。接続追加時に `GET /user` で
     検証し、認証ユーザーの login から接続 id (`github:{login}`) を導出する。
 - **シークレット保管**: Windows 資格情報マネージャ (`keyring`) のみ。
@@ -494,7 +494,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   DevOps 組織を独立にポーリングするのを避けるため、Active PR (+レビュアー一覧) と
   Work Item を同期成功のたびに中立な第三の SQLite ファイル
   (`%APPDATA%\AzDoSharedCache\cache.db`) へ書き込む (`prs/sync_fetch.rs` /
-  `work_items/sync.rs`)。Active PR の定期同期では、同じ組織 URL・プロジェクト ID・利用者の新しいスナップショットを再利用する。取得上限が一致するか、より小さい上限で全件取得済みであることも確認する。範囲を記録しない既存の waypoint が書いたデータを読むときや、明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン) では Azure DevOps API から取得する。PR とレビュアーの行、同期時刻、取得範囲は同じトランザクションで更新する。上限に達した結果には旧版向けの同期済み印を付けず、旧版は全件を取り直す。読み込み時はブランチ名を正規化し、PR の Web URL を再構築する。
+  `work_items/sync.rs`)。Active PR の定期同期では、同じ組織 URL・プロジェクト ID・利用者の新しいスナップショットを再利用する。取得上限が一致するか、より小さい上限で全件取得済みであることも確認する。範囲を記録しない既存の waypoint が書いたデータを読むときや、明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン) では Azure DevOps API から取得する。PR とレビュアーの行、同期時刻、取得範囲は同じトランザクションで更新する。上限に達した結果には旧版向けの同期済み印を付けず、旧版は全件を取り直す。読み込み時は `status = active` の行だけを使い、ブランチ名を正規化し、PR の Web URL を共有キャッシュの値を使わず自分の `base_url` とプロジェクト/リポジトリ名から再構築する。Work Item は上限 (2000 件) に達したプロジェクトはフル同期でも置換せず upsert する。`work_items` の主キーは `(organization, id)` なので、別プロジェクトから移動した項目は旧プロジェクトの行を引き継ぐ (UNIQUE 違反で書き込み全体が失敗しない)。`cache_meta.schema_version` が `1` 以外のファイルは読み書きしない (waypoint 側のスキーマ変更を誤読・上書きしない)。共有キャッシュの I/O は `spawn_blocking` で async ワーカー外で行う。
   共有スキーマは DevDeck 自身のテーブル形と無関係な独立の契約
   (Azure DevOps の生の事実のみ、is_mine 等の per-viewer 判断は持たない) なので、
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
@@ -511,12 +511,15 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 - 並列実行: 1 パス内で全組織を並列処理し、各組織の PR / 作業項目同期も並列に走らせる。
   プロジェクト一覧 (`_apis/projects`) は組織ごとに 1 回だけ取得して両種別で共有する。
   PR コメント通知のスレッド取得も同じ共有セマフォを通る。
-  同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 12) で上限を設け、
-  ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。
-- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録し、以前取得できたグループ一覧が残っていればそれで続行する。active PR 一覧が上限 (`PROJECT_PR_SYNC_TOP`) に達したプロジェクトでは一覧が欠けるため、グループ ID ごとに `searchCriteria.reviewerId` で取得してレビュー対象を補完する (`prs/group_reviews_capped.rs`。1 件でも失敗したプロジェクトは前回の行を保持して警告に記録する)。`reviewerId` / `creatorId` の `$skip` ページングは、サーバーが `$top` より少なく返しても打ち切らず、空ページまで進める (`$skip` は実際に返った件数ぶん進め、重複は除く)。
+  同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 6) で上限を設け、
+  ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。クライアントの
+  エンドポイント単位スロットル (8 件) より小さくし、同期中も画面からのオンデマンド取得に枠を残す。
+- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録し、以前取得できたグループ一覧が残っていれば (TTL 切れでも) それで続行する。前回値も無ければ、直接レビューに含まれない既存のレビュー行をそのまま残す (グループ宛てレビューが 1 パスだけ消えて、次のパスで新規レビュー依頼として再通知されるのを防ぐ)。active PR 一覧が上限 (`PROJECT_PR_SYNC_TOP`) に達したプロジェクトでは一覧が欠けるため、グループ ID ごとに `searchCriteria.reviewerId` で取得してレビュー対象を補完する (`prs/group_reviews_capped.rs`。1 件でも失敗したプロジェクトは前回の行を保持して警告に記録する)。`reviewerId` / `creatorId` の `$skip` ページングは、サーバーが `$top` より少なく返しても打ち切らず、空ページまで進める (`$skip` は実際に返った件数ぶん進め、重複は除く)。
   レビューキャッシュはプロジェクト単位で置換し、取得に失敗したプロジェクトだけ前回の行を保持する (1 プロジェクトの失敗で一覧全体が古いままにならない)。保持上限は 5000 件。
   ドラフトは既定で非表示だが、件数をタブ帯の Show Drafts チェックボックスに出し、チェックで表示する。
 - PR 同期: active PR とレビュー対象 PR の取得を重ね合わせ、CI ステータスは最新 50 件を後段で付与。
+  CI を取得しなかった (50 件外・取得失敗) PR は前回の CI 結果を保持する。そのためレビューキャッシュの置換は
+  「スナップショットに無い行の削除 + upsert」で行い、残る行を一度削除しない。
   active PR のプロジェクト単位クエリまたは共有キャッシュが上限 (500 件) に達したプロジェクトも同様に、そのプロジェクトの既存キャッシュを
   削除せず取得分だけ upsert し、警告を記録する (レビュー対象 PR は `$skip` で全件ページングするため対象外)。
 - 作業項目同期: プロジェクト単位で並列。`System.ChangedDate` デルタ取得 (24h ごとにフル) は維持。
@@ -524,6 +527,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   プロジェクトは取得結果が切り詰められているため、フル同期でもそのプロジェクトの既存行を削除せず、本体・共有キャッシュともにマージ
   (`apply_work_items_delta` 相当) し、「上限より古い項目は更新されない (キャッシュ行は保持)」旨を `last_warning` に
   記録して Sync health で「Limited」(完了したが一部スキップ/切り詰めあり) と表示する。
+- プロセス内キャッシュ: リポジトリ一覧 (1 時間)・プロジェクト一覧 (5 分)・所属グループのキャッシュは、接続の追加/削除で
+  世代 (`cache_epoch`) が進むと無効になり、別アカウントで再追加した接続が古い結果を使わない。
 - イベント: 同期完了で `sync:updated` (org_id + 完了スコープ)。
   通知イベントは PR / 作業項目向けに別途 emit。
   Inbox に項目が増えた / 自動で Done になった場合は `action-inbox:updated` (空ペイロード) を emit する。
@@ -578,7 +583,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   `x-ms-continuationtoken` ヘッダーの継続トークンを辿って最後まで取得する (`list_all_pages`)。
   これにより 100 件超のプロジェクトも同期対象から外れない。
 - 401: 即時 `Unauthorized`。429: `Retry-After` を尊重 (上限付き)。
-  全 `AdoClient` 呼び出しはエンドポイント (host:port) ごとのプロセス共通スロットル (`client/throttle.rs`) を通る: 同時実行は最大 8 件、429 の `Retry-After` や成功応答の `X-RateLimit-Delay` を受けたら以降の全リクエストを一時停止する (最大 30 秒)。キャッシュ消去直後に各画面が一斉再取得しても Azure DevOps のレート制限に達しにくくする。5xx/タイムアウト/ネットワーク: リトライ。
+  全 `AdoClient` 呼び出しはエンドポイント (host:port) ごとのプロセス共通スロットル (`client/throttle.rs`) を通る: 同時実行は最大 8 件、429 の `Retry-After` や成功応答の `X-RateLimit-Delay` を受けたら以降の全リクエストを一時停止する (最大 30 秒。`Duration` に収まらない異常値のヘッダーは無視する)。キャッシュ消去直後に各画面が一斉再取得しても Azure DevOps のレート制限に達しにくくする。5xx/タイムアウト/ネットワーク: リトライ。
   副作用のある POST は 5xx/タイムアウトを再試行せず (429 と接続失敗のみ)、WIQL・バッチ取得・検索など読み取り専用の POST (`post_json_read` / Almsearch) は GET と同様に再試行する。
 - Azure CLI 認証は Windows では `cmd /C az` (`CREATE_NO_WINDOW`) 経由で起動する (`az` は `az.cmd` のため `Command::new("az")` では解決できない)。 `az` 未インストール時は `cmd` が終了コード 9009 を返すため、インストール案内メッセージに読み替える。
 - `azdo-client` は Tauri 非依存を維持し、`wiremock` でテストする。
