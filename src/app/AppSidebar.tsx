@@ -1,5 +1,6 @@
 import {
   type DragEvent as ReactDragEvent,
+  type Dispatch, type SetStateAction,
   type KeyboardEvent as ReactKeyboardEvent,
   forwardRef,
   type ReactNode,
@@ -26,6 +27,7 @@ import { isEditableTarget } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { NavButton, NavSection, NavSubGroup, NavSubItem } from "@/components/Nav";
 import { SidebarPinnedNav } from "./SidebarPinnedNav";
+import { SidebarPinnedViews } from "./SidebarPinnedViews";
 import type { WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
 import type { View, NavSectionId } from "./types";
 import { DEFAULT_SIDEBAR_WIDTH } from "./types";
@@ -46,6 +48,7 @@ export interface AppSidebarProps {
   sidebarWidth: number;
   setSidebarWidth: (w: number) => void;
   workItemNavViews: WorkItemQueryView[];
+  setWorkItemNavViews: Dispatch<SetStateAction<WorkItemQueryView[]>>;
   activeWorkItemViewId: string | null;
   myReviewsBadge: number | null;
   myWorkItemsBadge: number | null;
@@ -67,7 +70,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
     sidebarCollapsed,
     sidebarWidth,
     setSidebarWidth,
-    workItemNavViews,
+    workItemNavViews, setWorkItemNavViews,
     activeWorkItemViewId,
     myReviewsBadge,
     myWorkItemsBadge,
@@ -354,20 +357,18 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             onNavigate("workItemViews");
           }}
         >
-          {pinnedWorkItemViews.map((item, index) => (
-            <NavSubItem
-              key={item.id}
-              active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
-              disabled={organizationsLength === 0}
-              label={item.name}
-              badge={pinnedCounts[index]?.data ?? null}
-              onClick={() => {
-                onSetActiveWorkItemViewId(item.id);
-                onSetSelectedWorkItemViewRequestId(item.id);
-                onNavigate("workItemViews");
-              }}
-            />
-          ))}
+          <SidebarPinnedViews
+            views={pinnedWorkItemViews}
+            setViews={setWorkItemNavViews}
+            counts={pinnedCounts}
+            activeId={activeView === "workItemViews" ? activeWorkItemViewId : null}
+            disabled={organizationsLength === 0}
+            onOpen={(id) => {
+              onSetActiveWorkItemViewId(id);
+              onSetSelectedWorkItemViewRequestId(id);
+              onNavigate("workItemViews");
+            }}
+          />
         </NavSubGroup>
         <NavSubItem
           active={activeView === "workItems"}

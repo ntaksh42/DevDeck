@@ -1,4 +1,5 @@
 import { pipelineRunVisual, type RunTone } from "./pipelineStatus";
+import { readStoredJson, writeStoredJson } from "@/lib/storage";
 
 export const HISTORY_CELL_COUNT = 8;
 
@@ -31,10 +32,11 @@ export function historyCells(runs: RunLike[], max: number = HISTORY_CELL_COUNT):
     .reverse();
 }
 
-export type BoardSort = "status" | "name" | "lastRun";
+export type BoardSort = "status" | "name" | "lastRun" | "manual";
 export type BoardStatusFilter = "running" | "failed" | null;
 
 type RowLike = {
+  key?: string;
   sub: { definitionName: string };
   latest: { queueTime: string | null } | undefined;
   visual: { tone: RunTone };
@@ -63,8 +65,13 @@ function queueTimeMs(row: RowLike): number {
  * Orders the board. "status" floats running pipelines, then failed ones, to
  * the top; every mode is stable, so ties keep the watch order.
  */
-export function sortBoardRows<T extends RowLike>(rows: T[], sort: BoardSort): T[] {
+export function sortBoardRows<T extends RowLike>(rows: T[], sort: BoardSort, manualOrder: readonly string[] = []): T[] {
   const sorted = [...rows];
+  if (sort === "manual") {
+    const ranks = new Map(manualOrder.map((key, index) => [key, index]));
+    const rank = (row: T) => ranks.get(row.key ?? "") ?? ranks.size;
+    return sorted.sort((a, b) => rank(a) - rank(b));
+  }
   if (sort === "name") {
     return sorted.sort((a, b) => a.sub.definitionName.localeCompare(b.sub.definitionName));
   }
@@ -85,7 +92,17 @@ export type PipelineRunFilters = {
 export const NO_RUN_FILTERS: PipelineRunFilters = { branch: "", result: "", requestedForMe: false };
 
 const SORT_STORAGE_KEY = "azdodeck:view:pipelinesSort:v1";
-const SORT_MODES: BoardSort[] = ["status", "name", "lastRun"];
+const SORT_MODES: BoardSort[] = ["status", "name", "lastRun", "manual"];
+const MANUAL_ORDER_STORAGE_KEY = "azdodeck:view:pipelinesManualOrder:v1";
+
+export function loadBoardManualOrder(): string[] {
+  return readStoredJson(MANUAL_ORDER_STORAGE_KEY, (value) =>
+    Array.isArray(value) ? [...new Set(value.filter((key): key is string => typeof key === "string"))] : undefined, []);
+}
+
+export function saveBoardManualOrder(order: string[]) {
+  writeStoredJson(MANUAL_ORDER_STORAGE_KEY, order);
+}
 
 export function loadBoardSort(): BoardSort {
   try {

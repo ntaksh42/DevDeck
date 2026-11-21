@@ -13,12 +13,18 @@ export function reviewGroupKeyOf(pr: ReviewPullRequestSummary, groupBy: ReviewGr
   return groupBy === 'repository' ? pr.repositoryId : reviewSectionOf(pr);
 }
 
-/** Orders groups: fixed section order, or repository name A→Z. */
+/** Uses saved ranks first, then the default order for newly encountered groups. */
 export function compareReviewGroups(
   a: ReviewPullRequestSummary,
   b: ReviewPullRequestSummary,
   groupBy: ReviewGroupBy,
+  ranks?: ReadonlyMap<string, number>,
 ): number {
+  if (ranks?.size) {
+    const aRank = ranks.get(reviewGroupKeyOf(a, groupBy)) ?? ranks.size;
+    const bRank = ranks.get(reviewGroupKeyOf(b, groupBy)) ?? ranks.size;
+    if (aRank !== bRank) return aRank - bRank;
+  }
   if (groupBy === 'repository') {
     return (
       a.repositoryName.localeCompare(b.repositoryName, undefined, { sensitivity: 'base' }) ||

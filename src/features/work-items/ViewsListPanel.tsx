@@ -24,6 +24,7 @@ import {
   type ViewCountQueryResult,
 } from './ViewsListItems';
 import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { WorkItemViewsOverflowMenu } from './WorkItemViewsOverflowMenu';
 
 export type ViewsListPanelProps = {
@@ -44,6 +45,7 @@ export type ViewsListPanelProps = {
   onPinToggle: () => void;
   onMoveLeft: () => void;
   onMoveRight: () => void;
+  onReorderView: (fromId: string, toId: string) => void;
   onPreviewToggle: () => void;
   onShare: () => void;
   onExport: () => void;
@@ -75,6 +77,7 @@ export function ViewsListPanel({
   onPinToggle,
   onMoveLeft,
   onMoveRight,
+  onReorderView,
   onPreviewToggle,
   onShare,
   onExport,
@@ -88,6 +91,7 @@ export function ViewsListPanel({
   onKeyDown,
 }: ViewsListPanelProps) {
   const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index]));
+  const viewDrag = useColumnDrag(onReorderView);
 
   // In the one-row chip display the row scrolls sideways; keep the selected
   // chip visible so a chip is never left half-cut at the edge.
@@ -407,6 +411,7 @@ export function ViewsListPanel({
             return (
               <Item
                 key={view.id}
+                drag={views.length > 1 ? viewDrag(view.id) : undefined}
                 view={view}
                 query={viewCountQueries[index]}
                 stats={stats[index]}

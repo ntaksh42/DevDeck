@@ -33,6 +33,17 @@ export function firstCustomView(views: WorkItemQueryView[]): WorkItemQueryView |
   return views.find((view) => !view.id.startsWith("builtin-")) ?? null;
 }
 
+export function reorderWorkItemViews(views: WorkItemQueryView[], fromId: string, toId: string): WorkItemQueryView[] {
+  if (fromId === toId) return views;
+  const fromIndex = views.findIndex((view) => view.id === fromId);
+  const toIndex = views.findIndex((view) => view.id === toId);
+  if (fromIndex < 0 || toIndex < 0) return views;
+  const next = [...views];
+  const [view] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, view);
+  return next;
+}
+
 const WIQL_KEYWORDS = [
   "SELECT",
   "FROM",

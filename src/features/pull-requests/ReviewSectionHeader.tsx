@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
+import type { ColumnDragProps } from '@/lib/columnDrag';
 import type { ReviewSection } from './myReviewsTypes';
 
 interface ReviewSectionHeaderProps {
@@ -10,6 +11,9 @@ interface ReviewSectionHeaderProps {
   /** Status section, used for the accent color. Omitted when grouping by repository. */
   section?: ReviewSection;
   onToggle: () => void;
+  groupKey: string;
+  drag: ColumnDragProps;
+  onMove: (direction: -1 | 1) => void;
 }
 
 const ACCENTS: Record<ReviewSection, { bar: string; text: string; badge: string }> = {
@@ -46,25 +50,47 @@ const NEUTRAL_ACCENT = {
   badge: 'bg-muted text-muted-foreground',
 };
 
-export function ReviewSectionHeader({ label, count, collapsed, preview, section, onToggle }: ReviewSectionHeaderProps) {
+export function ReviewSectionHeader({ label, count, collapsed, preview, section, onToggle, groupKey, drag, onMove }: ReviewSectionHeaderProps) {
   const accent = section ? ACCENTS[section] : NEUTRAL_ACCENT;
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={!collapsed}
-      className={`flex h-[29px] w-full items-center gap-1.5 border-b border-l-4 border-border bg-muted/60 px-2 text-left text-xs font-semibold text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring ${accent.bar}`}
+    <div
+      {...drag.cell}
+      className={`flex h-[29px] items-center border-b border-l-4 border-border bg-muted/60 data-[drop-target=true]:bg-primary/15 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-inset data-[drop-target=true]:ring-primary ${accent.bar}`}
     >
-      {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-      <span className={`shrink-0 whitespace-nowrap ${accent.text}`}>{label}</span>
-      <span className={`rounded-full px-1.5 text-2xs font-medium leading-4 ${accent.badge}`}>
-        <span className="sr-only">(</span>{count}<span className="sr-only">)</span>
-      </span>
-      {collapsed && preview ? (
-        <span aria-hidden="true" className="ml-2 min-w-0 truncate whitespace-nowrap font-normal opacity-80">
-          {preview}
+      <button
+        {...drag.handle}
+        type="button"
+        data-review-group-handle={groupKey}
+        aria-label={`Reorder group ${label}`}
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+        title="Drag to reorder or press Alt+Up / Alt+Down"
+        className="h-full shrink-0 cursor-grab px-1 text-muted-foreground hover:bg-muted focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-ring"
+        onKeyDown={(event) => {
+          if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onMove(event.key === 'ArrowUp' ? -1 : 1);
+        }}
+      >
+        <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-1 text-left text-xs font-semibold text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
+      >
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+        <span className={`shrink-0 whitespace-nowrap ${accent.text}`}>{label}</span>
+        <span className={`rounded-full px-1.5 text-2xs font-medium leading-4 ${accent.badge}`}>
+          <span className="sr-only">(</span>{count}<span className="sr-only">)</span>
         </span>
-      ) : null}
-    </button>
+        {collapsed && preview ? (
+          <span aria-hidden="true" className="ml-2 min-w-0 truncate whitespace-nowrap font-normal opacity-80">
+            {preview}
+          </span>
+        ) : null}
+      </button>
+    </div>
   );
 }
