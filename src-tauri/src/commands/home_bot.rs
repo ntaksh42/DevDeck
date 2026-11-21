@@ -7,6 +7,7 @@ use crate::app_state::run_blocking;
 use crate::error::Result;
 use crate::home_bot::{
     HomeBot, HomeBotSettings, HomeBotView, HomeChatView, HomeSuggestionAsk, SendHomeMessageInput,
+    WatchedPipeline,
 };
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +56,19 @@ pub async fn start_home_suggestion(
 ) -> Result<HomeSuggestionAsk> {
     let bot = bot.inner().clone();
     run_blocking(move || bot.suggestion_ask(&input.id)).await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomePipelinesInput {
+    pub pipelines: Vec<WatchedPipeline>,
+}
+
+/// The Pipelines view's watch list, copied here for Look around.
+#[tauri::command]
+pub async fn save_home_pipelines(input: HomePipelinesInput, bot: State<'_, HomeBot>) -> Result<()> {
+    let bot = bot.inner().clone();
+    run_blocking(move || bot.save_pipelines(input.pipelines)).await
 }
 
 #[tauri::command]

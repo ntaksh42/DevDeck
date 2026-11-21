@@ -10,6 +10,7 @@ import { commandErrorMessage, getAppSettings, startHomeSuggestion, type AgentKin
 import { openExternalUrl } from "@/lib/openExternal";
 import { pushNotice, pushToast } from "@/lib/toast";
 import { clamp, formatRelativeDate } from "@/lib/utils";
+import { shareWithLookAround } from "@/features/pipelines/pipelineSubscriptionsStorage";
 import { HomeChatComposer } from "./HomeChatComposer";
 import { EMPTY_DRAFT, HomeOrchestratorChat, OrchestratorStatePill, type HomeDraft } from "./HomeOrchestratorChat";
 import { HOME_SUGGESTIONS_SHOWN, HomeSuggestionList } from "./HomeSuggestionList";
@@ -30,6 +31,7 @@ export function HomeView() {
   const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [errorOpen, setErrorOpen] = useState(false);
   const [draft, setDraft] = useState<HomeDraft>(EMPTY_DRAFT);
   const [choice, setChoice] = useState<{ agent: AgentKind | null; model: string | null }>({ agent: null, model: null });
   const [activate, setActivate] = useState<{ id: string; key: number }>({ id: "chat", key: 1 });
@@ -38,6 +40,8 @@ export function HomeView() {
 
   // Opening Home reads the suggestions (and arms the schedule the first time).
   useEffect(() => markSeen(), [markSeen]);
+  // Look around reads the watched pipelines from a backend copy; refresh it.
+  useEffect(() => shareWithLookAround(), []);
 
   const focusList = useCallback(() => listRef.current?.focus(), []);
   const attachList = useCallback((element: HTMLDivElement | null) => {
@@ -179,15 +183,25 @@ export function HomeView() {
 
   const listPane = (
     <div className="flex h-full min-h-0 flex-col">
-      {look.running ? (
-        <div role="status" className="border-b border-info/30 bg-info/10 px-3 py-1 text-xs text-info">
-          ● Looking around… (read-only)
-        </div>
-      ) : look.error ? (
-        <div role="alert" className="border-b border-destructive/30 bg-destructive/10 px-3 py-1 text-xs text-destructive">
-          Last look failed{look.failuresInARow > 1 ? ` (${look.failuresInARow} in a row)` : ""}: {look.error}
-          {view.settings.enabled ? " Press L to try again." : " Look around is off; turn it on in Settings."}
-        </div>
+      {!look.running && look.error ? (
+        <button
+          type="button"
+          role="alert"
+          aria-expanded={errorOpen}
+          onClick={() => setErrorOpen((open) => !open)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            setErrorOpen(false);
+            focusList();
+          }}
+          title={errorOpen ? "Collapse (Enter)" : "Show the whole error (Enter)"}
+          className={`border-b border-destructive/30 bg-destructive/10 px-3 py-1 text-left text-xs text-destructive outline-none focus-visible:ring-1 focus-visible:ring-destructive ${
+            errorOpen ? "whitespace-pre-wrap break-words" : "truncate"
+          }`}
+        >
+          Look failed{look.failuresInARow > 1 ? ` ×${look.failuresInARow}` : ""}: {look.error}
+        </button>
       ) : null}
       <HomeSuggestionList
         ref={attachList}
@@ -201,6 +215,11 @@ export function HomeView() {
           setSelectedId(id);
           focusList();
         }}
+        onStart={() => void start()}
+        onDismiss={() => {
+          dismissSelected();
+          focusList();
+        }}
         onKeyDown={onListKeyDown}
       />
       <ListStatusBar
@@ -209,15 +228,16 @@ export function HomeView() {
           view.newCount ? `${view.newCount} new` : null,
           look.nextAt ? `Next look ${shortTime(look.nextAt)}` : "Look around off",
         ]}
+        helpSection="home"
       >
-        <span className="text-2xs text-muted-foreground">Q start ・ E dismiss ・ M chat ・ W workers ・ L look now ・ N new chat</span>
+        <span className="text-2xs text-muted-foreground">Q ask ・ E dismiss ・ L look</span>
       </ListStatusBar>
     </div>
   );
 
   const lookButton = (
     <span className="flex items-center gap-2 text-2xs text-muted-foreground">
-      <span>{lookText}</span>
+      <span role="status">{lookText}</span>
       <button
         type="button"
         onClick={() => lookNow.mutate()}
@@ -279,6 +299,7 @@ export function HomeView() {
             content: (
               <HomeOrchestratorChat
                 chat={chatData}
+                brief={view.brief}
                 composer={composer}
                 onStarter={(text) => setDraft((current) => ({ ...EMPTY_DRAFT, key: current.key + 1, text }))}
                 onOpenWorker={openWorker}

@@ -88,8 +88,8 @@ pub(crate) fn prompt(
                 })
                 .collect();
             format!(
-                "Workers finished. For each: the point, the evidence (file:line), and the next step; \
-                 if a worker asks something, quote its question so the user can answer. \
+                "Workers finished. For each, one bullet of at most two lines: the conclusion, the evidence (file:line) \
+                 and the next step, as fragments; if a worker asks something, quote only its question. \
                  Do not start new workers in this turn.\n\n{}",
                 parts.join("\n\n")
             )
@@ -98,7 +98,8 @@ pub(crate) fn prompt(
     format!(
         "You are the user's Orchestrator in DevDeck, a dashboard for Azure DevOps. You talk with the user in one ongoing chat.\n\
          Rules:\n\
-         - Answer questions about what is going on yourself, from the overview below. Keep replies short (Japanese).\n\
+         - Answer questions about what is going on yourself, from the overview below. Keep replies short (Japanese): \
+           at most 3 lines or 3 bullets, no greeting, no restating the question, no closing offer.\n\
          - Work that needs code, logs or diffs (investigate, summarize a diff, review, propose a fix) goes to a worker, \
            one per target. Only workers look at code: you answer from the overview.\n\
          - For a pull request target, DevDeck hands the worker the PR's diff, description and threads, and a clone of its \

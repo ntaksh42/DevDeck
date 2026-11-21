@@ -8,7 +8,7 @@ const AGENTS: { kind: AgentKind; label: string }[] = [
 ];
 const MAX_HEIGHT = 200;
 
-export type ComposerDraft = { key: number; text: string; targetLabel: string | null };
+export type ComposerDraft = { key: number; text: string; targetLabel: string | null; suggestionId?: string | null };
 
 /**
  * The chat input as chat apps have it: one rounded box that is always open,
@@ -125,6 +125,9 @@ export function HomeChatComposer({
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>
             </span>
+            {draft.suggestionId ? (
+              <span className="ml-2 self-center text-xs text-muted-foreground">Edit if needed, then Enter to send</span>
+            ) : null}
           </div>
         ) : null}
         <textarea
@@ -133,7 +136,7 @@ export function HomeChatComposer({
           rows={1}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={busy ? "The Orchestrator is replying…" : "Message the Orchestrator… (Enter to send, Shift+Enter for a new line)"}
+          placeholder={busy ? "The Orchestrator is replying…" : "Message the Orchestrator…"}
           aria-label="Message the Orchestrator"
           className="block max-h-[200px] w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-sm leading-6 outline-none placeholder:text-muted-foreground"
         />

@@ -7,13 +7,13 @@ use super::snapshot::Snapshot;
 use super::store::NewSuggestion;
 
 pub(crate) const PER_RUN: usize = 5;
-pub(crate) const TITLE_MAX: usize = 80;
-pub(crate) const WHY_MAX: usize = 400;
+pub(crate) const TITLE_MAX: usize = 40;
+pub(crate) const WHY_MAX: usize = 80;
 pub(crate) const ASK_MAX: usize = 2_000;
-pub(crate) const BRIEF_MAX_LINES: usize = 5;
-pub(crate) const BRIEF_LINE_MAX: usize = 200;
+pub(crate) const BRIEF_MAX_LINES: usize = 3;
+pub(crate) const BRIEF_LINE_MAX: usize = 60;
 
-const DEFAULT_FOCUS: &str = "Anything waiting on the user: reviews asked of them, failing checks or conflicts on their pull requests, questions put to them, approvals, and agent conversations that need them.";
+const DEFAULT_FOCUS: &str = "Anything waiting on the user: reviews asked of them, failing checks or conflicts on their pull requests, failing watched pipelines, questions put to them, approvals, and agent conversations that need them.";
 
 pub(crate) struct History {
     pub open: Vec<String>,
@@ -53,10 +53,11 @@ pub(crate) fn prompt(
          Look for: {focus}\n\n\
          {}{}{}\
          Overview:\n<<<\n{}\n>>>\n\n\
-         Reply with only one JSON object (Japanese for the text):\n\
-         {{\"brief\": [1-{BRIEF_MAX_LINES} short lines on what matters today],\n \
-         \"suggestions\": [{{\"title\": what to do, under {TITLE_MAX} characters,\n  \
-         \"why\": one sentence on why now, naming the concrete fact,\n  \
+         Reply with only one JSON object (Japanese for the text). The user reads it at a glance: \
+         write terse fragments, not sentences.\n\
+         {{\"brief\": [1-{BRIEF_MAX_LINES} lines, each under 30 characters, e.g. \"!798 の CI 失敗が最優先\"],\n \
+         \"suggestions\": [{{\"title\": what to do, under 25 characters, e.g. \"!798 の CI を直す\",\n  \
+         \"why\": why now, under 30 characters, only the concrete fact, e.g. \"main 取り込み後 3 回失敗\",\n  \
          \"ask\": the message the user would send to their Orchestrator to do it, written as the user,\n  \
          \"target\": the bracketed key from the overview, or null}}]}}\n\
          Suggest only things with a concrete next step; if nothing is worth it, return an empty list.",
@@ -90,7 +91,13 @@ pub(crate) struct LookResult {
 
 fn clip(text: &str, max: usize) -> String {
     let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    one_line.chars().take(max).collect()
+    if one_line.chars().count() <= max {
+        return one_line;
+    }
+    // Cut text ends in "…" so the reader can tell it goes on.
+    let mut cut: String = one_line.chars().take(max.saturating_sub(1)).collect();
+    cut.push('…');
+    cut
 }
 
 /// Reads the run's JSON. Values past their limits are cut; a suggestion
@@ -195,6 +202,8 @@ mod tests {
         let look = parse(&text, &snapshot()).unwrap();
         assert_eq!(look.suggestions.len(), PER_RUN);
         assert_eq!(look.suggestions[0].title.chars().count(), TITLE_MAX);
+        assert!(look.suggestions[0].title.ends_with('…'));
+        assert_eq!(clip("短い", TITLE_MAX), "短い");
     }
 
     #[test]

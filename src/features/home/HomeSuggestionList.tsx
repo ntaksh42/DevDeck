@@ -9,8 +9,8 @@ const KIND_CLASS: Record<string, string> = { pr: "text-link", wi: "text-success"
 export const HOME_SUGGESTIONS_SHOWN = 3;
 
 /**
- * The brief and the suggestions, as one listbox. The selected row expands to
- * show why and what Start would ask.
+ * The brief and the suggestions, as one listbox. The selected row shows the
+ * whole reason; what Start asks appears in the chat input on Q.
  */
 export const HomeSuggestionList = forwardRef<
   HTMLDivElement,
@@ -22,17 +22,21 @@ export const HomeSuggestionList = forwardRef<
     showAll: boolean;
     onShowAll: () => void;
     onSelect: (id: string) => void;
+    /** Puts the selected suggestion's ask in the Orchestrator input (Q). */
+    onStart: () => void;
+    /** Dismisses the selected suggestion (E). */
+    onDismiss: () => void;
     onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   }
->(function HomeSuggestionList({ brief, briefMeta, suggestions, selectedId, showAll, onShowAll, onSelect, onKeyDown }, ref) {
+>(function HomeSuggestionList({ brief, briefMeta, suggestions, selectedId, showAll, onShowAll, onSelect, onStart, onDismiss, onKeyDown }, ref) {
   const visible = showAll ? suggestions : suggestions.slice(0, HOME_SUGGESTIONS_SHOWN);
   const hidden = suggestions.length - visible.length;
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       {brief.length ? (
         <section aria-label="Brief" className="border-b border-border px-3 py-1.5 text-sm">
-          <h3 className="flex items-baseline gap-2 font-semibold">
-            Today <span className="text-xs font-normal text-muted-foreground">{briefMeta}</span>
+          <h3 className="font-semibold" title={briefMeta}>
+            Today
           </h3>
           <ul className="ml-4 list-disc text-[13px] leading-5">
             {brief.map((line) => (
@@ -52,8 +56,8 @@ export const HomeSuggestionList = forwardRef<
       >
         {suggestions.length === 0 ? (
           <PreviewEmptyState
-            message="Nothing needs you right now."
-            hint="Change the focus in Settings, or press L to look around again."
+            message="Nothing needs you."
+            hint="L to look again"
           />
         ) : null}
         {visible.map((suggestion) => {
@@ -78,9 +82,31 @@ export const HomeSuggestionList = forwardRef<
                 </div>
                 <div className={`text-xs text-muted-foreground ${selected ? "" : "truncate"}`}>{suggestion.why}</div>
                 {selected ? (
-                  <div className="mt-0.5 rounded border-l-2 border-primary bg-info/10 px-1.5 text-xs">
-                    <span className="font-semibold">Start (Q) asks: </span>
-                    {suggestion.ask}
+                  // Mouse path for Q / E; the keys stay the keyboard path, so the buttons skip the tab order.
+                  <div className="mt-1 flex items-center gap-1.5 pb-0.5">
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onStart();
+                      }}
+                      title="Put this ask in the Orchestrator input; edit it, then press Enter to send"
+                      className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      Ask Orchestrator <kbd className="rounded bg-white/20 px-1 font-sans text-2xs">Q</kbd>
+                    </button>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDismiss();
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
+                    >
+                      Dismiss <kbd className="rounded bg-muted px-1 font-sans text-2xs">E</kbd>
+                    </button>
                   </div>
                 ) : null}
               </div>

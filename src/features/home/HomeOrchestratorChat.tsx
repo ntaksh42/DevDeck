@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, Bot, Info } from "lucide-react";
 import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
 import type { HomeChatMessage, HomeChatView, HomeWorker } from "@/lib/azdoCommands";
@@ -14,8 +14,54 @@ export type HomeDraft = {
 
 export const EMPTY_DRAFT: HomeDraft = { key: 0, text: "", target: null, targetLabel: null, suggestionId: null };
 
-/** Starters shown on an empty chat; one click puts it in the input. */
-const STARTERS = ["今日は何から手を付けるべき？", "承認やレビューで自分を待っているものは？", "自分の PR で止まっているものを洗い出して"];
+/** Starters shown on an empty chat when there is no brief; one click puts it in the input. */
+const STARTERS = ["今日の優先は？", "自分待ちのものは？", "止まっている自分の PR は？"];
+
+/** Starters from the latest brief (one per line, up to three), else the fixed ones. */
+export function chatStarters(brief: string[]): string[] {
+  const fromBrief = brief
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((line) => `${line.replace(/[。.]$/, "")} について詳しく`);
+  return fromBrief.length ? fromBrief : STARTERS;
+}
+
+/** Orchestrator replies taller than this (four lines of text) fold behind "Show more". */
+const FOLD_PX = 96;
+
+/** An Orchestrator reply that folds when it runs past four lines. */
+function FoldingBody({ text }: { text: string }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    const element = bodyRef.current;
+    if (element) setLong(element.scrollHeight > FOLD_PX + 8);
+  }, [text]);
+  const folded = long && !open;
+  return (
+    <>
+      <div
+        ref={bodyRef}
+        className={folded ? "overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]" : ""}
+        style={folded ? { maxHeight: FOLD_PX } : undefined}
+      >
+        <NoteMarkdown text={text} className="text-sm leading-6 text-foreground" />
+      </div>
+      {long ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="mt-0.5 text-xs text-link hover:underline focus-visible:underline focus-visible:outline-none"
+        >
+          {open ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </>
+  );
+}
 
 function stateLabel(state: HomeChatView["state"], waitingOn: number): string {
   if (state === "thinking") return "Replying…";
@@ -118,7 +164,7 @@ function Message({
           </div>
         ) : null}
         <div className="max-w-[92%] rounded-2xl rounded-tl-md bg-muted px-3.5 py-2">
-          <NoteMarkdown text={message.body} className="text-sm leading-6 text-foreground" />
+          <FoldingBody text={message.body} />
         </div>
         {cards.length ? (
           <div className="mt-1.5 grid max-w-[92%] grid-cols-1 gap-1.5">
@@ -157,11 +203,14 @@ function Typing() {
  */
 export function HomeOrchestratorChat({
   chat,
+  brief,
   composer,
   onStarter,
   onOpenWorker,
 }: {
   chat: HomeChatView | undefined;
+  /** The latest Look around brief: the empty chat offers its lines as starters. */
+  brief: string[];
   composer: ReactNode;
   onStarter: (text: string) => void;
   onOpenWorker: (worker: HomeWorker) => void;
@@ -203,12 +252,9 @@ export function HomeOrchestratorChat({
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-600 text-white dark:bg-violet-500">
                 <Bot className="h-6 w-6" aria-hidden="true" />
               </span>
-              <div>
-                <p className="text-sm font-semibold">Orchestrator</p>
-                <p className="text-xs text-muted-foreground">質問に答え、調査やレビューは worker に任せて結果をまとめます。</p>
-              </div>
+              <p className="text-sm font-semibold">Orchestrator</p>
               <div className="flex flex-wrap justify-center gap-2">
-                {STARTERS.map((starter) => (
+                {chatStarters(brief).map((starter) => (
                   <button
                     key={starter}
                     type="button"
@@ -242,7 +288,7 @@ export function HomeOrchestratorChat({
           {chat?.error ? (
             <div className="flex justify-center">
               <p role="alert" className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">
-                The last reply failed: {chat.error}
+                Reply failed: {chat.error}
               </p>
             </div>
           ) : null}

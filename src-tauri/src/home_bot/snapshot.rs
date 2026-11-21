@@ -14,6 +14,9 @@ use crate::error::Result;
 /// Longest overview handed to the agent.
 const MAX_CHARS: usize = 60_000;
 const MAX_PER_SECTION: usize = 40;
+/// Where the pipelines would be; a look replaces it with the watched pipelines.
+pub(crate) const NO_PIPELINES: &str =
+    "\nPipelines are not in this overview: only Look around reads the watched pipelines.\n";
 
 /// Something a suggestion or a worker can be about.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -253,7 +256,7 @@ pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
             note.context.as_deref().unwrap_or("no subject")
         );
     }
-    md.push_str("\nPipelines are not in this overview: DevDeck does not cache them.\n");
+    md.push_str(NO_PIPELINES);
     if md.len() > MAX_CHARS {
         let cut = md
             .char_indices()

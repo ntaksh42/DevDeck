@@ -31,22 +31,21 @@ let lastLookedAt = ago(55);
 let seenAt = 0;
 let dismissed = 0;
 let suggestions: HomeSuggestion[] = [
-  suggestion("s1", "!798 の CI 失敗を直す", "main の取り込み後に api-tests が 3 回続けて失敗している。", "!798 の api-tests 失敗の原因を調べて。main の取り込みで入った変更との関係と、直す場所を file:line で示して。", "!798", "pr", true),
-  suggestion("s2", "!812 をレビューする", "3 日前に依頼され、ほかのレビュアーは承認済み。", "!812 の差分の要点と、レビューで見るべき箇所をまとめて。", "!812", "pr", true),
-  suggestion("s3", "#4521 の再現手順を確認する", "2 日前に自分宛てのメンションがあり、まだ返信していない。", "#4521 のコメントを読んで、再現手順で足りない情報を挙げて。", "#4521", "wi", true),
-  suggestion("s4", "!790 のコンフリクトを解消する", "main と衝突して 1 日経ち、レビュアー 2 名が待っている。", "!790 のコンフリクトの箇所と、どちらの変更を残すべきかを調べて。", "!790", "pr", false),
+  suggestion("s1", "!798 の CI を直す", "main 取り込み後 3 回失敗", "!798 の api-tests 失敗の原因を調べて。main の取り込みで入った変更との関係と、直す場所を file:line で示して。", "!798", "pr", true),
+  suggestion("s2", "!812 をレビュー", "依頼から 3 日・他は承認済み", "!812 の差分の要点と、レビューで見るべき箇所をまとめて。", "!812", "pr", true),
+  suggestion("s3", "#4521 の質問に返信", "メンションから 2 日未返信", "#4521 のコメントを読んで、再現手順で足りない情報を挙げて。", "#4521", "wi", true),
+  suggestion("s4", "!790 の衝突を解消", "衝突 1 日・レビュアー 2 名待ち", "!790 のコンフリクトの箇所と、どちらの変更を残すべきかを調べて。", "!790", "pr", false),
 ];
 const brief = [
-  "レビュー依頼 2 件のうち !812 は作成から 3 日経っている。",
-  "自作 PR !798 の CI が main の取り込み後から失敗している。",
-  "#4521 で自分宛ての質問に 2 日返信していない。",
+  "!798 の CI 失敗が最優先",
+  "!812 のレビューが 3 日待ち",
 ];
 
 let chatId = "chat-demo";
 let messageId = 3;
 let thinking = false;
 let messages: HomeChatMessage[] = [
-  { id: 1, author: "orchestrator", body: "おはよう。今朝の提案は 4 件。急ぐのは **!798 の CI 失敗**。", workerIds: [], createdAt: ago(300) },
+  { id: 1, author: "orchestrator", body: "提案 4 件。急ぐのは **!798 の CI 失敗**。", workerIds: [], createdAt: ago(300) },
 ];
 let workers: HomeWorker[] = [];
 
@@ -132,7 +131,7 @@ export function demoSendHomeMessage(input: SendHomeMessageInput): null {
   setTimeout(() => {
     thinking = false;
     if (!label) {
-      push("orchestrator", `(${agent}) いま急ぐのは !798 の CI 失敗。次が #4521 への返信。`);
+      push("orchestrator", `(${agent}) 1. !798 の CI 失敗 2. #4521 に返信`);
       return;
     }
     const worker: HomeWorker = {
@@ -150,13 +149,19 @@ export function demoSendHomeMessage(input: SendHomeMessageInput): null {
       endedAt: null,
     };
     workers = [worker, ...workers];
-    push("orchestrator", `${label} を ${agent} の worker に渡した。終わったらここで知らせる。`, [worker.id]);
+    push("orchestrator", `${label} を ${agent} の worker に依頼。`, [worker.id]);
     setTimeout(() => {
       if (!workers.some((w) => w.id === worker.id && w.status === "running")) return;
       workers = workers.map((w) => (w.id === worker.id ? { ...w, status: "done", endedAt: now() } : w));
       push(
         "orchestrator",
-        `**${label} の結果:** 原因は main の \`a1b2c3d\` で戻り値が null 許容になったこと。修正候補は \`src/Orders/OrderServiceTests.cs:84\`。直す案も worker に頼む？`,
+        [
+          `- **${label}:** \`a1b2c3d\` で戻り値が null 許容に。直す場所は \`src/Orders/OrderServiceTests.cs:84\``,
+          "- 影響: `OrderService.Find` の呼び出し 3 か所",
+          "- 再現: `dotnet test --filter Orders` で 2 件失敗",
+          "- 案: null を空の注文に置き換える (`OrderService.cs:41`)",
+          "- 未確認: 夜間ビルドでの再現",
+        ].join("\n"),
       );
     }, 5000);
   }, 1200);
@@ -191,6 +196,8 @@ export function dispatchHomeBot(command: string, args: unknown): unknown {
       return demoStartHomeSuggestion(String(input.id));
     case "save_home_bot_settings":
       return demoSaveHomeBotSettings(input as unknown as HomeBotSettings);
+    case "save_home_pipelines":
+      return null;
     case "clear_home_dismissed":
       return demoClearHomeDismissed();
     case "count_home_dismissed":

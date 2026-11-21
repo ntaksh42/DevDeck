@@ -1,3 +1,4 @@
+import { saveHomePipelines } from "@/lib/azdoCommands";
 import { isTauriRuntime } from "@/lib/runtime";
 import { readStoredString, writeStoredJson } from "@/lib/storage";
 
@@ -111,6 +112,14 @@ export function savePipelineSubscriptions(subscriptions: PipelineSubscription[])
   if (typeof window === "undefined") return;
   writeStoredJson(PIPELINE_SUBSCRIPTIONS_STORAGE_KEY, subscriptions.slice(0, MAX_SUBSCRIPTIONS));
   window.dispatchEvent(new Event(PIPELINE_SUBSCRIPTIONS_CHANGED_EVENT));
+  shareWithLookAround(subscriptions);
+}
+
+/** Look around reads the watched pipelines from a copy in the backend. */
+export function shareWithLookAround(subscriptions: PipelineSubscription[] = loadPipelineSubscriptions()): void {
+  saveHomePipelines(subscriptions.slice(0, MAX_SUBSCRIPTIONS)).catch(() => {
+    // Best effort: the next change or Home visit sends it again.
+  });
 }
 
 export function isSubscribed(

@@ -206,6 +206,7 @@ pub fn run() {
             commands::home_bot::dismiss_home_suggestion,
             commands::home_bot::start_home_suggestion,
             commands::home_bot::save_home_bot_settings,
+            commands::home_bot::save_home_pipelines,
             commands::home_bot::clear_home_dismissed,
             commands::home_bot::count_home_dismissed,
             commands::home_bot::get_home_chat,
