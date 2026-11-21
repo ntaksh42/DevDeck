@@ -32,8 +32,9 @@ mod work_items_query;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-#[cfg(test)]
 mod tests_action_inbox;
+#[cfg(test)]
+mod tests_cache_retention;
 #[cfg(test)]
 mod tests_inbox_threads;
 #[cfg(test)]

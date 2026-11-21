@@ -178,7 +178,7 @@ async fn sync_org_prs(
     }
     // Cached for an hour by the PR sync above, so this is normally no request.
     let groups = match org.authenticated_user_id.as_deref() {
-        Some(me) => crate::prs::member_group_ids(db, client, org, me).await.0,
+        Some(me) => crate::prs::member_group_ids(db, client, org, me).await.ids,
         None => Default::default(),
     };
     let inbox_update = crate::prs::update_action_inbox(db, org, &scanned, &groups);

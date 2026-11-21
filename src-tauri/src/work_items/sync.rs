@@ -150,10 +150,16 @@ async fn fetch_project_work_items(
         (Err(e), _) | (_, Err(e)) => Err(e),
         (Ok(None), _) | (_, Ok(None)) => Ok(None),
         (Ok(Some(all)), Ok(Some(my))) => {
-            // A capped result is cut off, so like DevDeck's own cache it is merged
-            // rather than replacing the project's rows.
+            // A capped full result is truncated (oldest-changed items dropped), so
+            // it is merged like a delta instead of replacing the project's rows.
             let replace = was_full_sync && all.queried_count < SYNC_WORK_ITEM_QUERY_TOP;
-            write_all_work_items_to_shared_cache(&org, &project, &all.items, replace);
+            let (org, project, items) = (org.clone(), project.clone(), all.items.clone());
+            let path = shared_cache::path();
+            // SQLite I/O with a busy timeout; keep it off the async worker.
+            let _ = tokio::task::spawn_blocking(move || {
+                write_all_work_items_to_shared_cache(path, &org, &project, &items, replace)
+            })
+            .await;
             Ok(Some((all, my)))
         }
     };
@@ -170,10 +176,11 @@ async fn fetch_project_work_items(
 /// full/delta interaction below is intricate enough that adding a read-side
 /// skip here was judged not worth the risk); this is a pure write-through.
 fn write_all_work_items_to_shared_cache(
+    path: Option<std::path::PathBuf>,
     org: &Organization,
     project: &TeamProject,
     items: &[CachedWorkItem],
-    replace_project: bool,
+    replace: bool,
 ) {
     let rows: Vec<shared_cache::SharedWorkItem> = items
         .iter()
@@ -190,8 +197,8 @@ fn write_all_work_items_to_shared_cache(
         })
         .collect();
     let outcome = (|| -> Result<()> {
-        let mut conn = shared_cache::open()?;
-        if replace_project {
+        let mut conn = shared_cache::open_at(path)?;
+        if replace {
             shared_cache::write_work_items(&mut conn, &org.name, &project.name, &rows)?;
         } else {
             shared_cache::upsert_work_items(&mut conn, &org.name, &project.name, &rows)?;

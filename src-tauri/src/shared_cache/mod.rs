@@ -88,7 +88,13 @@ pub fn path() -> Option<PathBuf> {
 }
 
 pub fn open() -> Result<Connection> {
-    let path = path().ok_or_else(|| AppError::Database("APPDATA is unavailable".to_string()))?;
+    open_at(path())
+}
+
+/// Opens the file at `path` (as returned by [`path`]). Callers that move the
+/// I/O onto a blocking thread resolve the path first, on their own thread.
+pub fn open_at(path: Option<PathBuf>) -> Result<Connection> {
+    let path = path.ok_or_else(|| AppError::Database("APPDATA is unavailable".to_string()))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -157,8 +163,29 @@ pub fn open() -> Result<Connection> {
         );
         INSERT OR IGNORE INTO cache_meta (key, value) VALUES ('schema_version', '1');",
     )?;
+    check_schema_version(&conn)?;
     pr_snapshot::initialize(&conn)?;
     Ok(conn)
+}
+
+/// The table shapes this module reads and writes. Another app that migrates
+/// the file to a newer shape bumps `cache_meta.schema_version`; this app then
+/// stops touching it (readers fall back to the API, writes are skipped) rather
+/// than misreading or clobbering rows it does not understand.
+const SCHEMA_VERSION: &str = "1";
+
+fn check_schema_version(conn: &Connection) -> Result<()> {
+    let version: String = conn.query_row(
+        "SELECT value FROM cache_meta WHERE key = 'schema_version'",
+        [],
+        |row| row.get(0),
+    )?;
+    if version != SCHEMA_VERSION {
+        return Err(AppError::Database(format!(
+            "shared cache schema version {version} is not supported (expected {SCHEMA_VERSION})"
+        )));
+    }
+    Ok(())
 }
 
 /// `kind` values used in `sync_state`. Kept as string constants (not stored
@@ -185,7 +212,12 @@ pub fn is_fresh(
         .optional()
         .ok()
         .flatten();
-    synced_at.is_some_and(|synced_at| unix_now() - synced_at < max_age.as_secs() as i64)
+    // A timestamp in the future (clock moved back, or skew between writers) is
+    // not trusted as fresh.
+    synced_at.is_some_and(|synced_at| {
+        let age = unix_now() - synced_at;
+        (0..max_age.as_secs() as i64).contains(&age)
+    })
 }
 
 pub fn mark_synced(
@@ -360,5 +392,37 @@ mod tests {
             .unwrap();
         assert_eq!(synced_by, "devdeck");
         assert_eq!(last_error, None);
+    }
+
+    #[test]
+    fn a_future_timestamp_is_not_fresh() {
+        let conn = memory_conn();
+        conn.execute(
+            "INSERT INTO sync_state (organization, project, kind, synced_at, synced_by)
+             VALUES ('org', 'proj', 'pull_requests', ?1, 'waypoint')",
+            params![unix_now() + 3600],
+        )
+        .unwrap();
+        assert!(!is_fresh(
+            &conn,
+            "org",
+            "proj",
+            KIND_PULL_REQUESTS,
+            Duration::from_secs(120)
+        ));
+    }
+
+    #[test]
+    fn an_unknown_schema_version_is_rejected() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE cache_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO cache_meta VALUES ('schema_version', '1');",
+        )
+        .unwrap();
+        assert!(check_schema_version(&conn).is_ok());
+        conn.execute("UPDATE cache_meta SET value = '2'", [])
+            .unwrap();
+        assert!(check_schema_version(&conn).is_err());
     }
 }
