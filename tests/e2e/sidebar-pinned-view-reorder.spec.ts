@@ -28,6 +28,7 @@ test('reorders pinned Views in the sidebar and shares their saved order with Vie
   await expect(views).toHaveText([/Charlie/, /Alpha/, /Bravo/]);
   await alpha.focus();
   await page.keyboard.press('Alt+ArrowUp');
+  await expect(alpha.getByText('Alt+↑/↓')).toBeVisible();
   await expect.poll(pinOrder).toEqual(['alpha', 'charlie']);
   await expect(alpha).toBeFocused();
   await expect(views).toHaveText([/Alpha/, /Charlie/, /Bravo/]);

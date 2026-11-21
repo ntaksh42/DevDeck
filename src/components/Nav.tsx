@@ -111,12 +111,14 @@ export function NavSubItem({
   disabled = false,
   label,
   badge,
+  reorderable = false,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
   badge?: number | null;
+  reorderable?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -125,6 +127,7 @@ export function NavSubItem({
       disabled={disabled}
       onClick={onClick}
       aria-label={navItemAriaLabel(label, badge)}
+      aria-keyshortcuts={reorderable ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
@@ -134,6 +137,7 @@ export function NavSubItem({
     >
       <span className="min-w-0 truncate">{label}</span>
       <NavBadge count={badge} />
+      {reorderable ? <span aria-hidden="true" className="ml-auto hidden shrink-0 text-2xs group-focus:inline">Alt+↑/↓</span> : null}
     </button>
   );
 }

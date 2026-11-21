@@ -18,6 +18,7 @@ export type ComposerDraft = { key: number; text: string; targetLabel: string | n
  */
 export function HomeChatComposer({
   draft,
+  onChange,
   busy,
   agent,
   defaultAgent,
@@ -30,6 +31,7 @@ export function HomeChatComposer({
   onLeave,
 }: {
   draft: ComposerDraft;
+  onChange: (text: string) => void;
   busy: boolean;
   agent: AgentKind;
   defaultAgent: AgentKind;
@@ -41,22 +43,21 @@ export function HomeChatComposer({
   onSend: (text: string) => Promise<void>;
   onLeave: () => void;
 }) {
-  const [text, setText] = useState(draft.text);
+  const { key: draftKey, text } = draft;
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const agentRefs = useRef(new Map<AgentKind, HTMLButtonElement>());
 
-  // A new draft (Start on a suggestion, or after sending) replaces the text.
+  // Focus a loaded suggestion or starter once, without moving the caret on edits.
   useEffect(() => {
-    setText(draft.text);
-    if (draft.text) {
-      window.requestAnimationFrame(() => {
-        const box = textareaRef.current;
-        box?.focus();
-        box?.setSelectionRange(box.value.length, box.value.length);
-      });
-    }
-  }, [draft.key, draft.text]);
+    if (!textareaRef.current?.value) return;
+    const frame = window.requestAnimationFrame(() => {
+      const box = textareaRef.current;
+      box?.focus();
+      box?.setSelectionRange(box.value.length, box.value.length);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftKey]);
 
   useEffect(() => {
     const box = textareaRef.current;
@@ -73,7 +74,8 @@ export function HomeChatComposer({
     setSending(true);
     try {
       await onSend(text.trim());
-      setText("");
+    } catch {
+      // The mutation reports the error. Leave the draft available to retry.
     } finally {
       setSending(false);
     }
@@ -133,8 +135,9 @@ export function HomeChatComposer({
         <textarea
           ref={textareaRef}
           value={text}
+          readOnly={sending}
           rows={1}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder={busy ? "The Orchestrator is replying…" : "Message the Orchestrator…"}
           aria-label="Message the Orchestrator"
