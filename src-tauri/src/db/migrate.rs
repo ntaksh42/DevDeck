@@ -405,5 +405,9 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if current < 34 {
         super::home_bot::migrate_v34(conn)?;
     }
+    if current < 35 {
+        // Work Item views: last result per query, shown while it reruns.
+        super::work_item_view_cache::migrate_v35(conn)?;
+    }
     Ok(())
 }

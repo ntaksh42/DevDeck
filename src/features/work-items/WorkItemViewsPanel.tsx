@@ -11,7 +11,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import {
   listWorkItemProjects,
-  runWorkItemQuery,
   commandErrorMessage,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
@@ -43,6 +42,7 @@ import {
   readViewsImportFile,
 } from './workItemViewsTransfer';
 import { useViewCountQueries } from './useViewCountQueries';
+import { useWorkItemViewQuery } from './useWorkItemViewQuery';
 import { useViewEditorDraft } from './useViewEditorDraft';
 import { ViewEditorDialog } from './ViewEditorDialog';
 import { ViewsListPanel } from './ViewsListPanel';
@@ -119,37 +119,11 @@ export function WorkItemViewsPanel({
   const selectedView = views[selectedViewIndex] ?? null;
   const selectedViewProjectId = selectedView?.projectId || projectOptions[0]?.projectId || "";
   const selectedViewExtraColumns = selectedView?.extraColumns ?? [];
-  const selectedQuery = useQuery({
-    queryKey: workItemQueryKeys.queryView({
-      organizationId: selectedOrganizationId,
-      viewId: selectedView?.id,
-      projectId: selectedViewProjectId,
-      wiql: selectedView?.wiql,
-      limit: selectedView?.limit,
-      extraFieldsSignature: selectedViewExtraColumns.join("|"),
-    }),
-    queryFn: () =>
-      runWorkItemQuery({
-        organizationId: selectedOrganizationId,
-        projectId: selectedViewProjectId,
-        wiql: selectedView!.wiql,
-        limit: selectedView!.limit,
-        extraFields: selectedViewExtraColumns,
-      }),
-    enabled:
-      !!selectedView &&
-      !!selectedOrganizationId &&
-      !!selectedViewProjectId &&
-      !!selectedView.wiql.trim(),
-    staleTime: 5 * 60_000,
-    retry: false,
-    // Adding/removing an extra column changes the key; keep the same view's
-    // rows on screen so the grid (and its focus) isn't swapped for a spinner.
-    placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[2] === selectedView?.id ? previous : undefined,
-    refetchInterval: selectedView?.refreshIntervalSec
-      ? selectedView.refreshIntervalSec * 1000
-      : false,
+  const { query: selectedQuery, dataUpdatedAt: selectedDataUpdatedAt } = useWorkItemViewQuery({
+    organizationId: selectedOrganizationId,
+    view: selectedView,
+    projectId: selectedViewProjectId,
+    extraColumns: selectedViewExtraColumns,
   });
   const failedQuery = projectsQuery.isError ? projectsQuery : selectedQuery;
   const selectedResults = selectedQuery?.data ?? [];
@@ -440,7 +414,7 @@ export function WorkItemViewsPanel({
               key={selectedView.id}
               activeExternalFilterCount={filter.trim() ? 1 : 0}
               onClearExternalFilters={() => setFilter("")}
-              dataUpdatedAt={selectedQuery?.dataUpdatedAt}
+              dataUpdatedAt={selectedDataUpdatedAt}
               isFetching={!!selectedQuery?.isFetching && selectedQuery.data !== undefined}
               loading={selectedQueryInitialLoading}
               results={filteredResults}

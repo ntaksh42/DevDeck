@@ -40,6 +40,33 @@
     "workItemResultFolderPath": null,
     "workItemStaleThresholdDays": 7
   },
+  "get_cached_work_item_query": {
+    "fetchedAt": "2026-10-01T12:00:00Z",
+    "items": [
+      {
+        "assignedTo": null,
+        "changedDate": "2026-10-01T12:00:00Z",
+        "depth": 1,
+        "extraFields": [
+          {
+            "referenceName": "Custom.Risk",
+            "value": "Low"
+          }
+        ],
+        "hasActivePullRequest": true,
+        "hasDraftPullRequest": false,
+        "id": 121,
+        "organizationId": "fixture-org",
+        "projectId": "fixture-project",
+        "projectName": "Platform",
+        "state": "Active",
+        "tags": "release; docs",
+        "title": "Update the release process",
+        "webUrl": null,
+        "workItemType": "Task"
+      }
+    ]
+  },
   "get_home_bot": {
     "brief": [
       "Two reviews wait on you."

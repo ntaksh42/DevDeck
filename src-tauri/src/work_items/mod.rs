@@ -30,12 +30,14 @@ mod search;
 mod sync;
 mod types;
 mod types_views;
+mod view_cache;
 pub(crate) use candidates::*;
 use conversions::*;
 pub(crate) use query::*;
 pub(crate) use sync::*;
 pub use types::*;
 pub use types_views::*;
+pub use view_cache::CachedWorkItemQueryResult;
 
 #[cfg(test)]
 mod tests;
@@ -89,6 +91,12 @@ impl WorkItemService {
     }
 
     pub async fn run_query(&self, input: RunWorkItemQueryInput) -> Result<Vec<WorkItemSummary>> {
+        let items = self.fetch_query(&input).await?;
+        self.remember_query_result(&input, &items);
+        Ok(items)
+    }
+
+    async fn fetch_query(&self, input: &RunWorkItemQueryInput) -> Result<Vec<WorkItemSummary>> {
         let wiql = validate_work_item_wiql(&input.wiql)?;
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
