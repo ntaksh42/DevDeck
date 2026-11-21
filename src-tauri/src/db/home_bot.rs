@@ -82,3 +82,14 @@ pub(super) fn migrate_v33(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA user_version = 33;")?;
     Ok(())
 }
+
+/// Look around: how soon a suggestion should be acted on (`now` / `today` / `later`).
+pub(super) fn migrate_v34(conn: &Connection) -> Result<()> {
+    if !super::table_column_exists(conn, "bot_suggestions", "urgency")? {
+        conn.execute_batch(
+            "ALTER TABLE bot_suggestions ADD COLUMN urgency TEXT NOT NULL DEFAULT 'today';",
+        )?;
+    }
+    conn.execute_batch("PRAGMA user_version = 34;")?;
+    Ok(())
+}

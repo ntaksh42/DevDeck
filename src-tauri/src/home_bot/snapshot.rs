@@ -53,6 +53,46 @@ fn age(date: Option<&str>, now: DateTime<Utc>) -> String {
         .unwrap_or_else(|| "?".into())
 }
 
+/// Inbox rows read for the target keys (the overview lists fewer).
+const MAX_INBOX_KEYS: u32 = 1_000;
+
+fn pr_key(org_id: &str, repository_id: &str, id: impl std::fmt::Display) -> String {
+    format!("pr:{org_id}/{repository_id}/{id}")
+}
+
+fn wi_key(org_id: &str, id: impl std::fmt::Display) -> String {
+    format!("wi:{org_id}/{id}")
+}
+
+/// The pull request and work item keys that still wait on the user in the
+/// sync cache, without the section limits of the overview.
+pub(crate) fn live_keys(db: &AppDatabase) -> Result<std::collections::BTreeSet<String>> {
+    let mut keys = std::collections::BTreeSet::new();
+    for org in db.list_organizations()? {
+        let org_id = org.id.as_str();
+        for item in db.list_inbox_items(Some(org_id), InboxListState::Open, MAX_INBOX_KEYS)? {
+            keys.insert(if item.kind.starts_with("pr_") {
+                pr_key(org_id, &item.repository_id, item.subject_id)
+            } else {
+                wi_key(org_id, item.subject_id)
+            });
+        }
+        for pr in db.list_review_pull_requests(org_id)? {
+            keys.insert(pr_key(org_id, &pr.repository_id, pr.pull_request_id));
+        }
+        if let Some(user_id) = org.authenticated_user_id.as_deref() {
+            for created in db.list_created_pull_requests(org_id, user_id)? {
+                let pr = &created.pr;
+                keys.insert(pr_key(org_id, &pr.repository_id, pr.pull_request_id));
+            }
+        }
+        for wi in db.list_my_work_items(org_id)? {
+            keys.insert(wi_key(org_id, wi.id));
+        }
+    }
+    Ok(keys)
+}
+
 pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
     let mut targets = BTreeMap::new();
     let mut add = |target: Target| -> String {
@@ -90,7 +130,7 @@ pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
             let is_pr = item.kind.starts_with("pr_");
             let key = add(if is_pr {
                 Target {
-                    key: format!("pr:{org_id}/{}/{}", item.repository_id, item.subject_id),
+                    key: pr_key(&org_id, &item.repository_id, item.subject_id),
                     label: format!("!{}", item.subject_id),
                     title: item.title.clone(),
                     repository: Some(item.repository_name.clone()),
@@ -98,7 +138,7 @@ pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
                 }
             } else {
                 Target {
-                    key: format!("wi:{org_id}/{}", item.subject_id),
+                    key: wi_key(&org_id, item.subject_id),
                     label: format!("#{}", item.subject_id),
                     title: item.title.clone(),
                     repository: None,
@@ -142,7 +182,7 @@ pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
         );
         for pr in reviews.iter().take(MAX_PER_SECTION) {
             let key = add(Target {
-                key: format!("pr:{org_id}/{}/{}", pr.repository_id, pr.pull_request_id),
+                key: pr_key(&org_id, &pr.repository_id, pr.pull_request_id),
                 label: format!("!{}", pr.pull_request_id),
                 title: pr.title.clone(),
                 repository: Some(pr.repository_name.clone()),
@@ -170,7 +210,7 @@ pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
             for created in mine.iter().take(MAX_PER_SECTION) {
                 let pr = &created.pr;
                 let key = add(Target {
-                    key: format!("pr:{org_id}/{}/{}", pr.repository_id, pr.pull_request_id),
+                    key: pr_key(&org_id, &pr.repository_id, pr.pull_request_id),
                     label: format!("!{}", pr.pull_request_id),
                     title: pr.title.clone(),
                     repository: Some(pr.repository_name.clone()),
@@ -202,7 +242,7 @@ pub(crate) fn build(db: &AppDatabase, now: DateTime<Utc>) -> Result<Snapshot> {
         );
         for wi in items.iter().take(MAX_PER_SECTION) {
             let key = add(Target {
-                key: format!("wi:{org_id}/{}", wi.id),
+                key: wi_key(&org_id, wi.id),
                 label: format!("#{}", wi.id),
                 title: wi.title.clone(),
                 repository: None,

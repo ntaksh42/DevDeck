@@ -71,6 +71,7 @@
         "target": "pr:fixture-org/fixture-repo/101",
         "targetLabel": "!101",
         "title": "Review !101",
+        "urgency": "now",
         "webUrl": null,
         "why": "Requested three days ago."
       }

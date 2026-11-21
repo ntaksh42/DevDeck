@@ -157,7 +157,10 @@ impl HomeBot {
         let run_id = store::begin_run(&conn, trigger, slot, &settings.agent, model, now)?;
         self.notify();
         let mut snapshot = snapshot::build(&self.db, chrono::Utc::now())?;
-        let watched = pipelines::overview(&self.db);
+        let (watched, pipeline_targets) = pipelines::overview(&self.db);
+        for target in pipeline_targets {
+            snapshot.targets.insert(target.key.clone(), target);
+        }
         snapshot.markdown = if snapshot.markdown.contains(snapshot::NO_PIPELINES) {
             snapshot.markdown.replace(snapshot::NO_PIPELINES, &watched)
         } else {
@@ -224,6 +227,10 @@ impl HomeBot {
         let conn = self.db.open()?;
         let now = now_ms();
         store::expire(&conn, now)?;
+        // The sync cache is newer than the last look: drop what no longer waits.
+        if let Ok(live) = snapshot::live_keys(&self.db) {
+            store::close_gone(&conn, &live, now)?;
+        }
         let settings = store::load_settings(&conn)?;
         let seen = store::get_kv_ms(&conn, SEEN_KEY)?.unwrap_or(0);
         let runs = store::recent_runs(&conn, 20)?;

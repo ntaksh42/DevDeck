@@ -402,5 +402,8 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if current < 33 {
         super::home_bot::migrate_v33(conn)?;
     }
+    if current < 34 {
+        super::home_bot::migrate_v34(conn)?;
+    }
     Ok(())
 }

@@ -13,9 +13,26 @@ import type {
 const now = () => new Date().toISOString();
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
-function suggestion(id: string, title: string, why: string, ask: string, label: string, kind: string, isNew: boolean): HomeSuggestion {
-  const target = kind === "pr" ? `pr:demo/web/${label.slice(1)}` : kind === "wi" ? `wi:demo/${label.slice(1)}` : null;
-  return { id, title, why, ask, target, targetLabel: label, webUrl: null, kind, isNew, createdAt: ago(60) };
+function suggestion(
+  id: string,
+  title: string,
+  why: string,
+  ask: string,
+  label: string,
+  kind: string,
+  urgency: string,
+  isNew: boolean,
+): HomeSuggestion {
+  const target =
+    kind === "pr"
+      ? `pr:demo/web/${label.slice(1)}`
+      : kind === "wi"
+        ? `wi:demo/${label.slice(1)}`
+        : kind === "pipe"
+          ? "pipe:demo/web/12"
+          : null;
+  const webUrl = kind === "pipe" ? "https://dev.azure.com/demo/web/_build/results?buildId=4410" : null;
+  return { id, title, why, ask, target, targetLabel: label, webUrl, kind, urgency, isNew, createdAt: ago(60) };
 }
 
 let settings: HomeBotSettings = {
@@ -31,10 +48,11 @@ let lastLookedAt = ago(55);
 let seenAt = 0;
 let dismissed = 0;
 let suggestions: HomeSuggestion[] = [
-  suggestion("s1", "!798 の CI を直す", "main 取り込み後 3 回失敗", "!798 の api-tests 失敗の原因を調べて。main の取り込みで入った変更との関係と、直す場所を file:line で示して。", "!798", "pr", true),
-  suggestion("s2", "!812 をレビュー", "依頼から 3 日・他は承認済み", "!812 の差分の要点と、レビューで見るべき箇所をまとめて。", "!812", "pr", true),
-  suggestion("s3", "#4521 の質問に返信", "メンションから 2 日未返信", "#4521 のコメントを読んで、再現手順で足りない情報を挙げて。", "#4521", "wi", true),
-  suggestion("s4", "!790 の衝突を解消", "衝突 1 日・レビュアー 2 名待ち", "!790 のコンフリクトの箇所と、どちらの変更を残すべきかを調べて。", "!790", "pr", false),
+  suggestion("s1", "!798 の CI を直す", "main 取り込み後 3 回失敗", "!798 の api-tests 失敗の原因を調べて。main の取り込みで入った変更との関係と、直す場所を file:line で示して。", "!798", "pr", "now", true),
+  suggestion("s2", "!812 をレビュー", "依頼から 3 日・他は承認済み", "!812 の差分の要点と、レビューで見るべき箇所をまとめて。", "!812", "pr", "now", true),
+  suggestion("s5", "Nightly の失敗を確認", "最新の実行が失敗", "Nightly パイプラインの最新の失敗の原因をログから調べて。", "Nightly", "pipe", "today", true),
+  suggestion("s3", "#4521 の質問に返信", "メンションから 2 日未返信", "#4521 のコメントを読んで、再現手順で足りない情報を挙げて。", "#4521", "wi", "today", true),
+  suggestion("s4", "!790 の衝突を解消", "衝突 1 日・レビュアー 2 名待ち", "!790 のコンフリクトの箇所と、どちらの変更を残すべきかを調べて。", "!790", "pr", "later", false),
 ];
 const brief = [
   "!798 の CI 失敗が最優先",
@@ -45,7 +63,7 @@ let chatId = "chat-demo";
 let messageId = 3;
 let thinking = false;
 let messages: HomeChatMessage[] = [
-  { id: 1, author: "orchestrator", body: "提案 4 件。急ぐのは **!798 の CI 失敗**。", workerIds: [], createdAt: ago(300) },
+  { id: 1, author: "orchestrator", body: "提案 5 件。急ぐのは **!798 の CI 失敗**。", workerIds: [], createdAt: ago(300) },
 ];
 let workers: HomeWorker[] = [];
 

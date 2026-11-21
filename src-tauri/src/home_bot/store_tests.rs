@@ -17,6 +17,7 @@ fn s(title: &str, target: Option<&str>) -> NewSuggestion {
         target: target.map(str::to_string),
         target_label: None,
         web_url: None,
+        urgency: "today".into(),
     }
 }
 
@@ -43,7 +44,7 @@ fn a_repeated_suggestion_updates_the_open_row() {
 }
 
 #[test]
-fn a_dismissed_suggestion_is_not_made_again_for_30_days() {
+fn a_dismissed_suggestion_is_not_made_again_for_a_week() {
     let (_d, conn) = conn();
     let run = begin_run(&conn, "manual", None, "claude", None, 1).unwrap();
     suggest(&conn, run, &s("Review  !812", None), 10).unwrap();
@@ -64,6 +65,59 @@ fn a_dismissed_suggestion_is_not_made_again_for_30_days() {
         .unwrap(),
         SuggestOutcome::Added
     ));
+}
+
+#[test]
+fn dismissing_one_suggestion_keeps_others_about_the_same_target() {
+    let (_d, conn) = conn();
+    let run = begin_run(&conn, "manual", None, "claude", None, 1).unwrap();
+    suggest(&conn, run, &s("Review !798", Some("pr:o/r/798")), 10).unwrap();
+    let id = open_suggestions(&conn, 0).unwrap()[0].id.clone();
+    resolve(&conn, &id, "dismissed", 20).unwrap();
+    assert!(matches!(
+        suggest(&conn, run, &s("review  !798", Some("pr:o/r/798")), 30).unwrap(),
+        SuggestOutcome::Dismissed
+    ));
+    assert!(matches!(
+        suggest(&conn, run, &s("Fix CI on !798", Some("pr:o/r/798")), 40).unwrap(),
+        SuggestOutcome::Added
+    ));
+}
+
+#[test]
+fn urgent_suggestions_come_first() {
+    let (_d, conn) = conn();
+    let run = begin_run(&conn, "manual", None, "claude", None, 1).unwrap();
+    for (title, urgency) in [("a", "later"), ("b", "today"), ("c", "now")] {
+        let mut input = s(title, None);
+        input.urgency = urgency.into();
+        suggest(&conn, run, &input, 10).unwrap();
+    }
+    let open = open_suggestions(&conn, 0).unwrap();
+    assert_eq!(
+        open.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(),
+        vec!["c", "b", "a"]
+    );
+    assert_eq!(open[0].urgency, "now");
+}
+
+#[test]
+fn suggestions_about_items_the_cache_dropped_are_closed() {
+    let (_d, conn) = conn();
+    let run = begin_run(&conn, "manual", None, "claude", None, 1).unwrap();
+    suggest(&conn, run, &s("merged", Some("pr:o/r/1")), 10).unwrap();
+    suggest(&conn, run, &s("still open", Some("pr:o/r/2")), 10).unwrap();
+    suggest(&conn, run, &s("closed", Some("wi:o/5")), 10).unwrap();
+    suggest(&conn, run, &s("pipeline", Some("pipe:o/p/3")), 10).unwrap();
+    suggest(&conn, run, &s("no target", None), 10).unwrap();
+    let live = ["pr:o/r/2".to_string()].into_iter().collect();
+    assert_eq!(close_gone(&conn, &live, 20).unwrap(), 2);
+    let open = open_suggestions(&conn, 0).unwrap();
+    assert_eq!(
+        open.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(),
+        vec!["still open", "pipeline", "no target"]
+    );
+    assert_eq!(open[1].kind, "pipe");
 }
 
 #[test]

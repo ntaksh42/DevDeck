@@ -44,13 +44,16 @@ pub struct HomeSuggestion {
     pub why: String,
     /// The message Start puts in the Orchestrator's input.
     pub ask: String,
-    /// `pr:{org}/{repoId}/{id}`, `wi:{org}/{id}`, or none.
+    /// `pr:{org}/{repoId}/{id}`, `wi:{org}/{id}`,
+    /// `pipe:{org}/{projectId}/{definitionId}`, or none.
     pub target: Option<String>,
-    /// `!798`, `#4521`.
+    /// `!798`, `#4521`, a pipeline's name.
     pub target_label: Option<String>,
     pub web_url: Option<String>,
-    /// `pr` / `wi` / `other`, for the row's mark.
+    /// `pr` / `wi` / `pipe` / `other`, for the row's mark.
     pub kind: String,
+    /// `now` / `today` / `later`; the list is ordered by it.
+    pub urgency: String,
     pub is_new: bool,
     pub created_at: DateTime<Utc>,
 }
