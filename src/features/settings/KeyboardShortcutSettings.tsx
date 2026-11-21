@@ -57,7 +57,10 @@ export function KeyboardShortcutSettings() {
       (event.target as HTMLButtonElement).blur();
       return;
     }
-    const combo = comboFromEvent(event);
+    // A "go to view" key is a plain letter after the leader (the chain ignores
+    // Shift-modified keys), so capturing Shift+K there stores "K".
+    const isGoto = KEYBINDINGS.some((binding) => binding.id === id && binding.scope === "goto");
+    const combo = comboFromEvent(isGoto ? { ...pickKeyFields(event), shiftKey: false } : event);
     if (!combo) return; // modifier-only press: keep waiting
     event.preventDefault();
     setCombo(id, combo);
@@ -188,4 +191,9 @@ export function KeyboardShortcutSettings() {
       </div>
     </SettingsRow>
   );
+}
+
+function pickKeyFields(event: ReactKeyboardEvent<HTMLButtonElement>) {
+  const { key, ctrlKey, altKey, shiftKey, metaKey } = event;
+  return { key, ctrlKey, altKey, shiftKey, metaKey };
 }

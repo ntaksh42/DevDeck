@@ -14,14 +14,15 @@ const VIEW_TITLES: Record<View, string> = {
   pipelines: "Pipelines",
   notifications: "Notifications",
   inbox: "Inbox",
+  home: "Home",
+  autoQueue: "Agent Work",
   crossOrgSummary: "Cross-organization summary",
-  analyze: "Analyze",
   settings: "Settings",
 };
 
 // Breadcrumb path for views nested under a nav section, so the header names
 // both the section and the active screen (e.g. "Work Items › Search") instead
-// of just one or the other. Top-level views (Pipelines, Analyze, Notifications,
+// of just one or the other. Top-level views (Pipelines, Notifications,
 // Settings, ...) are left out and keep a single-segment title.
 const VIEW_BREADCRUMBS: Partial<Record<View, readonly [string, string]>> = {
   pullRequestSearch: ["Pull Requests", "Search"],
@@ -42,8 +43,9 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   pipelines: "Azure DevOps build runs by project",
   notifications: "History of review requests, work item updates, and pipeline alerts",
   inbox: "Mentions and replies that need your response",
+  home: "What to do next across reviews and work items, and the Orchestrator chat",
+  autoQueue: "What the agent is reviewing and investigating, what failed, and its results",
   crossOrgSummary: "Reviews and work items totalled across every connection",
-  analyze: "Query count trends for a group, by day or week",
   settings: "Local Azure DevOps organization setup",
 };
 
@@ -77,8 +79,8 @@ export function AppHeader({
     : [VIEW_TITLES[activeView]];
 
   return (
-    <header className="flex h-9 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:px-5">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="app-frame flex h-9 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
           onClick={onToggleSidebar}

@@ -4,60 +4,92 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --s-background: 214 22% 92%;
+    --background: var(--s-background);
+    --s-foreground: 222.2 84% 4.9%;
+    --foreground: var(--s-foreground);
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
     --primary: 210 84% 46%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --s-secondary: 210 40% 96.1%;
+    --secondary: var(--s-secondary);
+    --s-secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: var(--s-secondary-foreground);
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215 20% 38%;
+    --s-muted-foreground: 215 25% 27%;
+    --muted-foreground: var(--s-muted-foreground);
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 72% 45%;
+    --destructive: 0 72% 41%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 28% 84%;
-    --input: 214 28% 84%;
-    --ring: 210 84% 57%;
+    --s-border: 214 20% 84%;
+    --border: var(--s-border);
+    --s-input: 214 28% 80%;
+    --input: var(--s-input);
+    --s-ring: 210 84% 57%;
+    --ring: var(--s-ring);
     /* Text-only link blue. primary is the fill color for buttons (white text on
        it is 4.6:1); link is a notch darker for small text on tinted rows
-       (5.38:1 on white). */
-    --link: 210 80% 42%;
+       (6.27:1 on white, 4.5:1 or more on a selected row). */
+    --link: 210 80% 38%;
     /* Status tones. Like --link they are text-safe (>= 4.5:1 on the page and
        on their own 10% tint), so one token serves as text, border (/30) and
        surface (/10) -- no per-site light/dark palette pairs. */
     --success: 142 72% 26%;
     --warning: 30 95% 30%;
     --info: 214 85% 40%;
+    /* App frame (sidebar + header): a deep blue-green band that sets the
+       chrome apart from the white work surfaces. Inside .app-frame these
+       replace the surface tokens; controls and popups inside it switch back
+       (see .app-frame rules below). */
+    --frame: 193 59% 17%;
+    --frame-foreground: 190 40% 95%;
+    --frame-muted: 190 24% 76%;
+    --frame-hover: 192 42% 25%;
+    --frame-border: 193 55% 11%;
+    --frame-ring: 186 75% 62%;
     --radius: 0.5rem;
     color-scheme: light;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --s-background: 222 44% 6%;
+    --background: var(--s-background);
+    --s-foreground: 210 40% 98%;
+    --foreground: var(--s-foreground);
+    --card: 222 34% 13%;
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
     --primary: 210 95% 76%;
     --primary-foreground: 210 60% 12%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --s-secondary: 217.2 32.6% 17.5%;
+    --secondary: var(--s-secondary);
+    --s-secondary-foreground: 210 40% 98%;
+    --secondary-foreground: var(--s-secondary-foreground);
     --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 22% 72%;
+    --s-muted-foreground: 215 25% 82%;
+    --muted-foreground: var(--s-muted-foreground);
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 68%;
+    --destructive: 0 90% 80%;
     --destructive-foreground: 222.2 47% 11%;
-    --border: 217 28% 26%;
-    --input: 217 28% 26%;
-    --ring: 210 90% 70%;
+    --s-border: 222 24% 22%;
+    --border: var(--s-border);
+    --s-input: 217 28% 28%;
+    --input: var(--s-input);
+    --s-ring: 210 90% 70%;
+    --ring: var(--s-ring);
     --link: 210 95% 76%;
+    --frame: 195 48% 9%;
+    --frame-foreground: 190 30% 93%;
+    --frame-muted: 190 18% 74%;
+    --frame-hover: 195 38% 16%;
+    --frame-border: 195 40% 16%;
+    --frame-ring: 186 75% 62%;
     --success: 142 65% 58%;
     --warning: 38 92% 62%;
     --info: 210 95% 76%;
@@ -103,10 +135,132 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Hanken Grotesk Variable", system-ui, -apple-system, sans-serif;
+    font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+}
+
+/* Body typeface presets (Settings > Appearance, src/lib/uiFont.ts). The default
+   stack is the bundled Atkinson Hyperlegible + BIZ UDPGothic; the others use
+   fonts installed with Windows and fall back to system-ui elsewhere. */
+:root {
+  --font-ui: "Atkinson Hyperlegible Next Variable", "BIZ UDPGothic", system-ui, -apple-system, sans-serif;
+}
+[data-font="biz-ud"] {
+  --font-ui: "BIZ UDPGothic", system-ui, sans-serif;
+}
+[data-font="yu-gothic"] {
+  --font-ui: "Yu Gothic UI", "Yu Gothic", "BIZ UDPGothic", system-ui, sans-serif;
+}
+[data-font="meiryo"] {
+  --font-ui: "Meiryo UI", Meiryo, "BIZ UDPGothic", system-ui, sans-serif;
+}
+[data-font="system"] {
+  --font-ui: system-ui, "Segoe UI", "Yu Gothic UI", sans-serif;
+}
+
+/* Frame color presets (Settings > Appearance). The default teal is defined in
+   :root / .dark above; these override only the --frame* tokens. */
+[data-frame="white"] {
+  --frame: 0 0% 100%;
+  --frame-foreground: 222 47% 11%;
+  --frame-muted: 215 25% 32%;
+  --frame-hover: 210 40% 94%;
+  --frame-border: 214 20% 82%;
+  --frame-ring: 210 84% 46%;
+}
+.dark[data-frame="white"] {
+  --frame: 222 30% 11%;
+  --frame-foreground: 210 40% 96%;
+  --frame-muted: 215 20% 74%;
+  --frame-hover: 222 28% 18%;
+  --frame-border: 222 24% 20%;
+  --frame-ring: 210 90% 70%;
+}
+[data-frame="slate"] {
+  --frame: 215 25% 27%;
+  --frame-foreground: 210 40% 96%;
+  --frame-muted: 214 20% 78%;
+  --frame-hover: 215 22% 36%;
+  --frame-border: 215 28% 20%;
+  --frame-ring: 210 90% 70%;
+}
+[data-frame="navy"] {
+  --frame: 215 52% 24%;
+  --frame-foreground: 210 40% 96%;
+  --frame-muted: 213 30% 78%;
+  --frame-hover: 214 45% 32%;
+  --frame-border: 215 55% 16%;
+  --frame-ring: 205 90% 70%;
+}
+[data-frame="graphite"] {
+  --frame: 240 6% 16%;
+  --frame-foreground: 0 0% 96%;
+  --frame-muted: 240 5% 75%;
+  --frame-hover: 240 5% 24%;
+  --frame-border: 240 6% 10%;
+  --frame-ring: 210 90% 70%;
+}
+
+/* App frame: the sidebar and header take the frame colors by swapping the
+   surface tokens, so their existing bg-secondary / text-muted-foreground /
+   border-border classes follow without per-element edits. Anything that
+   paints its own light surface inside the frame (the active nav item, inputs,
+   card-styled buttons, popups) switches back to the surface tokens. */
+.app-frame {
+  --background: var(--frame);
+  --foreground: var(--frame-foreground);
+  --muted-foreground: var(--frame-muted);
+  --secondary: var(--frame-hover);
+  --secondary-foreground: var(--frame-foreground);
+  --border: var(--frame-border);
+  --input: var(--frame-border);
+  --ring: var(--frame-ring);
+  background-color: hsl(var(--frame));
+  color: hsl(var(--frame-foreground));
+}
+.app-frame :is(input, select, textarea, [role="menu"], [role="listbox"], [role="dialog"], [data-nav-active], .frame-surface, .bg-card, .bg-popover, .bg-background) {
+  --background: var(--s-background);
+  --foreground: var(--s-foreground);
+  --muted-foreground: var(--s-muted-foreground);
+  --secondary: var(--s-secondary);
+  --secondary-foreground: var(--s-secondary-foreground);
+  --border: var(--s-border);
+  --input: var(--s-input);
+  --ring: var(--s-ring);
+}
+
+/* Text color is inherited as a computed value, so swapping the tokens alone
+   would leave light frame text on these light surfaces. In the base layer so
+   a control's own text-* utility still wins. */
+@layer base {
+  .app-frame :where(input, select, textarea, [role="menu"], [role="listbox"], [role="dialog"], [data-nav-active], .frame-surface, .bg-card, .bg-popover, .bg-background) {
+    color: hsl(var(--foreground));
+  }
+}
+
+/* Single-line <select>s: one look everywhere (same chevron, border and radius
+   as the hand-rolled dropdowns) instead of the OS-native control. Keyboard
+   behaviour stays native. Base values are :where() so a class can still
+   override them; the right padding is unlayered so utility px-* cannot push
+   the text under the chevron. */
+:where(select:not([multiple]):not([size])) {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid hsl(var(--input));
+  border-radius: 0.375rem;
+  background-color: hsl(var(--background));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23475569' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 0.9rem;
+}
+.dark :where(select:not([multiple]):not([size])) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23cbd5e1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+}
+select:not([multiple]):not([size]) {
+  padding-right: 1.5rem;
 }
 
 /* Panel tabs: dockview's stock themes paint background tabs at 35-70% alpha
@@ -115,10 +269,10 @@
    underline so the current tab is obvious at a glance. */
 .dockview-theme-light .dv-dockview,
 .dockview-theme-dark .dv-dockview {
-  --dv-group-view-background-color: hsl(var(--background));
+  --dv-group-view-background-color: hsl(var(--card));
   --dv-tabs-and-actions-container-background-color: hsl(var(--muted));
-  --dv-activegroup-visiblepanel-tab-background-color: hsl(var(--background));
-  --dv-inactivegroup-visiblepanel-tab-background-color: hsl(var(--background));
+  --dv-activegroup-visiblepanel-tab-background-color: hsl(var(--card));
+  --dv-inactivegroup-visiblepanel-tab-background-color: hsl(var(--card));
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
   --dv-activegroup-visiblepanel-tab-color: hsl(var(--foreground));
@@ -132,7 +286,9 @@
    as separate cards (a border, not a dockview gap, so sizes stay exact). */
 .dv-dockview .dv-groupview {
   border: 1px solid hsl(var(--border));
-  border-radius: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px hsl(220 30% 20% / 0.10), 0 4px 12px hsl(220 30% 20% / 0.06);
 }
 
 /* Paint above opaque pane contents; nested panes highlight only the focus owner. */
@@ -143,9 +299,10 @@
 
 /* A pane that scrolls itself would carry an absolutely positioned frame away
    with its content, so it sits directly inside a non-scrolling
-   [data-focus-frame] wrapper that paints the frame instead. */
-[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within)):not([data-focus-frame] > *)::after,
-[data-focus-frame]:has(> [data-focus-pane]:focus-within):not(:has(> [data-focus-pane] [data-focus-pane]:focus-within))::after {
+   [data-focus-frame] wrapper that paints the frame instead. Grids show focus
+   on the row itself, so a pane holding a grid skips the frame. */
+[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within)):not(:has([data-primary-grid])):not([data-focus-frame] > *)::after,
+[data-focus-frame]:has(> [data-focus-pane]:focus-within):not(:has(> [data-focus-pane] [data-focus-pane]:focus-within)):not(:has(> [data-focus-pane] [data-primary-grid]))::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -158,6 +315,16 @@
 /* Agent owns its conversation scroll area; the dock frame must not scroll. */
 .dv-dockview .dv-view:has([data-agent-panel]) {
   overflow: hidden;
+}
+
+/* Tab strip: tall enough (28px, set in DockableWorkspace) that the tab label
+   and the inline controls do not touch the lines above and below. */
+.dv-dockview .dv-tabs-and-actions-container {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.dv-dockview .dv-tab {
+  padding: 0 10px;
 }
 
 .dv-tab.dv-active-tab {

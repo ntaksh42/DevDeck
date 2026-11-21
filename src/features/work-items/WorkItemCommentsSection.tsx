@@ -64,6 +64,7 @@ export function WorkItemCommentsSection({
   return preview.comments.length > 0 ? (
     <PreviewSection
       accentColor="border-l-muted-foreground"
+      primary
       className={className}
       collapseId="comments"
       title={`Comments (${preview.comments.length})`}
@@ -91,6 +92,9 @@ export function WorkItemCommentsSection({
                 mentionDisplayNames,
               )}
               commentText={comment.text}
+              commentFormat={comment.format}
+              commentRenderedText={comment.renderedText}
+              mentionDisplayNames={mentionDisplayNames}
               createdBy={comment.createdBy}
               createdDate={comment.createdDate}
               deleting={deleting}
@@ -132,6 +136,7 @@ export function WorkItemCommentsSection({
   ) : preview.commentsUnavailable ? (
     <PreviewSection
       accentColor="border-l-muted-foreground"
+      primary
       className={className}
       collapseId="comments"
       title="Comments"

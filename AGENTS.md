@@ -11,7 +11,7 @@ Rust services and the Azure DevOps REST API.
 Key areas:
 
 - `src/` contains the React app. Feature areas live under `src/features/`
-  (`pull-requests`, `work-items`, `pipelines`, `analyze`, `settings`),
+  (`pull-requests`, `work-items`, `pipelines`, `auto-queue`, `settings`),
   shared UI under `src/components/`, and cross-cutting helpers under `src/lib/`.
 - `src/lib/azdoCommands.ts` is the frontend boundary for all backend commands.
   It validates command results with Zod and provides browser-only demo data
@@ -21,7 +21,9 @@ Key areas:
   module per area: `prs.rs`, `repos/` (repository and branch listings),
   `orgs.rs`, `projects.rs`, `settings.rs`, `search.rs` (cross-kind
   command-palette search), `sync.rs` (background cache refresh),
-  `pipelines.rs`, `pr_review.rs` (PR threads/diffs), and `snooze.rs`. Work items are large enough to be their
+  `pipelines.rs`, `pr_review.rs` (PR threads/diffs), `snooze.rs`, and `home_bot/`
+  (Home: Look around suggestions and the Orchestrator chat, see
+  `docs/spec-home-bot.md`). Work items are large enough to be their
   own module directory: `src-tauri/src/work_items/` (`sync`, `mutations`,
   `candidates`, `conversions`, `types`).
 - `crates/azdo-client/` is a standalone Azure DevOps REST client crate. Keep it
@@ -51,6 +53,7 @@ $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 | Run Rust tests | `cargo test --workspace` |
 | Run one Rust test | `cargo test --package azdo-client test_name` |
 | Build desktop app | `pnpm tauri build` |
+| Check the 500-line file limit | `pnpm check:lines` |
 
 ## Runtime Boundaries
 
@@ -122,9 +125,9 @@ XService {
 ```
 
 `settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
-via `rusqlite`. Schema migrations live in `src-tauri/src/db.rs:migrate()` and
+via `rusqlite`. Schema migrations live in `src-tauri/src/db/migrate.rs:migrate()` and
 use `PRAGMA user_version`; the current schema version is the `SCHEMA_VERSION`
-constant in `src-tauri/src/db/mod.rs` (currently `25`). `migrate()` applies each
+constant in `src-tauri/src/db/mod.rs` (currently `34`). `migrate()` applies each
 `if current < N` step in order and must stay repeatable; add a new numbered
 step rather than editing an existing one.
 

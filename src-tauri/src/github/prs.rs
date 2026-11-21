@@ -5,8 +5,8 @@ use crate::auth::github_client_for_organization;
 use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::prs::{
-    MyCreatedPullRequestSummary, PullRequestSummary, ReviewPullRequestSummary,
-    SearchPullRequestsInput,
+    MyCreatedPullRequestSummary, PullRequestSearchResult, PullRequestSummary,
+    ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::secrets::SecretStore;
 
@@ -59,8 +59,12 @@ impl PrSearchQualifiers {
                 Some("closed") => "closed",
                 _ => "created",
             },
-            from_date: parse_search_date(input.from_date.as_deref())?,
-            to_date: parse_search_date(input.to_date.as_deref())?,
+            from_date: parse_search_date(
+                input.from_date.as_deref(),
+                false,
+                input.utc_offset_minutes,
+            )?,
+            to_date: parse_search_date(input.to_date.as_deref(), true, input.utc_offset_minutes)?,
         })
     }
 
@@ -95,13 +99,24 @@ impl PrSearchQualifiers {
 }
 
 /// Validates a `YYYY-MM-DD` filter bound for use in a GitHub date qualifier.
-fn parse_search_date(value: Option<&str>) -> Result<Option<String>> {
+/// With the user's UTC offset the bound becomes a local date-time, so the day
+/// matches the user's calendar rather than UTC's.
+fn parse_search_date(
+    value: Option<&str>,
+    end_of_day: bool,
+    utc_offset_minutes: Option<i32>,
+) -> Result<Option<String>> {
     let Some(trimmed) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
     NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map_err(|_| AppError::InvalidInput(format!("invalid date: {trimmed}")))?;
-    Ok(Some(trimmed.to_string()))
+    let offset = crate::prs::local_offset(utc_offset_minutes)?;
+    if offset.local_minus_utc() == 0 {
+        return Ok(Some(trimmed.to_string()));
+    }
+    let time = if end_of_day { "23:59:59" } else { "00:00:00" };
+    Ok(Some(format!("{trimmed}T{time}{offset}")))
 }
 
 /// Searches pull requests the authenticated user is involved in (authored,
@@ -112,14 +127,15 @@ pub async fn search_pull_requests(
     organization: &Organization,
     secrets: &SecretStore,
     query: &str,
-    active_only: bool,
+    state: Option<&str>,
     qualifiers: &PrSearchQualifiers,
     limit: u32,
 ) -> Result<Vec<PullRequestSummary>> {
     let client = github_client_for_organization(organization, secrets)?;
     let mut q = String::from("is:pr involves:@me");
-    if active_only {
-        q.push_str(" is:open");
+    if let Some(state) = state {
+        q.push_str(" is:");
+        q.push_str(state);
     }
     qualifiers.append_to(&mut q);
     let trimmed = query.trim();
@@ -273,9 +289,98 @@ fn item_to_summary(org_id: &str, item: IssueSearchItem) -> MyCreatedPullRequestS
     }
 }
 
+/// Runs the shared PR-search contract using GitHub's existing search semantics.
+pub(crate) async fn search_from_input(
+    org: &Organization,
+    secrets: &SecretStore,
+    input: SearchPullRequestsInput,
+) -> Result<PullRequestSearchResult> {
+    if input.progressive.unwrap_or(false)
+        || input.author_id.is_some()
+        || input.reviewer_id.is_some()
+        || input.exclude_words.is_some()
+        || input.continuation_token.is_some()
+        || input.search_id.is_some()
+    {
+        return Err(AppError::NotSupported(
+            "Advanced PR search is supported for Azure DevOps connections only".into(),
+        ));
+    }
+    let (statuses, state) = status_scope(input.statuses.as_deref());
+    let query = input.query.clone().unwrap_or_default();
+    // The repository / target-branch / date filters translate into GitHub
+    // search qualifiers. Previously every field except `query`, `statuses`
+    // and `exclude_drafts` was dropped on the floor, so the search screen's
+    // filters silently did nothing on a GitHub connection.
+    let qualifiers = PrSearchQualifiers::from_input(&input)?;
+    let mut results = search_pull_requests(org, secrets, &query, state, &qualifiers, 100).await?;
+    // GitHub's closed state covers both merged (completed) and unmerged
+    // (abandoned) PRs, so keep only the requested ones.
+    results.retain(|pr| statuses.contains(&pr.status));
+    if input.exclude_drafts.unwrap_or(false) {
+        results.retain(|pr| !pr.is_draft);
+    }
+    // `sort_by` is applied locally: GitHub's `sort:` qualifier has no
+    // equivalent for the "title" ordering the UI offers.
+    crate::prs::sort_summaries(
+        &mut results,
+        crate::prs::parse_sort_by(input.sort_by.as_deref()),
+    );
+    let total = results.len();
+    Ok(PullRequestSearchResult {
+        pull_requests: results,
+        total,
+        truncated: false,
+        warnings: Vec::new(),
+        ..Default::default()
+    })
+}
+
+/// The requested statuses (same vocabulary as the Azure DevOps path; nothing
+/// selected means Active) and the GitHub `is:` state that covers them.
+fn status_scope(values: Option<&[String]>) -> (Vec<String>, Option<&'static str>) {
+    let mut statuses: Vec<String> = values
+        .unwrap_or_default()
+        .iter()
+        .map(|status| status.trim().to_ascii_lowercase())
+        .filter(|status| !status.is_empty())
+        .collect();
+    if statuses.is_empty() {
+        statuses.push("active".into());
+    }
+    let wants_active = statuses.iter().any(|status| status == "active");
+    let state = if !wants_active {
+        Some("closed")
+    } else if statuses.iter().all(|status| status == "active") {
+        Some("open")
+    } else {
+        None
+    };
+    (statuses, state)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_scope_maps_requested_statuses_to_github_state() {
+        let scope = |values: &[&str]| {
+            let values: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+            status_scope(Some(&values))
+        };
+        assert_eq!(
+            status_scope(None),
+            (vec!["active".to_string()], Some("open"))
+        );
+        assert_eq!(scope(&["Active"]).1, Some("open"));
+        assert_eq!(
+            scope(&["completed"]),
+            (vec!["completed".to_string()], Some("closed"))
+        );
+        assert_eq!(scope(&["completed", "abandoned"]).1, Some("closed"));
+        assert_eq!(scope(&["active", "completed"]).1, None);
+    }
 
     fn input() -> SearchPullRequestsInput {
         SearchPullRequestsInput {
@@ -290,7 +395,21 @@ mod tests {
             date_basis: None,
             exclude_drafts: None,
             sort_by: None,
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn local_dates_become_offset_date_times() {
+        let mut i = input();
+        i.from_date = Some("2026-05-01".into());
+        i.to_date = Some("2026-05-31".into());
+        i.utc_offset_minutes = Some(540);
+        let q = query_for(&i);
+        assert!(
+            q.contains("created:2026-05-01T00:00:00+09:00..2026-05-31T23:59:59+09:00"),
+            "{q}"
+        );
     }
 
     fn query_for(input: &SearchPullRequestsInput) -> String {

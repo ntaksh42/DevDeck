@@ -15,12 +15,19 @@ use crate::secrets::SecretStore;
 pub struct PullRequestService {
     db: AppDatabase,
     #[allow(dead_code)]
-    secrets: SecretStore,
+    pub(super) secrets: SecretStore,
+    pub(super) palette_cache: super::palette::PalettePrCache,
+    pub(super) search_sessions: super::progressive::SearchSessions,
 }
 
 impl PullRequestService {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
-        Self { db, secrets }
+        Self {
+            db,
+            secrets,
+            palette_cache: Default::default(),
+            search_sessions: Default::default(),
+        }
     }
 
     pub fn list_my_reviews(
@@ -125,6 +132,19 @@ impl PullRequestService {
     // branches. Target-branch and date-window filters are pushed to the server
     // on the live path and applied in memory on the cache path.
     pub async fn search(&self, input: SearchPullRequestsInput) -> Result<PullRequestSearchResult> {
+        if input.progressive.unwrap_or(false) {
+            return self.search_progressive(input).await;
+        }
+        if input.author_id.is_some()
+            || input.reviewer_id.is_some()
+            || input.exclude_words.is_some()
+            || input.continuation_token.is_some()
+            || input.search_id.is_some()
+        {
+            return Err(AppError::InvalidInput(
+                "Advanced search requires progressive mode".into(),
+            ));
+        }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
 
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
@@ -142,8 +162,9 @@ impl PullRequestService {
                 normalize_optional(Some(branch)).map(|value| short_ref(&value).to_string())
             })
             .collect();
-        let from_rfc = parse_date_bound(input.from_date.as_deref(), false)?;
-        let to_rfc = parse_date_bound(input.to_date.as_deref(), true)?;
+        let from_rfc =
+            parse_date_bound(input.from_date.as_deref(), false, input.utc_offset_minutes)?;
+        let to_rfc = parse_date_bound(input.to_date.as_deref(), true, input.utc_offset_minutes)?;
         if let (Some(from), Some(to)) = (&from_rfc, &to_rfc) {
             if from > to {
                 return Err(AppError::InvalidInput(
@@ -242,6 +263,7 @@ impl PullRequestService {
             total,
             truncated,
             warnings,
+            ..Default::default()
         })
     }
 
@@ -330,7 +352,7 @@ impl PullRequestService {
         collect_project_prs(tasks).await
     }
 
-    fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
+    pub(super) fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
     }
 }

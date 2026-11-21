@@ -3,12 +3,17 @@ use std::str::FromStr;
 mod agent_notes;
 mod app_state;
 mod auth;
+mod auto_agent;
 mod commands;
 mod db;
+mod dev_overrides;
 mod diagnostics;
 mod error;
 mod github;
+mod home_bot;
 mod inbox_insight;
+#[cfg(test)]
+mod ipc_contract;
 mod orgs;
 mod pipelines;
 mod pr_review;
@@ -108,9 +113,15 @@ pub fn run() {
             // Surface setup failures (e.g. a failed DB migration) to stderr;
             // otherwise the window stays blank with no clue why state was never
             // managed and every command fails.
-            let app_data_dir = app.path().app_data_dir().inspect_err(|e| {
-                eprintln!("DevDeck setup failed (app_data_dir): {e}");
-            })?;
+            let app_data_dir = match dev_overrides::data_dir() {
+                Some(dir) => {
+                    std::fs::create_dir_all(&dir)?;
+                    dir
+                }
+                None => app.path().app_data_dir().inspect_err(|e| {
+                    eprintln!("DevDeck setup failed (app_data_dir): {e}");
+                })?,
+            };
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
             db.initialize().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (db.initialize): {e}");
@@ -152,6 +163,13 @@ pub fn run() {
                 sync_trigger: sync_tx,
                 active_provider: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
             });
+            let handle = app.handle().clone();
+            let notifier: home_bot::Notifier = std::sync::Arc::new(move || {
+                let _ = tauri::Emitter::emit(&handle, "home:updated", serde_json::json!({}));
+            });
+            let home_bot = home_bot::HomeBot::new(db.clone(), Some(notifier));
+            home_bot.start();
+            app.manage(home_bot);
             tauri::async_runtime::spawn(
                 SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
             );
@@ -163,6 +181,7 @@ pub fn run() {
             commands::settings::update_app_settings,
             commands::settings::get_review_result_preview,
             commands::settings::get_work_item_result_preview,
+            commands::settings::list_result_item_ids,
             commands::agent_notes::list_agent_notes,
             commands::agent_notes::create_agent_note,
             commands::agent_notes::delete_agent_note,
@@ -175,6 +194,29 @@ pub fn run() {
             commands::agent_notes::run_agent,
             commands::agent_notes::post_agent_comment,
             commands::agent_notes::list_agent_asks,
+            commands::auto_queue::list_auto_queue,
+            commands::auto_queue::get_auto_queue_preview,
+            commands::auto_queue::run_auto_queue,
+            commands::auto_queue::run_assigned_work_item_investigations,
+            commands::auto_queue::run_work_item_investigations,
+            commands::auto_queue::list_agent_work,
+            commands::home_bot::get_home_bot,
+            commands::home_bot::run_home_look_now,
+            commands::home_bot::mark_home_seen,
+            commands::home_bot::dismiss_home_suggestion,
+            commands::home_bot::start_home_suggestion,
+            commands::home_bot::save_home_bot_settings,
+            commands::home_bot::save_home_pipelines,
+            commands::home_bot::clear_home_dismissed,
+            commands::home_bot::count_home_dismissed,
+            commands::home_bot::get_home_chat,
+            commands::home_bot::send_home_message,
+            commands::home_bot::new_home_chat,
+            commands::home_bot::stop_home_worker,
+            commands::auto_queue::start_pipeline_investigation,
+            commands::auto_queue::read_agent_work_log,
+            commands::auto_queue::retry_agent_work,
+            commands::auto_queue::set_agent_work_excluded,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,
             commands::snooze::snooze_item,
@@ -188,6 +230,7 @@ pub fn run() {
             commands::orgs::set_active_organization,
             commands::orgs::get_provider_capabilities,
             commands::prs::search_pull_requests,
+            commands::prs::stop_pull_request_search,
             commands::prs::list_my_review_pull_requests,
             commands::prs::list_my_created_pull_requests,
             commands::pr_review::get_pull_request_review,
@@ -196,6 +239,7 @@ pub fn run() {
             commands::pr_review::list_pull_request_commits,
             commands::pr_review::list_pull_request_work_items,
             commands::pr_review::post_pull_request_comment,
+            commands::pr_review::upload_comment_image,
             commands::pr_review::set_pull_request_thread_status,
             commands::pr_review::submit_pull_request_vote,
             commands::pr_review::update_pull_request,
@@ -214,9 +258,9 @@ pub fn run() {
             commands::work_items::list_work_item_projects,
             commands::work_items::run_work_item_query,
             commands::work_items::count_work_item_query,
-            commands::work_items::count_work_item_query_history,
             commands::work_items::get_work_item_preview,
             commands::work_items::search_work_item_mentions,
+            commands::work_items::resolve_mention_identities,
             commands::work_items::record_mention_interaction,
             commands::work_items::record_assignee_interaction,
             commands::work_items::search_work_item_assignees,
@@ -257,6 +301,7 @@ pub fn run() {
             commands::pipelines::get_pipeline_run,
             commands::pipelines::list_pipeline_artifacts,
             commands::pipelines::list_pipeline_test_results,
+            commands::pipelines::list_flaky_tests,
             commands::pipelines::get_pipeline_definition,
             commands::pipelines::update_pipeline_definition,
             commands::pipelines::get_pipeline_run_log_tail,
@@ -275,7 +320,10 @@ pub fn run() {
             commands::action_inbox::list_action_inbox_items,
             commands::action_inbox::get_action_inbox_counts,
             commands::action_inbox::set_action_inbox_item_state,
-            commands::action_inbox::generate_action_inbox_insight
+            commands::action_inbox::generate_action_inbox_insight,
+            commands::action_inbox::set_reply_reminder,
+            commands::action_inbox::list_reply_reminders,
+            commands::action_inbox::clear_reply_reminder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

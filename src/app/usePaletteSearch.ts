@@ -9,8 +9,11 @@ import {
   submitPullRequestVote,
   type Organization,
   type PullRequestSummary,
+  commandErrorMessage,
 } from "@/lib/azdoCommands";
 import { openWikiPagePreview } from "@/features/wiki/wikiPreviewEvents";
+import { pushToast } from "@/lib/toast";
+import { isTauriRuntime } from "@/lib/runtime";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
@@ -33,6 +36,8 @@ export interface UsePaletteSearchResult {
   paletteRecentItems: CommandPaletteSearchItem[];
   paletteSearchEnabled: boolean;
   searchAllQueryIsFetching: boolean;
+  paletteSearchStatus: string;
+  paletteSearchError: string | undefined;
 }
 
 export function usePaletteSearch(
@@ -51,10 +56,11 @@ export function usePaletteSearch(
       setDebouncedPaletteSearchText("");
       return;
     }
-    const timer = window.setTimeout(() => setDebouncedPaletteSearchText(paletteSearchText), 200);
+    const timer = window.setTimeout(() => setDebouncedPaletteSearchText(paletteSearchText), 300);
     return () => window.clearTimeout(timer);
   }, [paletteSearchText]);
 
+  const activeOrganizationId = useActiveOrganizationId();
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
   // A pasted Azure DevOps link opens its item directly instead of being searched as text.
   const paletteUrl = useMemo(
@@ -68,7 +74,7 @@ export function usePaletteSearch(
   // prefix — never on a generic palette query.
   const paletteSearchEnabled =
     commandPaletteOpen &&
-    organizations.length > 0 &&
+    !!activeOrganizationId &&
     paletteSearch.kind !== "wiki" &&
     paletteUrl === null &&
     paletteSearch.kind !== "inbox" &&
@@ -80,18 +86,17 @@ export function usePaletteSearch(
     paletteSearch.query.length >= 2;
 
   const searchAllQuery = useQuery({
-    queryKey: ["searchAll", paletteSearch.query],
-    queryFn: () => searchAll({ query: paletteSearch.query }),
+    queryKey: ["searchAll", activeOrganizationId, paletteSearch.kind, paletteSearch.query],
+    queryFn: () => searchAll({ organizationId: activeOrganizationId, query: paletteSearch.query,
+      ...(paletteSearch.kind === "workItems" || paletteSearch.kind === "pullRequests" ? { kind: paletteSearch.kind } : {}),
+    }),
     enabled: paletteSearchEnabled,
-    staleTime: 30_000,
-    // Keep showing the previous results while the next keystroke's search
-    // runs, instead of flashing an empty list.
-    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+    retry: false,
   });
 
   // Wiki search targets the active connection (the palette has no org
   // selector), falling back to the first one until the active id has loaded.
-  const activeOrganizationId = useActiveOrganizationId();
   const paletteCodeOrgId = activeOrganizationId || organizations[0]?.id;
   const paletteWikiQuery = useQuery({
     queryKey: ["paletteWiki", paletteCodeOrgId, paletteSearch.query],
@@ -119,12 +124,13 @@ export function usePaletteSearch(
     kind: "workItems" | "pullRequests",
     query: string,
     organizationId?: string,
+    target?: Pick<ExternalSearchRequest, "workItem" | "pullRequest">,
   ): void {
     if (kind === "workItems") {
-      callbacks.setWorkItemSearchRequest({ query, requestId: Date.now(), organizationId });
+      callbacks.setWorkItemSearchRequest({ query, requestId: Date.now(), organizationId, ...target });
       callbacks.setView("workItems");
     } else {
-      callbacks.setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
+      callbacks.setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId, ...target });
       callbacks.setView("pullRequestSearch");
     }
   }
@@ -132,18 +138,25 @@ export function usePaletteSearch(
   // The search views read the active connection, so targets in another
   // organization switch to it before opening the search view.
   function openLinkedItem(
-    kind: "workItems" | "pullRequests",
-    query: string,
-    organizationId: string,
+    kind: "workItems" | "pullRequests", query: string, organizationId: string,
+    target?: Pick<ExternalSearchRequest, "workItem" | "pullRequest">,
   ): void {
-    if (organizationId === activeOrganizationId) {
-      openSearchTarget(kind, query, organizationId);
-      return;
-    }
-    setActiveOrganization(organizationId)
-      .then(() => queryClient.invalidateQueries())
-      .then(() => openSearchTarget(kind, query, organizationId))
-      .catch((error) => console.error("Failed to switch connection for a palette item", error));
+    void (async () => {
+      if (organizationId !== activeOrganizationId) {
+        await setActiveOrganization(organizationId);
+        await queryClient.invalidateQueries();
+      }
+      if (!target) {
+        const result = await searchAll({ organizationId, query, kind });
+        const workItem = result.workItems.find((wi) => String(wi.id) === query);
+        const pullRequest = result.pullRequests.find((pr) => String(pr.pullRequestId) === query);
+        if (kind === "workItems" ? !workItem : !pullRequest) {
+          throw new Error(result.warnings?.join("; ") || "Item not found or no longer accessible (PRs must be active).");
+        }
+        target = kind === "workItems" ? { workItem } : { pullRequest };
+      }
+      openSearchTarget(kind, query, organizationId, target);
+    })().catch((error) => pushToast(commandErrorMessage(error)));
   }
 
   // Cast a review vote on a PR directly from the command palette (E-36). The
@@ -263,6 +276,7 @@ export function usePaletteSearch(
           label: `#${item.id} ${item.title}`,
           detail: [
             showOrg ? item.organizationId : null,
+            item.projectName,
             item.workItemType,
             item.state,
             item.assignedTo,
@@ -270,24 +284,13 @@ export function usePaletteSearch(
             .filter(Boolean)
             .join(" · "),
           run: () => {
-            openLinkedItem("workItems", String(item.id), item.organizationId);
+            openLinkedItem("workItems", String(item.id), item.organizationId, { workItem: item });
           },
           runAlt: item.webUrl
             ? () => {
                 void openExternalUrl(item.webUrl as string);
               }
             : undefined,
-        });
-      }
-      if (data.totals.workItems > data.workItems.length) {
-        items.push({
-          id: "wi:more",
-          group: "Work Items",
-          label: `Show all ${data.totals.workItems} work items…`,
-          run: () => {
-            callbacks.setWorkItemSearchRequest({ query: rawQuery, requestId: Date.now() });
-            callbacks.setView("workItems");
-          },
         });
       }
     }
@@ -297,28 +300,17 @@ export function usePaletteSearch(
           id: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
           group: "Pull Requests (active)",
           label: `PR ${pr.pullRequestId} ${pr.title}`,
-          detail: [showOrg ? pr.organizationId : null, pr.repositoryName, pr.createdBy]
+          detail: [pr.projectName, pr.repositoryName, pr.createdBy]
             .filter(Boolean)
             .join(" · "),
           run: () => {
-            openLinkedItem("pullRequests", String(pr.pullRequestId), pr.organizationId);
+            openLinkedItem("pullRequests", String(pr.pullRequestId), pr.organizationId, { pullRequest: pr });
           },
           runAlt: pr.webUrl
             ? () => {
                 void openExternalUrl(pr.webUrl as string);
               }
             : undefined,
-        });
-      }
-      if (data.totals.pullRequests > data.pullRequests.length) {
-        items.push({
-          id: "pr:more",
-          group: "Pull Requests (active)",
-          label: `Show all ${data.totals.pullRequests} pull requests…`,
-          run: () => {
-            callbacks.setPullRequestSearchRequest({ query: rawQuery, requestId: Date.now() });
-            callbacks.setView("pullRequestSearch");
-          },
         });
       }
       // When the user explicitly filters to PRs, offer direct approve/reject
@@ -341,6 +333,11 @@ export function usePaletteSearch(
           });
         }
       }
+    }
+    // Keep groups together, but put the group with an exact ID hit first.
+    if (data.pullRequests.some((pr) => String(pr.pullRequestId) === rawQuery) &&
+        !data.workItems.some((item) => String(item.id) === rawQuery)) {
+      items.sort((a, b) => Number(b.group === "Pull Requests (active)") - Number(a.group === "Pull Requests (active)"));
     }
     return items;
   }, [
@@ -367,11 +364,12 @@ export function usePaletteSearch(
     if (!commandPaletteOpen || organizations.length === 0) return [];
     // A prefixed search (wi:/pr:/wiki:/inbox:) is an explicit live search, not a recents lookup.
     if (paletteSearch.kind !== null) return [];
-    // Once live cross-org search kicks in, those results stand on their own;
+    // Once live search kicks in, those results stand on their own;
     // recents are the fallback for an empty or too-short query.
     if (paletteSearchEnabled) return [];
     const filterText = debouncedPaletteSearchText.trim().toLowerCase();
-    const matches = loadRecentPaletteEntries(organizations.length > 1).filter((entry) => {
+    const matches = loadRecentPaletteEntries(false).filter((entry) => {
+      if (!activeOrganizationId || entry.organizationId !== activeOrganizationId) return false;
       if (filterText.length === 0) return true;
       const needle = filterText.replace(/^#/, "");
       return entry.label.toLowerCase().includes(needle) || entry.query.includes(needle);
@@ -402,9 +400,19 @@ export function usePaletteSearch(
   return {
     paletteSearchText,
     setPaletteSearchText,
-    paletteSearchItems,
-    paletteRecentItems,
+    paletteSearchItems: paletteSearchText === debouncedPaletteSearchText ? paletteSearchItems : [],
+    paletteRecentItems: paletteSearchText === debouncedPaletteSearchText ? paletteRecentItems : [],
     paletteSearchEnabled,
-    searchAllQueryIsFetching: searchAllQuery.isFetching,
+    searchAllQueryIsFetching: searchAllQuery.isFetching || paletteWikiQuery.isFetching || (paletteSearchText.trim() !== "" && paletteSearchText !== debouncedPaletteSearchText),
+    paletteSearchError: paletteSearchEnabled && searchAllQuery.isError ? commandErrorMessage(searchAllQuery.error) : undefined,
+    paletteSearchStatus: [
+      isTauriRuntime() ? `Search: ${organizations.find((org) => org.id === activeOrganizationId)?.displayName || organizations.find((org) => org.id === activeOrganizationId)?.name || "current organization"} · all accessible projects · active PRs only`
+        : "Demo data only — real Azure DevOps items are available in the desktop app.",
+      ...(paletteSearchEnabled ? searchAllQuery.data?.warnings ?? [] : []),
+      paletteSearchEnabled && searchAllQuery.data &&
+        ((paletteSearch.kind !== "pullRequests" && searchAllQuery.data.totals.workItems > searchAllQuery.data.workItems.length) ||
+         (paletteSearch.kind !== "workItems" && searchAllQuery.data.totals.pullRequests > searchAllQuery.data.pullRequests.length))
+          ? "More matches available. Refine your search to narrow the results." : "",
+    ].filter(Boolean).join(" · "),
   };
 }

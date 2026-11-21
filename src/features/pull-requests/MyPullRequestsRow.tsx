@@ -1,6 +1,7 @@
 import { type ReactNode, Fragment, forwardRef } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { type MyCreatedPullRequestSummary } from "@/lib/azdoCommands";
+import type { ColumnDragProps } from "@/lib/columnDrag";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { sortLabels, type SortKey, type SortState } from "./myPullRequestsTypes";
@@ -80,11 +81,13 @@ export function SortHeaderButton({
   sort,
   onSort,
   resizeHandle,
+  dragProps,
 }: {
   column: SortKey;
   sort: SortState;
   onSort: (column: SortKey) => void;
   resizeHandle?: ReactNode;
+  dragProps?: ColumnDragProps;
 }) {
   const active = sort.key === column;
   const label = sortLabels[column];
@@ -92,13 +95,15 @@ export function SortHeaderButton({
     <div
       role="columnheader"
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="relative min-w-0"
+      className="relative min-w-0 data-[drop-target=true]:bg-primary/15 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary"
+      {...dragProps?.cell}
     >
       <div className="flex min-w-0 items-center">
         <button
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(column)}
+          {...dragProps?.handle}
           className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
             active ? "text-foreground" : ""
           }`}

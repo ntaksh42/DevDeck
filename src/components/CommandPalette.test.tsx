@@ -32,6 +32,26 @@ it("runs the focused search result after results change order", async () => {
   expect(runA).not.toHaveBeenCalled();
 });
 
+it("keeps the row picked with the arrow keys when search results arrive above it", async () => {
+  const goA = vi.fn();
+  const goB = vi.fn();
+  const runResult = vi.fn();
+  const commands: CommandPaletteAction[] = [
+    { id: "nav-a", group: "Navigation", label: "Go to A", run: goA },
+    { id: "nav-b", group: "Navigation", label: "Go to B", run: goB },
+  ];
+  const view = (items: { id: string; group: string; label: string; run: () => void }[]) => (
+    <CommandPalette actions={commands} onClose={vi.fn()} search={{ items, pending: false, onQueryChange: vi.fn() }} />
+  );
+  const { rerender } = render(view([]));
+  const input = screen.getByRole("textbox");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  rerender(view([{ id: "wi:42", group: "Work Items", label: "#42 Item", run: runResult }]));
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(goB).toHaveBeenCalledTimes(1));
+  expect(runResult).not.toHaveBeenCalled();
+});
+
 it("leaves Enter on the close button to its native click action", () => {
   const run = vi.fn();
   const onClose = vi.fn();
@@ -115,7 +135,7 @@ describe("CommandPalette IME composition", () => {
         onClose={onClose}
       />,
     );
-    const input = screen.getByPlaceholderText("Type a command...");
+    const input = screen.getByPlaceholderText("Type a command…");
 
     fireEvent.keyDown(input, { key: "Enter", isComposing: true });
     fireEvent.keyDown(input, { key: "Escape", isComposing: true });
@@ -126,4 +146,36 @@ describe("CommandPalette IME composition", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+});
+
+it("places search results before matching commands and keeps Tab inside the palette", () => {
+  render(<CommandPalette actions={actions} onClose={vi.fn()}
+    search={{ items: [{ id: "wi:42", group: "Work Items", label: "#42 Item", run: vi.fn() }], pending: false, onQueryChange: vi.fn() }} />);
+  const input = screen.getByRole("textbox");
+  expect(screen.getByRole("button", { name: "#42 Item" }).getAttribute("aria-current")).toBe("true");
+  fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
+  const last = document.activeElement;
+  expect(last).not.toBe(input);
+  fireEvent.keyDown(last!, { key: "Tab" });
+  expect(document.activeElement).toBe(input);
+});
+
+it("runs the browser action with Ctrl+Enter and contains navigation keys", async () => {
+  const run = vi.fn();
+  const runAlt = vi.fn();
+  const outsideKeyDown = vi.fn();
+  render(<div onKeyDown={outsideKeyDown}><CommandPalette actions={[]} onClose={vi.fn()}
+    search={{ items: [{ id: "wi:42", group: "Work Items", label: "#42 Item", run, runAlt }], pending: false, onQueryChange: vi.fn() }} /></div>);
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "ArrowDown" });
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", ctrlKey: true });
+  await waitFor(() => expect(runAlt).toHaveBeenCalledTimes(1));
+  expect(run).not.toHaveBeenCalled();
+  expect(outsideKeyDown).not.toHaveBeenCalled();
+});
+
+it("shows search scope and API errors distinctly from empty results", () => {
+  render(<CommandPalette actions={[]} onClose={vi.fn()} search={{ items: [], pending: false,
+    onQueryChange: vi.fn(), status: "Demo data only", error: "Search permission denied" }} />);
+  expect(screen.getByRole("status").textContent).toContain("Demo data only");
+  expect(screen.getByRole("alert").textContent).toBe("Search permission denied");
 });

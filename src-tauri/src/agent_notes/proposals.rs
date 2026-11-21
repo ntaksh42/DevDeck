@@ -1,9 +1,8 @@
 //! Comments an agent proposes to leave on a work item or pull request. The
 //! agent has no Azure DevOps access, so it appends the text to the note after
 //! a `<!-- post {agent} {time} -->` marker and DevDeck posts it, either when
-//! the user approves it or, if Settings allows, on its own. Every posted
-//! comment ends with a signature naming the agent that wrote it, added here
-//! and never taken from the agent's text. DevDeck then records the result as
+//! the user approves it or, if Settings allows, on its own. The text is posted
+//! as written. DevDeck then records the result as
 //! `<!-- posted {time} {reference} -->` under the proposal, so it can only be
 //! posted once, and appends it to `post-log.jsonl` in the notes root, which
 //! limits how fast automatic posts may follow each other.
@@ -28,7 +27,6 @@ const MAX_COMMENT_CHARS: usize = 10_000;
 /// Automatic posts allowed per hour, on one item and in total.
 const AUTO_PER_ITEM_PER_HOUR: usize = 3;
 const AUTO_PER_HOUR: usize = 10;
-const SIGNATURE_PREFIX: &str = "— 🤖 Posted by ";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,33 +61,14 @@ impl Drop for PostGuard {
 
 /// A proposal that passed every check, ready to post.
 pub(crate) struct PreparedPost {
-    /// The comment with the agent's signature appended.
+    /// The comment to post.
     pub body: String,
+    /// For a pull request line comment: the file and the 1-based line on the new side.
+    pub location: Option<(String, i64)>,
     input: PostAgentProposalInput,
     agent: String,
     hash: u64,
     _guard: PostGuard,
-}
-
-pub(crate) fn agent_label(agent: &str) -> Option<&'static str> {
-    match agent {
-        "claude" => Some("Claude"),
-        "codex" => Some("Codex"),
-        _ => None,
-    }
-}
-
-pub(crate) fn signature(label: &str) -> String {
-    format!("{SIGNATURE_PREFIX}{label} (via DevDeck)")
-}
-
-/// The proposal text without a signature the agent may have written itself.
-fn strip_signature(body: &str) -> &str {
-    let body = body.trim();
-    match body.rsplit_once('\n') {
-        Some((rest, last)) if last.trim().starts_with(SIGNATURE_PREFIX) => rest.trim_end(),
-        _ => body,
-    }
 }
 
 /// FNV-1a: only compares texts within the log, so it needs no stability
@@ -100,10 +79,53 @@ fn text_hash(text: &str) -> u64 {
     })
 }
 
+/// Longest file path accepted in a proposal's `file=`.
+const MAX_PATH_CHARS: usize = 1_000;
+
+/// The file and line a proposal is about, checked. `None` for a plain comment.
+fn proposal_location(
+    target: NoteTarget,
+    auto: bool,
+    file_path: Option<&str>,
+    line: Option<i64>,
+) -> Result<Option<(String, i64)>> {
+    let (file_path, line) = match (file_path, line) {
+        (None, None) => return Ok(None),
+        (Some(file_path), Some(line)) => (file_path, line),
+        _ => {
+            return Err(AppError::InvalidInput(
+                "a line comment needs both file= and line=".to_string(),
+            ))
+        }
+    };
+    let valid_path = file_path.starts_with('/')
+        && file_path.chars().count() <= MAX_PATH_CHARS
+        && !file_path.chars().any(char::is_control)
+        && !file_path.split('/').any(|segment| segment == "..");
+    if !valid_path || line < 1 {
+        return Err(AppError::InvalidInput(
+            "the proposed comment's file or line is not valid".to_string(),
+        ));
+    }
+    if target != NoteTarget::PullRequest {
+        return Err(AppError::InvalidInput(
+            "a line comment can only be posted to a pull request".to_string(),
+        ));
+    }
+    if auto {
+        return Err(AppError::InvalidInput(
+            "a line comment needs your approval".to_string(),
+        ));
+    }
+    Ok(Some((file_path.to_string(), line)))
+}
+
 /// Automatic posts must not carry anything a hostile pull request could use to
 /// make the agent reach out: links and @-mentions go through the user.
 fn check_auto_content(body: &str) -> Result<()> {
-    if body.contains("http://") || body.contains("https://") || body.contains('@') {
+    // URL schemes are case-insensitive, so "HTTPS://" is a link too.
+    let lower = body.to_ascii_lowercase();
+    if lower.contains("http://") || lower.contains("https://") || body.contains('@') {
         return Err(AppError::InvalidInput(
             "a comment with a link or @mention needs your approval".to_string(),
         ));
@@ -151,7 +173,7 @@ fn find_note(root: &Path, input: &PostAgentProposalInput) -> Result<PathBuf> {
 }
 
 impl AgentNoteService {
-    /// Checks a proposal and signs it. Fails when the note or proposal is not
+    /// Checks a proposal. Fails when the note or proposal is not
     /// what the request says, it was posted already, or (for `auto`) Settings
     /// or the limits do not allow it.
     pub(crate) fn prepare_post(&self, input: PostAgentProposalInput) -> Result<PreparedPost> {
@@ -197,13 +219,19 @@ pub(super) fn prepare_post_in(
             "this comment was already posted".to_string(),
         ));
     }
-    let label = agent_label(&reply.author).ok_or_else(|| {
-        AppError::InvalidInput(format!(
+    if !matches!(reply.author.as_str(), "claude" | "codex") {
+        return Err(AppError::InvalidInput(format!(
             "unknown agent for a proposed comment: {}",
             reply.author
-        ))
-    })?;
-    let text = strip_signature(&reply.body);
+        )));
+    }
+    let location = proposal_location(
+        input.target,
+        input.auto,
+        reply.file_path.as_deref(),
+        reply.line,
+    )?;
+    let text = reply.body.trim();
     if text.is_empty() {
         return Err(AppError::InvalidInput(
             "the proposed comment is empty".to_string(),
@@ -241,9 +269,15 @@ pub(super) fn prepare_post_in(
             ));
         }
     }
+    // The notes root is part of the key so that separate roots never share a
+    // slot: the app has one root, but tests run in parallel, each in its own
+    // temporary root, and reuse the same ids.
     let key = format!(
-        "{target}:{}:{}:{}",
-        input.item_id, input.note_id, input.reply_index
+        "{}:{target}:{}:{}:{}",
+        root.display(),
+        input.item_id,
+        input.note_id,
+        input.reply_index
     );
     if !in_flight()
         .lock()
@@ -255,7 +289,8 @@ pub(super) fn prepare_post_in(
         ));
     }
     Ok(PreparedPost {
-        body: format!("{text}\n\n{}", signature(label)),
+        body: text.to_string(),
+        location,
         agent: reply.author.clone(),
         hash,
         input,

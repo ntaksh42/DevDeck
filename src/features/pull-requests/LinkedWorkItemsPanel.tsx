@@ -164,7 +164,7 @@ export function LinkedWorkItemsPanel({ pr }: { pr: ReviewPullRequestSummary }) {
                 {preview?.state ? (
                   <span className={`h-2 w-2 shrink-0 rounded-full ${workItemStateDotClass(preview.state)}`} aria-hidden="true" />
                 ) : null}
-                <span className="min-w-0 flex-1 truncate">{preview?.title ?? "Loading..."}</span>
+                <span className="min-w-0 flex-1 truncate">{preview?.title ?? "Loading…"}</span>
                 {preview?.workItemType ? (
                   <span className="shrink-0 text-muted-foreground">{preview.workItemType}</span>
                 ) : null}

@@ -28,8 +28,8 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
   const orgNames = new Map(organizations.map((org) => [org.id, org.name]));
 
   function syncScope(state: SyncState): SyncScope {
-    if (state.scope.startsWith("prs:")) return "myReviews";
-    if (state.scope.startsWith("work_items:")) return "myWorkItems";
+    if (state.scope.startsWith("prs:") || state.scope.startsWith("inbox_prs:")) return "myReviews";
+    if (state.scope.startsWith("work_items:") || state.scope.startsWith("inbox_wi:")) return "myWorkItems";
     return "all";
   }
 
@@ -153,6 +153,8 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
 function formatSyncScope(scope: string): string {
   if (scope.startsWith("prs:")) return "Pull requests / My Reviews";
   if (scope.startsWith("work_items:")) return "Work items / My Items";
+  if (scope.startsWith("inbox_prs:")) return "Inbox / PR comments";
+  if (scope.startsWith("inbox_wi:")) return "Inbox / Work item comments";
   return scope;
 }
 

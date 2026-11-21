@@ -87,10 +87,22 @@ impl AppDatabase {
 
     /// Replaces cached pull requests for the repositories that synced
     /// successfully; rows of other repositories are preserved.
+    #[cfg(test)]
     pub fn replace_pull_requests_for_projects(
         &self,
         org_id: &str,
         synced_project_ids: &[&str],
+        prs: &[CachedPr],
+    ) -> Result<()> {
+        self.replace_pull_request_snapshot(org_id, synced_project_ids, None, &[], prs)
+    }
+
+    pub(crate) fn replace_pull_request_snapshot(
+        &self,
+        org_id: &str,
+        synced_project_ids: &[&str],
+        creator_id: Option<&str>,
+        creator_projects: &[String],
         prs: &[CachedPr],
     ) -> Result<()> {
         let conn = self.open()?;
@@ -99,6 +111,12 @@ impl AppDatabase {
             tx.execute(
                 "DELETE FROM pull_requests WHERE org_id = ?1 AND project_id = ?2",
                 rusqlite::params![org_id, project_id],
+            )?;
+        }
+        for project_id in creator_projects {
+            tx.execute(
+                "DELETE FROM pull_requests WHERE org_id = ?1 AND project_id = ?2 AND created_by_id = ?3 COLLATE NOCASE",
+                params![org_id, project_id, creator_id],
             )?;
         }
         upsert_pull_requests(&tx, prs)?;

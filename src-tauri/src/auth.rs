@@ -39,7 +39,10 @@ pub fn client_for_organization(
         }
     };
 
-    Ok(AdoClient::new(&organization.name, auth)?)
+    Ok(crate::dev_overrides::apply(
+        AdoClient::new(&organization.name, auth)?,
+        &organization.name,
+    ))
 }
 
 /// Builds a GitHub client for a GitHub-kind connection, reading the stored PAT

@@ -9,6 +9,7 @@ type UseViewCountQueriesParams = {
   views: WorkItemQueryView[];
   selectedOrganizationId: string;
   projectOptions: WorkItemProjectOption[];
+  recordHistory?: boolean;
 };
 
 /**
@@ -20,6 +21,7 @@ export function useViewCountQueries({
   views,
   selectedOrganizationId,
   projectOptions,
+  recordHistory = true,
 }: UseViewCountQueriesParams) {
   const viewCountQueries = useQueries({
     queries: views.map((view) => ({
@@ -51,6 +53,7 @@ export function useViewCountQueries({
     .map((view, index) => `${view.id}:${viewCountQueries[index]?.data ?? ""}`)
     .join("|");
   useEffect(() => {
+    if (!recordHistory) return;
     const ids = views.map((view) => view.id);
     views.forEach((view, index) => {
       const count = viewCountQueries[index]?.data;
@@ -60,7 +63,7 @@ export function useViewCountQueries({
     });
     // viewCountQueries is a fresh array each render; the signature captures the inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewCountsSignature]);
+  }, [viewCountsSignature, recordHistory]);
 
   return viewCountQueries;
 }

@@ -55,7 +55,7 @@ export function AssigneePicker({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-2xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full truncate rounded px-1 text-left text-xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "Unassigned"}
       >
         {pending ? "Updating..." : current ?? "Unassigned"}
@@ -80,7 +80,7 @@ export function AssigneePicker({
                 listRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
               }
             }}
-            placeholder="Search assignee..."
+            placeholder="Search assignee…"
             className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
           <div ref={listRef} className="max-h-44 overflow-auto">
@@ -90,7 +90,7 @@ export function AssigneePicker({
               </div>
             ) : null}
             {loading ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching...</div>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching…</div>
             ) : options.length > 0 ? (
               options.map((candidate) => (
                 <button
@@ -109,7 +109,7 @@ export function AssigneePicker({
                       else inputRef.current?.focus();
                     }
                   }}
-                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus-visible:outline-offset-[-2px]"
                 >
                   <CandidateAvatar displayName={candidate.displayName} />
                   <span className="flex min-w-0 flex-col">

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listSnoozedItems, snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
-import { activeSnoozedKeys } from '@/lib/snoozePresets';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
+import { useActiveWorkItemSnoozes } from './useActiveWorkItemSnoozes';
 import { useGridColumns } from '@/lib/useGridColumns';
+import { moveColumnBy, showColumn } from '@/lib/useColumnVisibility';
+import { moveColumnTo } from '@/lib/columnDrag';
 import type { CustomPreviewField } from './previewFieldsStorage';
 import { loadCustomPreviewFields } from './previewFieldsStorage';
-import { workItemQueryKeys } from './queryKeys';
+import { invalidateWorkItemSnoozeCaches } from './queryKeys';
 import {
   DEFAULT_WI_COLUMN_WIDTHS,
   WI_COLUMN_MIN_WIDTHS,
@@ -22,6 +24,7 @@ import {
   loadWorkItemColumnFilters,
   storeWorkItemColumnFilters,
   type WiSortKey,
+  type WiSortColumn,
   type WiSortState,
   type FilterableColumn,
 } from './workItemsGridHelpers';
@@ -118,7 +121,6 @@ export function useWiGridState({
   }, []);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const previousResultKeysRef = useRef<string | null>(null);
-  const [gridViewport, setGridViewport] = useState({ width: 0, height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
   const [showDone, setShowDone] = useState(false);
   const [triageVersion, setTriageVersion] = useState(0);
@@ -126,25 +128,11 @@ export function useWiGridState({
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
   const snoozeTargetRef = useRef<WorkItemSummary[]>([]);
-  // Same key as SnoozedItemsPanel so a snooze/unsnooze refreshes both at once.
-  const snoozedQuery = useQuery({
-    queryKey: ["snoozedItems", "work_item", snoozeOrganizationId],
-    queryFn: () => listSnoozedItems({ organizationId: snoozeOrganizationId, itemType: "work_item" }),
-    enabled: snoozeEnabled,
-    staleTime: 60_000,
-  });
-  const snoozedKeys = useMemo(
-    () => activeSnoozedKeys(snoozedQuery.data ?? []),
-    [snoozedQuery.data],
-  );
+  const snoozedKeys = useActiveWorkItemSnoozes(snoozeOrganizationId);
   const snoozeMutation = useMutation({
     mutationFn: snoozeItems,
     onSuccess: () => {
-      if (snoozeOrganizationId) {
-        void queryClient.invalidateQueries({
-          queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),
-        });
-      }
+      if (snoozeOrganizationId) invalidateWorkItemSnoozeCaches(queryClient, snoozeOrganizationId);
       void queryClient.invalidateQueries({
         queryKey: ["snoozedItems", "work_item"],
       });
@@ -178,7 +166,7 @@ export function useWiGridState({
 
   // ─── Column visibility handlers ───────────────────────────────────────────
 
-  function applyWiSort(column: WiSortKey) {
+  function applyWiSort(column: WiSortColumn) {
     setWiSort((current) => {
       const next: WiSortState =
         current.key !== column
@@ -194,8 +182,16 @@ export function useWiGridState({
     setVisibleColumns((current) =>
       current.includes(column)
         ? current.filter((value) => value !== column)
-        : WI_GRID_KEYS.filter((value) => value === column || current.includes(value)),
+        : showColumn(WI_GRID_KEYS, current, column),
     );
+  }
+
+  function moveColumn(column: WiSortKey, delta: number) {
+    setVisibleColumns((current) => moveColumnBy(current, column, delta));
+  }
+
+  function reorderColumn(from: WiSortKey, to: WiSortKey) {
+    setVisibleColumns((current) => moveColumnTo(current, from, to));
   }
 
   function resetColumnVisibility() {
@@ -206,7 +202,7 @@ export function useWiGridState({
   return {
     sort, setWiSort, applyWiSort,
     visibleColumns, setVisibleColumns, shownColumns,
-    toggleColumnVisibility, resetColumnVisibility,
+    toggleColumnVisibility, moveColumn, reorderColumn, resetColumnVisibility,
     wiColTemplate, gridMinWidth, autoColumnWidths, resetColumnWidths, gridRef, columnResizeProps,
     copyToast, setCopyToast,
     checkedIds, setCheckedIds,
@@ -226,7 +222,6 @@ export function useWiGridState({
     filterButtonRef,
     staleOnly, setStaleOnly,
     containerRef, gridScrollRef, setGridScrollNode, scrollerAttached, rowRefs, previousResultKeysRef,
-    gridViewport, setGridViewport,
     queryClient,
     showDone, setShowDone,
     triageVersion, setTriageVersion,

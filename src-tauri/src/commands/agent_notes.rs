@@ -150,18 +150,33 @@ pub async fn post_agent_comment(
             let repository_id = input.repository_id.ok_or_else(|| {
                 AppError::InvalidInput("repositoryId is required for a pull request".to_string())
             })?;
+            let pull_request_id = input.proposal.item_id;
+            let pr = || PrLocator {
+                organization_id: input.organization_id.clone(),
+                project_id: input.project_id.clone(),
+                repository_id: repository_id.clone(),
+                pull_request_id,
+            };
+            // A line comment opens its own thread on a file the pull request changes.
+            let (thread_id, file_path, right_line) = match &prepared.location {
+                Some((path, line)) => {
+                    let changes = provider.list_pull_request_changes(pr()).await?;
+                    if !changes.files.iter().any(|file| &file.path == path) {
+                        return Err(AppError::InvalidInput(format!(
+                            "{path} is not changed by this pull request"
+                        )));
+                    }
+                    (None, Some(path.clone()), Some(*line))
+                }
+                None => (input.thread_id, None, None),
+            };
             let thread = provider
                 .post_pull_request_comment(PostPullRequestCommentInput {
-                    pr: PrLocator {
-                        organization_id: input.organization_id,
-                        project_id: input.project_id,
-                        repository_id,
-                        pull_request_id: input.proposal.item_id,
-                    },
-                    thread_id: input.thread_id,
+                    pr: pr(),
+                    thread_id,
                     content: prepared.body.clone(),
-                    file_path: None,
-                    right_line: None,
+                    file_path,
+                    right_line,
                     left_line: None,
                 })
                 .await?;

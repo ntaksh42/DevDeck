@@ -6,8 +6,14 @@ import {
   type Toast,
 } from "@/lib/toast";
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
+import { isImeComposing } from "@/lib/utils";
 
 function ToastRow({ toast }: { toast: Toast }) {
+  useEffect(() => {
+    if (toast.durationMs === undefined) return;
+    const timer = window.setTimeout(() => dismissToast(toast.id), toast.durationMs);
+    return () => window.clearTimeout(timer);
+  }, [toast.id, toast.durationMs]);
   return (
     <div className="flex items-center gap-3 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-lg">
       <span className="min-w-0">{toast.message}</span>
@@ -67,6 +73,9 @@ function ToastList({ toasts }: { toasts: Toast[] }) {
       return;
     }
     function onKeyDown(event: KeyboardEvent) {
+      // An Escape that closed a popup or cancelled an IME conversion was meant
+      // for that; it must not also throw away a message (often an error).
+      if (event.defaultPrevented || isImeComposing(event)) return;
       if (event.key === "Escape") {
         dismissToast(visible[visible.length - 1].id);
       }

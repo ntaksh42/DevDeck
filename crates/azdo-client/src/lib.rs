@@ -20,8 +20,8 @@ pub use error::{AdoError, Result};
 pub use git::{
     CommitSearchCriteria, GitBranchStats, GitCommitDiffs, GitCommitRef, GitDiffChange, GitDiffItem,
     GitItem, GitPullRequest, GitRef, GitRefUpdateResult, GitRepository, GitUserDate,
-    GitVersionType, IdentityRef, IdentityRefWithVote, PullRequestStatus, TeamProject,
-    ZERO_OBJECT_ID,
+    GitVersionType, IdentityRef, IdentityRefWithVote, PullRequestPageCriteria, PullRequestStatus,
+    TeamProject, ZERO_OBJECT_ID,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{
@@ -42,8 +42,7 @@ pub use project_info::{
 };
 pub use wiki::{WikiPage, WikiSearchRequest, WikiSearchResponse, WikiSearchResult};
 pub use work_items::{
-    has_asof_clause, with_asof, ClassificationNode, ClassificationNodeAttributes,
-    CommentIdentityRef, CommentReaction, QueryHierarchyItem, WorkItem, WorkItemComment,
-    WorkItemFieldDefinition, WorkItemLink, WorkItemReference, WorkItemRelation,
-    WorkItemRelationAttributes, WorkItemUpdate,
+    ClassificationNode, ClassificationNodeAttributes, CommentIdentityRef, CommentReaction,
+    QueryHierarchyItem, WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink,
+    WorkItemReference, WorkItemRelation, WorkItemRelationAttributes, WorkItemUpdate,
 };

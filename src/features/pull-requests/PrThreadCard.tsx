@@ -4,7 +4,18 @@ import { type MentionCandidate, type PrThread } from "@/lib/azdoCommands";
 import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
+import type { CommentImageTarget } from "@/lib/commands/commentImages";
 import { CommentComposer } from "./CommentComposer";
+import { markdownMentionsToEditable } from "@/features/work-items/mentionEditDraft";
+
+function editDraftProps(
+  content: string | null | undefined,
+  names: ReadonlyMap<string, string>,
+) {
+  const draft = markdownMentionsToEditable(content ?? "", names);
+  return { initialValue: draft.text, initialMentions: draft.mentions };
+}
 
 const AVATAR_PALETTE = [
   "bg-info/10 text-info",
@@ -230,7 +241,9 @@ export function PrThreadCard({
   onDeleteComment,
   mentionSearch,
   resolveImageSource,
+  imageTarget,
   baseUrl,
+  organizationId,
 }: {
   thread: PrThread;
   busy: boolean;
@@ -241,9 +254,15 @@ export function PrThreadCard({
   onEditComment?: (commentId: number, content: string) => Promise<void>;
   onDeleteComment?: (commentId: number) => Promise<void>;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  imageTarget?: CommentImageTarget;
   resolveImageSource?: (url: string) => Promise<string | null>;
   baseUrl?: string | null;
+  organizationId?: string;
 }) {
+  const mentionDisplayNames = useMentionIdentityNames(
+    organizationId,
+    thread.comments.map((comment) => comment.content),
+  );
   const [replying, setReplying] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   // Resolved threads start folded to one line so open discussions stand out.
@@ -379,10 +398,13 @@ export function PrThreadCard({
                     <CommentComposer
                       placeholder="Edit comment…"
                       submitLabel="Save"
-                      initialValue={comment.content ?? ""}
+                      // Show existing mentions as @Name; they turn back into
+                      // @<guid> on save.
+                      {...editDraftProps(comment.content, mentionDisplayNames)}
                       autoFocus
                       busy={busy}
                       mentionSearch={mentionSearch}
+                imageTarget={imageTarget}
                       onSubmit={(content) => onEditComment(comment.id, content)}
                       onCancel={() => {
                         setEditingId(null);
@@ -401,6 +423,7 @@ export function PrThreadCard({
                       className="text-foreground"
                       resolveImageSource={resolveImageSource}
                       baseUrl={baseUrl}
+                      mentionDisplayNames={mentionDisplayNames}
                     />
                   </div>
                 )}
@@ -415,6 +438,7 @@ export function PrThreadCard({
                 autoFocus
                 busy={busy}
                 mentionSearch={mentionSearch}
+                imageTarget={imageTarget}
                 onSubmit={onReply}
                 onCancel={() => {
                   setReplying(false);

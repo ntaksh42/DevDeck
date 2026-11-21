@@ -6,6 +6,7 @@ import { pullRequestSummariesSchema } from "./prs";
 const searchAllResultSchema = z.object({
   workItems: workItemSummariesSchema,
   pullRequests: pullRequestSummariesSchema,
+  warnings: z.array(z.string()).default([]),
   totals: z.object({
     workItems: z.number(),
     pullRequests: z.number(),
@@ -18,6 +19,7 @@ export type SearchAllInput = {
   organizationId?: string;
   query: string;
   limitPerKind?: number;
+  kind?: "workItems" | "pullRequests";
 };
 
 export async function searchAll(input: SearchAllInput): Promise<SearchAllResult> {

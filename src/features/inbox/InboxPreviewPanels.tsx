@@ -12,6 +12,7 @@ import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { PrThreadCard } from "@/features/pull-requests/PrThreadCard";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
 import { commentRichHtml } from "@/features/work-items/workItemHtml";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import type { InboxEntry } from "./inboxPresentation";
 
 /** Text to start the reply box with; a new `key` remounts the composer with it. */
@@ -69,6 +70,7 @@ export function ThreadPanel({
         mentionSearch={mentionSearch}
         resolveImageSource={resolveImageSource}
         baseUrl={item.webUrl}
+        organizationId={item.organizationId}
         onReply={onReply}
         onToggleStatus={onToggleStatus}
       />
@@ -78,7 +80,7 @@ export function ThreadPanel({
           Read-only validation mode: replies and status changes are disabled.
         </p>
       ) : (
-        <div data-inbox-composer="true" className="sticky bottom-0 z-10 mt-1 border-t border-border bg-card pt-1">
+        <div data-inbox-composer="true" className="sticky -bottom-2 z-10 mt-1 border-t border-border bg-card pb-2 pt-1">
           <CommentComposer
             key={draft?.key ?? 0}
             initialValue={draft?.text ?? ""}
@@ -87,6 +89,11 @@ export function ThreadPanel({
             submitLabel="Reply"
             busy={busy}
             mentionSearch={mentionSearch}
+            imageTarget={item.repositoryId && item.webUrl?.includes("/_git/") ? {
+              organizationId: item.organizationId,
+              projectId: item.projectId,
+              pr: { repositoryId: item.repositoryId, pullRequestId: item.subjectId },
+            } : undefined}
             onSubmit={onReply}
             onAltSubmit={thread.isResolved ? undefined : onReplyAndResolve}
             altSubmitHint={thread.isResolved ? undefined : "Ctrl+Shift+Enter to post & resolve"}
@@ -156,6 +163,11 @@ export function WorkItemPanel({
     if (draft) setReplyTo(null);
   }, [draft]);
 
+  const mentionDisplayNames = useMentionIdentityNames(
+    item.organizationId,
+    workItem?.comments.flatMap((comment) => [comment.text, comment.renderedText]) ?? [],
+  );
+
   if (!workItem) {
     return (
       <p className="py-2 text-xs text-muted-foreground">
@@ -167,7 +179,6 @@ export function WorkItemPanel({
   const mentionIndex = workItem.comments.findIndex((comment) => comment.id === item.commentId);
   const shown = Math.max(3, mentionIndex + 1);
   const latest = workItem.comments.slice(0, showAll ? undefined : shown);
-  const mentionDisplayNames = new Map<string, string>();
   return (
     <div className="space-y-1.5 py-1">
       <p className="text-xs text-muted-foreground">
@@ -251,6 +262,7 @@ export function WorkItemPanel({
             initialMentions={replyTo ? workItemReplyDraft(replyTo.comment).mentions : undefined}
             busy={busy}
             mentionSearch={mentionSearch}
+            imageTarget={{ organizationId: item.organizationId, projectId: item.projectId }}
             onSubmit={onComment}
             onSubmitted={() => setReplyTo(null)}
           />

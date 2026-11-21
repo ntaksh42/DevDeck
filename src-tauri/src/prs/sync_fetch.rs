@@ -7,13 +7,14 @@ use super::*;
 use crate::db::{CachedPr, CachedReviewPr, Organization};
 use crate::error::Result;
 use crate::repos::encode_path_segment;
-use crate::shared_cache::{self, SharedPullRequest, SharedReviewer};
+use crate::shared_cache::{
+    self, ActivePrScope, ActivePrSnapshot, SharedPullRequest, SharedReviewer,
+};
 
 /// How stale the shared cache (`shared_cache` module) may be before this app
 /// falls back to fetching from Azure DevOps itself. Chosen well under
 /// DevDeck's own ~5 minute sync interval so this app's own cadence is
-/// essentially unaffected; it only skips a fetch on the rare occasion the
-/// other app (waypoint) refreshed this scope moments earlier.
+/// essentially unaffected. The reader also requires a compatible scope.
 const SHARED_CACHE_FRESHNESS: Duration = Duration::from_secs(120);
 
 // One project-level query replaces a request per repository; repositories
@@ -32,9 +33,8 @@ pub(crate) async fn fetch_active_prs_for_project(
     let label = project.name.clone();
 
     if !force_refresh {
-        if let Some((cached, reviewers)) = read_active_prs_from_shared_cache(&org, &project) {
-            // A shared snapshot can be the previous capped API response too.
-            let capped = cached.len() >= PROJECT_PR_SYNC_TOP as usize;
+        if let Some((cached, reviewers, capped)) = read_active_prs_from_shared_cache(&org, &project)
+        {
             return PrProjectFetch {
                 project_id,
                 label,
@@ -80,6 +80,66 @@ pub(crate) async fn fetch_active_prs_for_project(
 
     let capped = prs.len() >= PROJECT_PR_SYNC_TOP as usize;
 
+    let (cached, shared_reviewers) = map_active_prs(&org, &project, prs);
+
+    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers, capped);
+
+    PrProjectFetch {
+        project_id,
+        label,
+        result: Ok(cached),
+        capped,
+        reviewers: shared_reviewers,
+    }
+}
+
+pub(super) async fn fetch_active_with_authored(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    force_refresh: bool,
+) -> (PrProjectFetch, Result<bool>) {
+    let mut fetch =
+        fetch_active_prs_for_project(client.clone(), org.clone(), project.clone(), force_refresh)
+            .await;
+    let (Some(user), true, Ok(prs)) = (
+        org.authenticated_user_id.as_deref(),
+        fetch.capped,
+        &mut fetch.result,
+    ) else {
+        return (fetch, Ok(false));
+    };
+    let authored = match client
+        .list_pull_requests_by_creator(&project.id, user, 200)
+        .await
+    {
+        Ok(authored) => authored,
+        Err(error) => return (fetch, Err(error.into())),
+    };
+    let authored_keys: HashSet<_> = prs
+        .iter()
+        .filter(|pr| {
+            pr.created_by_id
+                .as_deref()
+                .is_some_and(|id| id.eq_ignore_ascii_case(user))
+        })
+        .map(|pr| (pr.repository_id.clone(), pr.pull_request_id))
+        .collect();
+    prs.retain(|pr| !authored_keys.contains(&(pr.repository_id.clone(), pr.pull_request_id)));
+    fetch
+        .reviewers
+        .retain(|row| !authored_keys.contains(&(row.repository_id.clone(), row.pull_request_id)));
+    let (authored, reviewers) = map_active_prs(&org, &project, authored);
+    prs.extend(authored);
+    fetch.reviewers.extend(reviewers);
+    (fetch, Ok(true))
+}
+
+fn map_active_prs(
+    org: &Organization,
+    project: &TeamProject,
+    prs: Vec<GitPullRequest>,
+) -> (Vec<CachedPr>, Vec<SharedReviewer>) {
     // Reviewers are read from `prs` by reference before the by-value pass
     // below consumes each `pr` to build `CachedPr`; both passes read the same
     // API response, just for different destinations (DevDeck's own cache vs
@@ -146,14 +206,17 @@ pub(crate) async fn fetch_active_prs_for_project(
         })
         .collect();
 
-    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers);
+    (cached, shared_reviewers)
+}
 
-    PrProjectFetch {
-        project_id,
-        label,
-        result: Ok(cached),
-        capped,
-        reviewers: shared_reviewers,
+fn active_pr_scope<'a>(org: &'a Organization, project: &'a TeamProject) -> ActivePrScope<'a> {
+    ActivePrScope {
+        organization: &org.name,
+        project: &project.name,
+        base_url: &org.base_url,
+        project_id: &project.id,
+        principal_id: org.authenticated_user_id.as_deref(),
+        limit: PROJECT_PR_SYNC_TOP,
     }
 }
 
@@ -163,19 +226,18 @@ pub(crate) async fn fetch_active_prs_for_project(
 fn read_active_prs_from_shared_cache(
     org: &Organization,
     project: &TeamProject,
-) -> Option<(Vec<CachedPr>, Vec<SharedReviewer>)> {
-    let conn = shared_cache::open().ok()?;
-    if !shared_cache::is_fresh(
-        &conn,
-        &org.name,
-        &project.name,
-        shared_cache::KIND_PULL_REQUESTS,
+) -> Option<(Vec<CachedPr>, Vec<SharedReviewer>, bool)> {
+    let mut conn = shared_cache::open().ok()?;
+    let ActivePrSnapshot {
+        rows,
+        reviewers,
+        capped,
+    } = shared_cache::read_active_pr_snapshot(
+        &mut conn,
+        &active_pr_scope(org, project),
         SHARED_CACHE_FRESHNESS,
-    ) {
-        return None;
-    }
-    let rows = shared_cache::read_pull_requests(&conn, &org.name, &project.name).ok()?;
-    let reviewers = shared_cache::read_reviewers(&conn, &org.name, &project.name).ok()?;
+    )
+    .ok()??;
     let cached = rows
         .into_iter()
         .map(|row| {
@@ -205,7 +267,7 @@ fn read_active_prs_from_shared_cache(
             }
         })
         .collect();
-    Some((cached, reviewers))
+    Some((cached, reviewers, capped))
 }
 
 /// Best-effort: a failure to reach the shared cache never fails DevDeck's own
@@ -216,6 +278,7 @@ fn write_active_prs_to_shared_cache(
     project: &TeamProject,
     cached: &[CachedPr],
     reviewers: &[SharedReviewer],
+    capped: bool,
 ) {
     let rows: Vec<SharedPullRequest> = cached
         .iter()
@@ -236,13 +299,12 @@ fn write_active_prs_to_shared_cache(
         .collect();
     let outcome = (|| -> Result<()> {
         let mut conn = shared_cache::open()?;
-        shared_cache::write_pull_requests(&mut conn, &org.name, &project.name, &rows, reviewers)?;
-        shared_cache::mark_synced(
-            &conn,
-            &org.name,
-            &project.name,
-            shared_cache::KIND_PULL_REQUESTS,
-            shared_cache::SYNCED_BY,
+        shared_cache::write_active_pr_snapshot(
+            &mut conn,
+            &active_pr_scope(org, project),
+            &rows,
+            reviewers,
+            capped,
         )
     })();
     if let Err(e) = outcome {

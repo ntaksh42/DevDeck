@@ -17,10 +17,12 @@ export function HeaderToolbarSlotProvider({ children }: { children: ReactNode })
   );
 }
 
-/** The target node inside the header. */
+/** The target node inside the header. It takes the rest of the row so a view
+ * can put its search box here; no overflow clipping, so dropdowns that open
+ * below a control in the toolbar stay visible over the panes. */
 export function HeaderToolbarTarget() {
   const { setElement } = useContext(HeaderToolbarSlotContext);
-  return <div ref={setElement} className="flex min-w-0 items-center gap-2 overflow-x-auto" />;
+  return <div ref={setElement} className="flex min-w-0 flex-1 items-center gap-2" />;
 }
 
 /** Renders `children` into the header when it is mounted, inline otherwise. */

@@ -1,17 +1,19 @@
 import type { ReactNode } from 'react';
 import {
+  formatDate,
   formatRelativeDate,
   type SortDirection,
 } from '@/lib/utils';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { openExternalUrl } from '@/lib/openExternal';
+import { isValidFieldReferenceName } from './previewFieldsStorage';
 import { WorkItemStatePill } from './WorkItemBadges';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
-export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 68, 240, 82, 92, 140, 72];
-export const WI_COLUMN_MIN_WIDTHS = [44, 58, 68, 240, 70, 92, 60, 72];
+export const DEFAULT_WI_COLUMN_WIDTHS = [46, 76, 84, 240, 82, 92, 140, 72];
+export const WI_COLUMN_MIN_WIDTHS = [44, 76, 84, 240, 70, 92, 60, 72];
 export const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 400, 160];
 export const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 3);
 export const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 2);
@@ -36,7 +38,8 @@ export type WiSortKey =
   | "assignedTo"
   | "tags"
   | "changedDate";
-export type WiSortState = { key: WiSortKey; direction: SortDirection };
+export type WiSortColumn = WiSortKey | `field:${string}`;
+export type WiSortState = { key: WiSortColumn; direction: SortDirection };
 
 // ─── Row key helpers ──────────────────────────────────────────────────────────
 
@@ -63,7 +66,18 @@ export const wiSortLabels: Record<WiSortKey, string> = {
   changedDate: "Changed",
 };
 
-export function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: WiSortKey): number {
+export function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: WiSortColumn): number {
+  if (key.startsWith("field:")) {
+    const referenceName = key.slice(6);
+    const left = extraFieldValue(a, referenceName);
+    const right = extraFieldValue(b, referenceName);
+    if (left === null || left === "") return right === null || right === "" ? 0 : 1;
+    if (right === null || right === "") return -1;
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
+    return left.localeCompare(right, undefined, { numeric: true });
+  }
   switch (key) {
     case "id":
       return a.id - b.id;
@@ -82,6 +96,8 @@ export function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: Wi
       return (a.tags ?? "￿").localeCompare(b.tags ?? "￿");
     case "changedDate":
       return (a.changedDate ?? "").localeCompare(b.changedDate ?? "");
+    default:
+      return 0;
   }
 }
 
@@ -116,6 +132,13 @@ export function loadVisibleWorkItemColumns(key: string): WiSortKey[] {
   );
 }
 
+export function isWorkItemSortColumn(value: unknown): value is WiSortColumn {
+  return typeof value === "string" && (
+    WI_GRID_KEYS.includes(value as WiSortKey) ||
+    (value.startsWith("field:") && isValidFieldReferenceName(value.slice(6)))
+  );
+}
+
 export function defaultWorkItemSort(): WiSortState {
   return { key: "changedDate", direction: "desc" };
 }
@@ -127,12 +150,12 @@ export function loadWorkItemSort(key: string, fallback: WiSortState): WiSortStat
       const parsed = raw as Partial<WiSortState> | null;
       if (
         !parsed ||
-        !WI_GRID_KEYS.includes(parsed.key as WiSortKey) ||
+        !isWorkItemSortColumn(parsed.key) ||
         (parsed.direction !== "asc" && parsed.direction !== "desc")
       ) {
         return undefined;
       }
-      return { key: parsed.key as WiSortKey, direction: parsed.direction };
+      return { key: parsed.key as WiSortColumn, direction: parsed.direction };
     },
     fallback,
   );
@@ -263,7 +286,7 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
       return (
         <span
           className="text-xs text-muted-foreground"
-          title={item.changedDate ? new Date(item.changedDate).toLocaleString() : undefined}
+          title={item.changedDate ? formatDate(item.changedDate) : undefined}
         >
           {item.changedDate ? formatRelativeDate(item.changedDate) : "—"}
         </span>

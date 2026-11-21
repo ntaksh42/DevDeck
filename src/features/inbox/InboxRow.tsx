@@ -9,8 +9,7 @@ import {
   inboxKindLabel,
   inboxKindClass,
   inboxLocationLabel,
-  inboxRowTitle,
-  inboxSubjectLabel,
+  inboxRowSubject,
   type InboxEntry,
   type InboxTab,
 } from "./inboxPresentation";
@@ -45,7 +44,7 @@ export const InboxRow = forwardRef<
         : item.detectedAt,
   );
 
-  const rowTitle = inboxRowTitle(item);
+  const subjectPlace = item.repositoryName || item.projectName;
   const location = inboxLocationLabel(item);
   const verdict = item.insight?.status === "ready" && item.insight.verdict ? VERDICTS[item.insight.verdict] : undefined;
 
@@ -62,37 +61,30 @@ export const InboxRow = forwardRef<
       className={`group flex cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection: checked })}`}
     >
       {checked ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Marked" /> : null}
-      <span className={`w-16 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
+      <span className={`w-20 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
         {inboxKindLabel(item.kind)}
       </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">
-        <span className="shrink-0 whitespace-nowrap font-medium" title={item.title}>
-          {inboxSubjectLabel(item)}
+      <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden">
+        {/* What the comment is about leads the row; the repository / project is in the tooltip. */}
+        <span
+          className="min-w-[10rem] max-w-[16rem] truncate whitespace-nowrap font-medium"
+          title={subjectPlace ? `${subjectPlace} · ${item.title}` : item.title}
+        >
+          {inboxRowSubject(item)}
         </span>
         {location ? (
           <span className="shrink-0 whitespace-nowrap font-mono text-2xs text-muted-foreground" title={item.filePath ?? undefined}>
             {location}
           </span>
         ) : null}
-        <span className="min-w-0 shrink truncate text-muted-foreground" title={item.snippet ?? undefined}>
+        <span className="min-w-0 shrink truncate text-foreground/90" title={item.snippet ?? undefined}>
           {item.author ? `${item.author}: ` : ""}
           {item.snippet ?? item.title}
         </span>
-        {/* The comment is what the row is for; the title only says which PR /
-            work item it is about, so it takes the leftover width and gives it
-            all up before the comment starts to truncate. */}
-        {rowTitle ? (
-          <span
-            className="min-w-0 shrink-[100] truncate whitespace-nowrap text-muted-foreground/70"
-            title={rowTitle}
-          >
-            {`· ${rowTitle}`}
-          </span>
-        ) : null}
       </span>
       {verdict ? (
         <span
-          className={`shrink-0 rounded border px-1 text-3xs font-semibold leading-4 ${verdict.rowClassName}`}
+          className={`shrink-0 rounded border px-1 text-2xs font-semibold leading-4 ${verdict.rowClassName}`}
           title="Verdict by Claude"
         >
           {verdict.label}

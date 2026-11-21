@@ -27,7 +27,7 @@ import { InboxRelatedLinks } from "./InboxRelatedLinks";
 
 function bandTitle(item: InboxEntry): string {
   if (isThreadItem(item)) return "Thread";
-  if (isWorkItemItem(item)) return item.kind === "wi_mention" ? "Discussion" : "Work item";
+  if (isWorkItemItem(item)) return item.kind === "wi_mention" || item.kind === "wi_reply" ? "Discussion" : "Work item";
   return "Details";
 }
 
@@ -102,6 +102,20 @@ export function InboxPreview({
   const contextProps = { item, review, thread, workItem };
   const editable =
     !readOnly && !detail.isLoading && ((isThreadItem(item) && !!thread) || (isWorkItemItem(item) && !!workItem));
+  // Folded to one line each and placed after the comment, so the comment is on the first screen.
+  const folded = (
+    <>
+      {!detail.isLoading && !detail.error ? (
+        <InboxContextDescription
+          {...contextProps}
+          expanded={contextExpanded}
+          onToggleExpanded={onToggleContext}
+          resolveImageSource={resolveImageSource}
+        />
+      ) : null}
+      {!detail.isLoading ? <InboxRelatedLinks itemId={item.id} links={links} onOpen={onOpenLink} /> : null}
+    </>
+  );
 
   return (
     <div
@@ -115,7 +129,7 @@ export function InboxPreview({
       // away once a long thread overflows the pane).
       className="flex min-h-0 flex-1 flex-col overflow-y-auto [&>*]:shrink-0 px-3 py-2 outline-none [&_[data-thread-reply-area]]:sticky [&_[data-thread-reply-area]]:bottom-0 [&_[data-thread-reply-area]]:z-10 [&_[data-thread-reply-area]]:bg-card [&_[data-thread-reply-area]]:py-0.5"
     >
-      <h2 className="line-clamp-2 text-sm font-semibold leading-snug">{heading}</h2>
+      <h2 className="line-clamp-2 text-base font-semibold leading-snug">{heading}</h2>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
         <span className={`font-semibold ${inboxKindClass(item.kind)}`}>{inboxKindLabel(item.kind)}</span>
         <span>
@@ -130,7 +144,7 @@ export function InboxPreview({
       </div>
 
       {!detail.isLoading && !detail.error ? <InboxContextSummary {...contextProps} /> : null}
-      <InboxInsightPanel insight={item.insight} onUseDraft={onUseDraft} onGenerate={onGenerateInsight} />
+      <InboxInsightPanel itemId={item.id} insight={item.insight} onUseDraft={onUseDraft} onGenerate={onGenerateInsight} />
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {tab === "open" ? (
@@ -169,18 +183,7 @@ export function InboxPreview({
         ) : null}
       </div>
 
-      {!detail.isLoading && !detail.error ? (
-        <InboxContextDescription
-          {...contextProps}
-          expanded={contextExpanded}
-          onToggleExpanded={onToggleContext}
-          resolveImageSource={resolveImageSource}
-        />
-      ) : null}
-
-      {!detail.isLoading ? <InboxRelatedLinks links={links} onOpen={onOpenLink} /> : null}
-
-      <h3 className="mt-2 border-b border-border pb-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="mt-2 rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
         {bandTitle(item)}
       </h3>
       {detail.isLoading ? (
@@ -201,10 +204,17 @@ export function InboxPreview({
           onReply={onReply}
           onReplyAndResolve={onReplyAndResolve}
           onToggleStatus={onToggleStatus}
-          beforeComposer={!detail.error ? <InboxContextCode {...contextProps} /> : null}
+          beforeComposer={
+            <>
+              {!detail.error ? <InboxContextCode {...contextProps} /> : null}
+              {folded}
+            </>
+          }
           draft={draft}
         />
       ) : null}
+      {/* Without a thread there is no composer to sit before, so the folded lines follow the panel. */}
+      {isThreadItem(item) && !thread ? folded : null}
       {isWorkItemItem(item) && !detail.isLoading ? (
         <WorkItemPanel
           key={item.id}
@@ -219,6 +229,7 @@ export function InboxPreview({
         />
       ) : null}
 
+      {!isThreadItem(item) ? folded : null}
       {!isThreadItem(item) && !detail.isLoading && !detail.error ? <InboxContextCode {...contextProps} /> : null}
     </div>
   );

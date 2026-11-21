@@ -4,6 +4,8 @@ import type {
   RecordNotificationInput,
 } from "@/lib/azdoCommands";
 
+import { applyNotificationScenario } from "@/lib/azdoDemoHarness";
+
 const DEMO_ORG = "contoso";
 
 // Seed records are built lazily (once) so their `createdAt` timestamps are
@@ -187,7 +189,7 @@ function buildSeedNotifications(): NotificationRecord[] {
 
 function allDemoNotifications(): NotificationRecord[] {
   if (!seededNotifications) {
-    seededNotifications = buildSeedNotifications();
+    seededNotifications = applyNotificationScenario(buildSeedNotifications());
   }
   return [...recordedNotifications, ...seededNotifications].sort((a, b) => b.id - a.id);
 }

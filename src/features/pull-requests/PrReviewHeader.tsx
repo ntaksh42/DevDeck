@@ -229,7 +229,7 @@ export function PrReviewHeader({
     <div className="flex shrink-0 flex-col gap-1 border-b border-border px-2 py-1">
       <div className="flex min-w-0 items-start gap-2">
         <h2
-          className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground"
+          className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-foreground"
           title={title}
         >
           {title}

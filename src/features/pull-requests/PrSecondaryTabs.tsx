@@ -14,7 +14,7 @@ export function ResultTab({
   selectedPr,
   commentModeRequest = 0,
 }: {
-  selectedPr: ReviewPullRequestSummary;
+  selectedPr: Pick<ReviewPullRequestSummary, "pullRequestId">;
   commentModeRequest?: number;
 }) {
   const settingsQuery = useQuery({

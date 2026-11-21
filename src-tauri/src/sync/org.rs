@@ -4,7 +4,9 @@ use std::sync::Arc;
 use azdo_client::TeamProject;
 use tauri::{AppHandle, Emitter};
 
+use crate::agent_notes::NoteTarget;
 use crate::auth::client_for_organization;
+use crate::auto_agent::Assignments;
 use crate::db::{AppSettings, NewNotification, Organization};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
@@ -64,6 +66,8 @@ pub(super) async fn sync_org(
     };
     let snooze = SnoozeService::new(db.clone());
 
+    let mut pr_assignments = Assignments::new();
+    let mut wi_assignments = Assignments::new();
     let (pr_outcome, wi_outcome) = tokio::join!(
         sync_org_prs(
             &db,
@@ -77,13 +81,26 @@ pub(super) async fn sync_org(
             &budget,
             &now,
             &projects,
+            &mut pr_assignments,
         ),
         sync_org_work_items(
-            &db, &client, &handle, &org, scope, &settings, &snooze, &budget, &now, &projects,
+            &db,
+            &client,
+            &handle,
+            &org,
+            scope,
+            &settings,
+            &snooze,
+            &budget,
+            &now,
+            &projects,
+            &mut wi_assignments,
         ),
     );
     outcome.merge(pr_outcome);
     outcome.merge(wi_outcome);
+    pr_assignments.extend(wi_assignments);
+    crate::auto_agent::start(&db, &settings, &org, pr_assignments);
     outcome
 }
 
@@ -100,6 +117,7 @@ async fn sync_org_prs(
     budget: &SyncBudget,
     now: &str,
     projects: &[TeamProject],
+    assignments: &mut Assignments,
 ) -> SyncPassOutcome {
     let mut outcome = SyncPassOutcome::default();
     if !matches!(
@@ -110,7 +128,7 @@ async fn sync_org_prs(
     }
     let should_collect = should_collect_pr_notifications(settings);
     let baseline_established = has_completed_sync(db, "prs", &org.id);
-    let previous_reviews = db.list_review_pull_requests(&org.id).unwrap_or_default();
+    let previous_reviews = db.list_review_pull_requests(&org.id);
     if let Err(e) = sync_prs_for_org(db, client, org, projects, budget, force_refresh).await {
         tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
         outcome.record_failure();
@@ -118,12 +136,32 @@ async fn sync_org_prs(
     }
     outcome.record_success();
     let current_reviews = db.list_review_pull_requests(&org.id).unwrap_or_default();
+    if settings.auto_agent_enabled && baseline_established {
+        if let Ok(previous) = &previous_reviews {
+            let keys: HashSet<_> = previous
+                .iter()
+                .map(|pr| (&pr.repository_id, pr.pull_request_id))
+                .collect();
+            assignments.extend(
+                current_reviews
+                    .iter()
+                    .filter(|pr| !keys.contains(&(&pr.repository_id, pr.pull_request_id)))
+                    .map(|pr| {
+                        (
+                            NoteTarget::PullRequest,
+                            pr.repository_id.clone(),
+                            pr.pull_request_id,
+                        )
+                    }),
+            );
+        }
+    }
     // Collect comment notifications first: the call advances the comment-seen
     // markers that snooze revival then reads.
     let mut items = Vec::new();
     if should_collect {
         items = pr_review_notification_items(
-            &previous_reviews,
+            previous_reviews.as_deref().unwrap_or_default(),
             &current_reviews,
             settings,
             baseline_established,
@@ -131,13 +169,23 @@ async fn sync_org_prs(
     }
     // One thread fetch feeds both the reply notifications and the Inbox. The
     // Inbox is always fed, whatever the notification settings are.
-    let scanned = crate::prs::fetch_pr_threads(db, client, org, budget).await;
+    let crate::prs::PrThreadScan {
+        prs: scanned,
+        warning: scan_warning,
+    } = crate::prs::fetch_pr_threads(db, client, org, budget).await;
     if should_collect && settings.notify_pr_comment_replies {
         items.extend(crate::prs::pr_comment_notifications_from(db, org, &scanned));
     }
-    let inbox_update = crate::prs::update_action_inbox(db, org, &scanned);
+    // Cached for an hour by the PR sync above, so this is normally no request.
+    let groups = match org.authenticated_user_id.as_deref() {
+        Some(me) => crate::prs::member_group_ids(db, client, org, me).await.0,
+        None => Default::default(),
+    };
+    let inbox_update = crate::prs::update_action_inbox(db, org, &scanned, &groups);
+    super::inbox::record_inbox_health(db, org, "inbox_prs", scan_warning.as_deref());
     let state_update = super::inbox::retire_condition_items(db, org);
     let closed_update = crate::prs::finish_inbox_items_of_closed_prs(db, org);
+    super::reply_reminders::reconcile(db, handle, org);
     if inbox_update.changed() || state_update.changed() || closed_update.changed() {
         if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
             tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
@@ -233,6 +281,7 @@ async fn sync_org_work_items(
     budget: &SyncBudget,
     now: &str,
     projects: &[TeamProject],
+    assignments: &mut Assignments,
 ) -> SyncPassOutcome {
     let mut outcome = SyncPassOutcome::default();
     if !matches!(
@@ -243,27 +292,49 @@ async fn sync_org_work_items(
     }
     let should_collect = should_collect_work_item_notifications(settings);
     let baseline_established = has_completed_sync(db, "work_items", &org.id);
-    let previous_my_work_items = match db.list_my_work_items(&org.id) {
-        Ok(items) => items,
-        Err(e) => {
-            tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items before sync");
-            Vec::new()
-        }
-    };
+    let previous_my_work_items = db.list_my_work_items(&org.id);
+    if let Err(error) = &previous_my_work_items {
+        tracing::warn!(org = %org.name, ?error, "sync: failed to snapshot work items before sync");
+    }
     if let Err(e) = sync_work_items_for_org(db, client, org, projects, budget).await {
         tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
         outcome.record_failure();
         return outcome;
     }
     outcome.record_success();
-    emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
     match db.list_my_work_items(&org.id) {
         Ok(current_my_work_items) => {
-            let inbox_update =
+            // Revive snoozed work items past their deadline or with a newer
+            // ChangedDate; remember which stay snoozed.
+            let snoozed_ids = match snooze
+                .reconcile_work_items(&org.id, client, budget, &current_my_work_items, now)
+                .await
+            {
+                Ok(reconcile) => still_snoozed_work_item_ids(&reconcile.still_snoozed),
+                Err(e) => {
+                    tracing::warn!(org = %org.name, error = ?e, "sync: WI snooze reconcile failed");
+                    HashSet::new()
+                }
+            };
+            emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
+            if settings.auto_agent_enabled && baseline_established {
+                if let Ok(previous) = &previous_my_work_items {
+                    let ids: HashSet<_> = previous.iter().map(|wi| wi.id).collect();
+                    assignments.extend(
+                        current_my_work_items
+                            .iter()
+                            .filter(|wi| !ids.contains(&wi.id))
+                            .map(|wi| (NoteTarget::WorkItem, wi.project_id.clone(), wi.id)),
+                    );
+                }
+            }
+            let (inbox_update, scan_warning) =
                 super::wi_mentions::update_work_item_mentions(db, client, org, projects, budget)
                     .await;
+            super::inbox::record_inbox_health(db, org, "inbox_wi", scan_warning.as_deref());
             let closed_update =
                 super::wi_mentions::finish_closed_work_item_mentions(db, client, org, budget).await;
+            super::reply_reminders::reconcile(db, handle, org);
             if inbox_update.changed() || closed_update.changed() {
                 if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
                     tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
@@ -277,22 +348,9 @@ async fn sync_org_work_items(
                 &crate::db::WI_INSIGHT_KINDS,
                 Default::default(),
             );
-            // Revive snoozed work items past their deadline or with a newer
-            // ChangedDate; remember which stay snoozed.
-            let snoozed_ids = match snooze.reconcile_work_items(
-                &org.id,
-                &current_my_work_items,
-                now,
-            ) {
-                Ok(reconcile) => still_snoozed_work_item_ids(&reconcile.still_snoozed),
-                Err(e) => {
-                    tracing::warn!(org = %org.name, error = ?e, "sync: WI snooze reconcile failed");
-                    HashSet::new()
-                }
-            };
             if should_collect {
                 let mut items = work_item_notification_items(
-                    &previous_my_work_items,
+                    previous_my_work_items.as_deref().unwrap_or_default(),
                     &current_my_work_items,
                     settings,
                     baseline_established,

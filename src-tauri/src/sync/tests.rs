@@ -400,6 +400,25 @@ fn work_item_notification_items_reports_assignment_and_state_changes() {
     assert_eq!(notifications[1].id, 3);
 }
 
+// The summary toast reads "N work item updates" from the item count, and
+// snooze / notification-rule filtering runs after this function, so a cap here
+// under-counted large batches and dropped allowed items past the cap.
+#[test]
+fn work_item_notification_items_keeps_every_change() {
+    let settings = AppSettings {
+        desktop_notifications_enabled: true,
+        ..AppSettings::default()
+    };
+    let current: Vec<CachedWorkItem> = (1..=25)
+        .map(|id| work_item(id, "Assigned", Some("To Do")))
+        .collect();
+
+    let notifications = work_item_notification_items(&[], &current, &settings, true);
+
+    assert_eq!(notifications.len(), 25);
+    assert_eq!(notifications[24].id, 25);
+}
+
 fn work_item(id: i64, title: &str, state: Option<&str>) -> CachedWorkItem {
     CachedWorkItem {
         org_id: "org".to_string(),

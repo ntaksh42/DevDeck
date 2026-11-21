@@ -16,13 +16,6 @@ const PR_COMMENT_FETCH_CONCURRENCY: usize = 6;
 pub(crate) struct CommentHit {
     pub author: Option<String>,
     pub snippet: Option<String>,
-    pub thread_id: i64,
-    pub comment_id: i64,
-    /// The comment mentions the user (as opposed to only replying in a thread
-    /// the user took part in).
-    pub mentions_me: bool,
-    /// Full comment text; the Inbox derives its own, mention-cleaned summary.
-    pub content: String,
 }
 
 /// The few fields a comment scan needs from a cached PR, whichever cache it
@@ -112,17 +105,6 @@ pub(crate) fn pr_comment_notification_items(
     me: Option<&str>,
     last_seen: Option<i64>,
 ) -> (Vec<CommentHit>, Option<i64>) {
-    pr_comment_hits(threads, me, last_seen, false)
-}
-
-/// Like [`pr_comment_notification_items`]; with `any_thread` every new comment
-/// from someone else is a hit (the user's own PR), not only replies/mentions.
-pub(crate) fn pr_comment_hits(
-    threads: &[GitThread],
-    me: Option<&str>,
-    last_seen: Option<i64>,
-    any_thread: bool,
-) -> (Vec<CommentHit>, Option<i64>) {
     let Some(me) = me else {
         return (Vec::new(), None);
     };
@@ -157,14 +139,10 @@ pub(crate) fn pr_comment_hits(
             }
             let content = comment.content.as_deref().unwrap_or("");
             let mentions_me = mentions_user(content, me);
-            if i_am_in_thread || mentions_me || any_thread {
+            if i_am_in_thread || mentions_me {
                 hits.push(CommentHit {
                     author: comment.author.as_ref().and_then(|a| a.display_name.clone()),
                     snippet: Some(truncate_snippet(content, 90)),
-                    thread_id: thread.id,
-                    comment_id: comment.id,
-                    mentions_me,
-                    content: content.to_string(),
                 });
             }
         }
@@ -172,16 +150,49 @@ pub(crate) fn pr_comment_hits(
     (hits, max_id)
 }
 
+/// The PRs whose threads one sync scanned, and a warning when a scan cap left
+/// some PRs out (shown as "Limited" in Sync health).
+pub(crate) struct PrThreadScan {
+    pub prs: Vec<ScannedPr>,
+    pub warning: Option<String>,
+}
+
+/// What the scan caps left out, as a Sync health message.
+pub(crate) fn scan_limit_warning(skipped_reviews: usize, skipped_own: usize) -> Option<String> {
+    let mut parts = Vec::new();
+    if skipped_reviews > 0 {
+        parts.push(format!(
+            "{skipped_reviews} older review PR(s) beyond the newest {PR_COMMENT_SCAN_LIMIT}"
+        ));
+    }
+    if skipped_own > 0 {
+        parts.push(format!(
+            "{skipped_own} older PR(s) of yours beyond the newest {AUTHORED_PR_SCAN_LIMIT}"
+        ));
+    }
+    (!parts.is_empty()).then(|| {
+        format!(
+            "Inbox did not read the comments of {}.",
+            parts.join(" and ")
+        )
+    })
+}
+
 /// Review PRs plus the user's own active PRs, newest first and capped, each
-/// flagged with whether the user authored it.
-fn scan_targets(db: &AppDatabase, org: &Organization) -> Vec<(PrScanTarget, bool)> {
+/// flagged with whether the user authored it, and the cap warning.
+fn scan_targets(
+    db: &AppDatabase,
+    org: &Organization,
+) -> (Vec<(PrScanTarget, bool)>, Option<String>) {
     let reviews = match db.list_review_pull_requests(&org.id) {
         Ok(reviews) => reviews,
         Err(e) => {
             tracing::warn!(org = %org.name, error = ?e, "pr-notify: failed to list review PRs");
-            return Vec::new();
+            return (Vec::new(), None);
         }
     };
+    let skipped_reviews = reviews.len().saturating_sub(PR_COMMENT_SCAN_LIMIT);
+    let mut skipped_own = 0;
     let mut targets: Vec<(PrScanTarget, bool)> = reviews
         .into_iter()
         .take(PR_COMMENT_SCAN_LIMIT)
@@ -196,6 +207,7 @@ fn scan_targets(db: &AppDatabase, org: &Organization) -> Vec<(PrScanTarget, bool
             .filter(|pr| pr.created_by_id.as_deref() == Some(me))
             .collect();
         own.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        skipped_own = own.len().saturating_sub(AUTHORED_PR_SCAN_LIMIT);
         for pr in own.into_iter().take(AUTHORED_PR_SCAN_LIMIT) {
             let already_scanned = targets.iter().any(|(target, _)| {
                 target.repository_id == pr.repository_id
@@ -206,7 +218,7 @@ fn scan_targets(db: &AppDatabase, org: &Organization) -> Vec<(PrScanTarget, bool
             }
         }
     }
-    targets
+    (targets, scan_limit_warning(skipped_reviews, skipped_own))
 }
 
 /// Fetches the comment threads of the PRs to scan. A failure for one PR is
@@ -216,8 +228,8 @@ pub(crate) async fn fetch_pr_threads(
     client: &AdoClient,
     org: &Organization,
     budget: &SyncBudget,
-) -> Vec<ScannedPr> {
-    let scanned = scan_targets(db, org);
+) -> PrThreadScan {
+    let (scanned, warning) = scan_targets(db, org);
 
     // Fetch each PR's threads concurrently (the network round-trip is the slow
     // part); keep results by index so PRs are still processed in their original
@@ -259,7 +271,7 @@ pub(crate) async fn fetch_pr_threads(
         }
     }
 
-    scanned
+    let prs = scanned
         .into_iter()
         .enumerate()
         .filter_map(|(index, (pr, authored))| {
@@ -269,7 +281,8 @@ pub(crate) async fn fetch_pr_threads(
                 threads,
             })
         })
-        .collect()
+        .collect();
+    PrThreadScan { prs, warning }
 }
 
 /// Detects new reply/mention comments in the fetched threads, advances the

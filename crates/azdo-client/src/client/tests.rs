@@ -508,3 +508,23 @@ async fn api_path_does_not_double_encode_pre_encoded_segments() {
         .await
         .unwrap();
 }
+
+#[test]
+fn zero_retry_after_falls_back_to_backoff() {
+    let client = AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
+        .unwrap()
+        .with_retry_policy(RetryPolicy {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(250),
+            max_delay: Duration::from_secs(2),
+            retry_after_cap: Duration::from_secs(5),
+        });
+    assert_eq!(
+        client.retry_delay(1, Some(Duration::ZERO)),
+        Duration::from_millis(250)
+    );
+    assert_eq!(
+        client.retry_delay(1, Some(Duration::from_secs(1))),
+        Duration::from_secs(1)
+    );
+}

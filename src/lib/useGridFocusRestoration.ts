@@ -106,11 +106,31 @@ export function useGridFocusRestoration({
     [clearBlurTimer, focusInsideGrid],
   );
 
+  // Scrolling the grid away from the focused row (wheel or scrollbar) means the
+  // user has moved on from it. Under virtualization the row then unmounts, and
+  // React never reports that blur, so ownership would otherwise linger and the
+  // next data update would scroll the grid back to the old selection. Keyboard
+  // jumps keep the selected row (or the parked grid) in view, so they keep it.
+  useEffect(() => {
+    const onScroll = (event: Event) => {
+      if (!hadFocusRef.current) return;
+      const scroller = event.target;
+      const container = containerRef.current;
+      if (!(scroller instanceof HTMLElement) || !container?.contains(scroller)) return;
+      if (!isGridScroller(scroller) || focusedGridElementInView(scroller)) return;
+      hadFocusRef.current = false;
+    };
+    // Scroll events do not bubble; a capturing listener still sees them.
+    document.addEventListener("scroll", onScroll, true);
+    return () => document.removeEventListener("scroll", onScroll, true);
+  }, [containerRef]);
+
   useEffect(() => {
     if (!hadFocusRef.current) return;
     clearBlurTimer();
     let cancelled = false;
     let timer = 0;
+    let frame = 0;
     const attempt = (remaining: number) => {
       if (cancelled) return;
       // The user may have moved focus into the preview pane (an editor in the
@@ -119,16 +139,37 @@ export function useGridFocusRestoration({
       if (focusMovedOffGrid()) return;
       if (restoreFocusRef.current()) return;
       if (remaining <= 0) return;
-      // A row scrolled out of the virtual window mounts on the next frame after
-      // we nudge the scroller; give it a couple of retries to appear.
-      timer = window.setTimeout(() => attempt(remaining - 1), 16);
+      // A row scrolled out of the virtual window mounts after we nudge the
+      // scroller, and on a busy machine that can take several frames; retry
+      // once per frame so the attempt never runs ahead of rendering.
+      frame = window.requestAnimationFrame(() => attempt(remaining - 1));
     };
-    timer = window.setTimeout(() => attempt(2), 0);
+    timer = window.setTimeout(() => attempt(10), 0);
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      if (frame) window.cancelAnimationFrame(frame);
     };
   }, [restoreSignature, clearBlurTimer, focusMovedOffGrid]);
 
   return { onFocusCapture, onBlurCapture, hadFocusRef };
+}
+
+/** The scroller sits around the grid (Work Items, My Reviews) or inside it (PR search, Inbox). */
+function isGridScroller(scroller: HTMLElement): boolean {
+  return Boolean(
+    scroller.closest(GRID_FOCUS_SELECTOR) ?? scroller.querySelector('[data-primary-grid="true"]'),
+  );
+}
+
+/** Whether keyboard focus is on this grid and still visible in its scroller. */
+function focusedGridElementInView(scroller: HTMLElement): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !active.closest(GRID_FOCUS_SELECTOR)) return false;
+  // Focus parked on a grid that wraps its own scroller stays in view.
+  if (active.contains(scroller)) return true;
+  if (!scroller.contains(active)) return false;
+  const row = active.getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  return row.bottom > view.top && row.top < view.bottom;
 }

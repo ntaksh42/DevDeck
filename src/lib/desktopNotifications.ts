@@ -46,6 +46,38 @@ type PullRequestNotificationItem = {
   snippet: string | null;
 };
 
+export type ReplyReminderDueEvent = {
+  organizationId: string;
+  organizationName: string;
+  items: { kind: "pr" | "wi"; subjectId: number; title: string; projectName: string; webUrl: string | null }[];
+};
+
+/** "Remind me if no one replies" deadlines that passed; clicking opens the Inbox, where they sit as Waiting rows. */
+export async function showReplyReminderNotificationEvent(
+  event: ReplyReminderDueEvent,
+  settings: AppSettings,
+  onOpenInbox?: () => void,
+): Promise<DesktopNotificationResult> {
+  if (
+    !settings.desktopNotificationsEnabled ||
+    event.items.length === 0 ||
+    isWithinQuietHours(settings)
+  ) {
+    return "skipped";
+  }
+  const label = (item: ReplyReminderDueEvent["items"][number]) =>
+    `${item.kind === "pr" ? "!" : "#"}${item.subjectId} ${item.title}`;
+  const first = event.items[0];
+  const title =
+    event.items.length === 1 ? "No reply yet" : `No reply yet on ${event.items.length} items`;
+  return sendDesktopNotification(title, {
+    body: settings.notificationContentPreviewEnabled
+      ? `${event.organizationName}: ${event.items.slice(0, 3).map(label).join(", ")}${moreSuffix(event.items.length)}`
+      : "Open DevDeck to review the conversations you were waiting on.",
+    onClick: summaryClickHandler(onOpenInbox, first.webUrl),
+  });
+}
+
 export type SyncFailedEvent = {
   consecutiveFailures: number;
   retryInSecs: number;
@@ -100,11 +132,17 @@ export async function sendPipelineRunNotification(input: {
 
 // An agent replied to or finished a note on a work item / PR result. Clicking
 // it opens the item in DevDeck.
-export async function showAgentNoteNotification(input: {
-  title: string;
-  body: string;
-  onClick: () => void;
-}): Promise<DesktopNotificationResult> {
+export async function showAgentNoteNotification(
+  input: {
+    title: string;
+    body: string;
+    onClick: () => void;
+  },
+  settings: AppSettings,
+): Promise<DesktopNotificationResult> {
+  if (!settings.desktopNotificationsEnabled || isWithinQuietHours(settings)) {
+    return "skipped";
+  }
   return sendDesktopNotification(input.title, { body: input.body, onClick: input.onClick });
 }
 

@@ -23,6 +23,7 @@ use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 
 mod asks;
+pub(crate) mod automation;
 mod create;
 mod format;
 mod guide;
@@ -31,6 +32,7 @@ mod migrate;
 mod ops;
 mod proposals;
 mod replies;
+pub(crate) mod review_skill;
 mod skill;
 mod summary;
 
@@ -64,7 +66,7 @@ const KINDS: [&str; 5] = ["fix", "question", "redo", "investigate", "summarize"]
 /// is a free-standing request (from any view, about a pipeline run, a wiki
 /// page or nothing in particular): its "item id" is a timestamp the frontend
 /// picks, and it needs no result folder.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum NoteTarget {
     WorkItem,
@@ -265,6 +267,31 @@ impl AgentNoteService {
 
     /// Starts the agent command from Settings for one item's notes.
     pub fn run_agent(&self, input: RunAgentInput) -> Result<()> {
+        self.with_launch(input, launch::run_agent)
+    }
+
+    pub(crate) fn run_agent_tracked(
+        &self,
+        input: RunAgentInput,
+        log_path: &Path,
+    ) -> Result<launch::TrackedChild> {
+        self.with_launch(input, |context, agent, command, target, item_id| {
+            launch::spawn_agent(context, agent, command, target, item_id, Some(log_path))
+                .and_then(launch::TrackedChild::new)
+        })
+    }
+
+    fn with_launch<T>(
+        &self,
+        input: RunAgentInput,
+        start: impl FnOnce(
+            &launch::AgentLaunch<'_>,
+            launch::AgentKind,
+            Option<&str>,
+            NoteTarget,
+            i64,
+        ) -> Result<T>,
+    ) -> Result<T> {
         validate_id(input.item_id)?;
         let folder = self.require_folder(input.target)?;
         let settings = self.db.get_app_settings()?;
@@ -300,7 +327,7 @@ impl AgentNoteService {
             repository: input.repository_name.as_deref(),
             model: model.filter(|m| !m.is_empty()),
         };
-        launch::run_agent(
+        start(
             &context,
             agent,
             command.as_deref(),
@@ -363,7 +390,7 @@ pub(crate) fn notes_root(db: &AppDatabase) -> PathBuf {
     db.data_dir().join(NOTES_ROOT)
 }
 
-fn notes_dir(root: &Path, target: NoteTarget, item_id: i64) -> PathBuf {
+pub(crate) fn notes_dir(root: &Path, target: NoteTarget, item_id: i64) -> PathBuf {
     root.join(format!("{}-{item_id}", target.dir_prefix()))
 }
 

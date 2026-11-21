@@ -3,15 +3,19 @@
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
   AgentNoteItem,
+  AgentWorkTarget,
+  AutoQueueTarget,
   CreateAgentNoteInput,
   ListInboxItemsInput,
   ListNotificationsInput,
   SetInboxItemStateInput,
+  SetReplyReminderInput,
   RecordNotificationInput,
   ReplyAgentNoteInput,
   AgentNoteTarget,
   UpdateAgentNoteInput,
 } from "@/lib/azdoCommands";
+import { dispatchHomeBot } from "@/lib/demo/homeBot";
 import {
   demoPipelineApprovals,
   demoPipelineDefinitionDetail,
@@ -20,6 +24,7 @@ import {
   demoPipelineLogTail,
   demoPipelineRunDetail,
   demoPipelineTestResults,
+  demoFlakyTests,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
@@ -35,10 +40,20 @@ import {
   demoUnreadNotificationsCount,
 } from "@/lib/demo/notifications";
 import {
+  demoClearReplyReminder,
   demoInboxCounts,
   demoListInboxItems,
+  demoListReplyReminders,
   demoSetInboxItemState,
+  demoSetReplyReminder,
 } from "@/lib/demo/actionInbox";
+import { demoAutoQueuePreview, demoListAutoQueue, demoRunAssignedWorkItems, demoRunAutoQueue } from "@/lib/demo/autoQueue";
+import {
+  demoListAgentWork,
+  demoReadAgentWorkLog,
+  demoRetryAgentWork,
+  demoSetAgentWorkExcluded,
+} from "@/lib/demo/agentWork";
 import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
@@ -54,6 +69,8 @@ import {
 } from "@/lib/demo/agentNotes";
 
 export function dispatchExt(command: string, args: unknown): unknown {
+  const home = dispatchHomeBot(command, args);
+  if (home !== undefined) return home;
   switch (command) {
     // ── Pipelines ──────────────────────────────────────────────────────────
     case "list_pipeline_projects":
@@ -90,6 +107,9 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "list_pipeline_test_results": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineTestResults(input?.buildId ?? 1001);
+    }
+    case "list_flaky_tests": {
+      return demoFlakyTests();
     }
     case "get_pipeline_definition": {
       const input = (args as { input?: { definitionId?: number } } | undefined)?.input;
@@ -210,6 +230,18 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "generate_action_inbox_insight":
       return null;
+    case "set_reply_reminder": {
+      const input = (args as { input?: SetReplyReminderInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoSetReplyReminder(input);
+    }
+    case "list_reply_reminders":
+      return demoListReplyReminders();
+    case "clear_reply_reminder": {
+      const id = (args as { id?: number } | undefined)?.id;
+      if (id !== undefined) demoClearReplyReminder(id);
+      return null;
+    }
     // ── Agent notes ───────────────────────────────────────────────────────
     case "list_agent_notes": {
       const input = (args as { input?: AgentNoteItem } | undefined)?.input;
@@ -261,6 +293,28 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "list_agent_asks":
       return demoListAgentAsks();
+    case "list_auto_queue":
+      return demoListAutoQueue();
+    case "get_auto_queue_preview":
+      return demoAutoQueuePreview((args as { input: AutoQueueTarget }).input);
+    case "run_assigned_work_item_investigations":
+      return demoRunAssignedWorkItems();
+    case "run_work_item_investigations":
+      return ((args as { input?: unknown[] } | undefined)?.input ?? []).length;
+    case "run_auto_queue":
+      return demoRunAutoQueue((args as { input: AutoQueueTarget[] }).input);
+    case "start_pipeline_investigation":
+      return false;
+    case "list_agent_work":
+      return demoListAgentWork();
+    case "read_agent_work_log":
+      return demoReadAgentWorkLog((args as { input: AgentWorkTarget }).input);
+    case "retry_agent_work":
+      demoRetryAgentWork((args as { input: AgentWorkTarget }).input);
+      return null;
+    case "set_agent_work_excluded":
+      demoSetAgentWorkExcluded((args as { input: Parameters<typeof demoSetAgentWorkExcluded>[0] }).input);
+      return null;
     case "run_agent":
       throw new Error("Running an agent is only available in the desktop app");
     default:

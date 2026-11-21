@@ -1,9 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { commandErrorMessage, listWorkItemFields } from "@/lib/azdoCommands";
-import { workItemQueryKeys } from "./queryKeys";
+import { commandErrorMessage } from "@/lib/azdoCommands";
+import { useExtraColumnLabel, useWorkItemFields } from "./useWorkItemFields";
 import { filterCustomFieldOptions } from "./workItemPreviewHelpers";
-import { extraColumnLabel } from "./workItemsGridHelpers";
 import { normalizeViewExtraColumns } from "./workItemViewsStorage";
 import { isImeComposing } from "@/lib/utils";
 
@@ -24,12 +22,8 @@ export function WiFieldColumnsSection({
 }) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
-  const fieldsQuery = useQuery({
-    queryKey: workItemQueryKeys.fields(organizationId, null),
-    queryFn: () => listWorkItemFields({ organizationId, projectId: "" }),
-    enabled: !!organizationId,
-    staleTime: 5 * 60_000,
-  });
+  const fieldsQuery = useWorkItemFields(organizationId);
+  const fieldName = useExtraColumnLabel(organizationId);
   const fields = useMemo(() => fieldsQuery.data ?? [], [fieldsQuery.data]);
   const matches = useMemo(
     () =>
@@ -41,14 +35,6 @@ export function WiFieldColumnsSection({
       ),
     [fields, extraColumns, search],
   );
-
-  function fieldName(referenceName: string) {
-    const lower = referenceName.toLowerCase();
-    return (
-      fields.find((field) => field.referenceName.toLowerCase() === lower)?.name ??
-      extraColumnLabel(referenceName)
-    );
-  }
 
   function add(referenceName: string) {
     onExtraColumnsChange(normalizeViewExtraColumns([...extraColumns, referenceName]));

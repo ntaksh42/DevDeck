@@ -9,20 +9,55 @@ use regex::Regex;
 
 use crate::error::Result;
 
-pub(super) fn find_review_result_file(
+pub(crate) fn find_review_result_file(
     folder: &Path,
     pull_request_id: i64,
 ) -> Result<Option<PathBuf>> {
     find_result_file(folder, |name| file_name_matches_pr(name, pull_request_id))
 }
 
-pub(super) fn find_work_item_result_file(
+pub(crate) fn find_work_item_result_file(
     folder: &Path,
     work_item_id: i64,
 ) -> Result<Option<PathBuf>> {
     find_result_file(folder, |name| {
         file_name_matches_work_item(name, work_item_id)
     })
+}
+
+/// Ids of every pull request that has a result file in `folder`, ascending.
+pub(crate) fn list_review_result_ids(folder: &Path) -> Result<Vec<i64>> {
+    list_result_ids(folder, file_name_matches_pr)
+}
+
+/// Ids of every work item that has a result file in `folder`, ascending.
+pub(crate) fn list_work_item_result_ids(folder: &Path) -> Result<Vec<i64>> {
+    list_result_ids(folder, file_name_matches_work_item)
+}
+
+/// Every digit run in a file name is a candidate id; the per-id matcher then
+/// decides, so the listing agrees with what the preview lookup would find.
+fn list_result_ids(folder: &Path, matches_name: fn(&str, i64) -> bool) -> Result<Vec<i64>> {
+    static DIGITS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d+").unwrap());
+    let mut ids = std::collections::BTreeSet::new();
+    for entry in fs::read_dir(folder)? {
+        let path = entry?.path();
+        if !path.is_file() || !is_html_file(&path) {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        for run in DIGITS.find_iter(file_name) {
+            let Ok(id) = run.as_str().parse::<i64>() else {
+                continue;
+            };
+            if id > 0 && matches_name(file_name, id) {
+                ids.insert(id);
+            }
+        }
+    }
+    Ok(ids.into_iter().collect())
 }
 
 fn find_result_file(folder: &Path, matches_name: impl Fn(&str) -> bool) -> Result<Option<PathBuf>> {
@@ -249,5 +284,31 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(found.file_name().unwrap(), "1234-v2.html");
+    }
+
+    #[test]
+    fn list_result_ids_agree_with_the_per_id_lookup() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in [
+            "review-PR0042.html",
+            "PR7-second.htm",
+            "apr12-summary.html",
+            "1234-result.html",
+            "2024-05-06-WI88.html",
+            "v42-report.html",
+            "PR9.txt",
+        ] {
+            fs::write(temp.path().join(name), "<html></html>").unwrap();
+        }
+
+        assert_eq!(list_review_result_ids(temp.path()).unwrap(), vec![7, 42]);
+        let work_items = list_work_item_result_ids(temp.path()).unwrap();
+        for id in &work_items {
+            assert!(find_work_item_result_file(temp.path(), *id)
+                .unwrap()
+                .is_some());
+        }
+        assert!(work_items.contains(&1234) && work_items.contains(&88));
+        assert!(!work_items.contains(&2024) && !work_items.contains(&42));
     }
 }

@@ -6,8 +6,8 @@ use crate::db::{AppSettings, SyncState};
 use crate::error::Result;
 use crate::settings::{
     normalize_app_settings, DiagnosticsExport, ExportDiagnosticsInput, GetReviewResultPreviewInput,
-    GetWorkItemResultPreviewInput, ReviewResultPreview, UpdateAppSettingsInput,
-    WorkItemResultPreview,
+    GetWorkItemResultPreviewInput, ListResultItemIdsInput, ReviewResultPreview,
+    UpdateAppSettingsInput, WorkItemResultPreview,
 };
 
 #[tauri::command]
@@ -25,7 +25,19 @@ pub fn update_app_settings(
     app: AppHandle,
 ) -> Result<AppSettings> {
     let settings = normalize_app_settings(input);
-    configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
+    // A changed hotkey that cannot be registered is an error for the user to
+    // fix. An unchanged one is only re-tried: if another app took it since
+    // startup, that must not block saving unrelated settings.
+    let current = state.settings.get()?.show_window_hotkey;
+    let changed =
+        current.as_deref().map(str::trim) != settings.show_window_hotkey.as_deref().map(str::trim);
+    let registered = configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref());
+    match registered {
+        Err(e) if !changed => {
+            tracing::warn!(error = ?e, "could not re-register the show window hotkey");
+        }
+        other => other?,
+    }
     state.settings.update_normalized(settings)
 }
 
@@ -37,6 +49,16 @@ pub async fn get_review_result_preview(
 ) -> Result<Option<ReviewResultPreview>> {
     let service = state.settings.clone();
     run_blocking(move || service.review_result_preview(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_result_item_ids(
+    input: ListResultItemIdsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<i64>> {
+    let service = state.settings.clone();
+    run_blocking(move || service.result_item_ids(input)).await
 }
 
 #[tauri::command]

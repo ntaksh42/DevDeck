@@ -29,7 +29,7 @@ export function NavButton({
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
       className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary"
+        active ? "bg-card text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="shrink-0">{icon}</span>
@@ -129,7 +129,7 @@ export function NavSubItem({
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
       className={`group flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
+        active ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="min-w-0 truncate">{label}</span>
@@ -178,7 +178,7 @@ export function NavSubGroup({
           data-nav-subgroup={expandable ? "true" : undefined}
           data-subgroup-id={id}
           className={`group flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
+            active ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-secondary"
           } disabled:cursor-not-allowed disabled:opacity-50`}
         >
           <span className="min-w-0 truncate">{label}</span>

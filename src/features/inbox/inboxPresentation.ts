@@ -5,7 +5,8 @@ export type InboxTab = "open" | "snoozed" | "done";
 export type InboxPriority = "all" | "priority" | "other";
 
 export function matchesInboxPriority(item: Pick<InboxItem, "kind">, priority: InboxPriority): boolean {
-  const mention = item.kind === "pr_mention" || item.kind === "wi_mention";
+  // A reminder the user set themselves counts as priority.
+  const mention = ["pr_mention", "wi_mention", "pr_waiting", "wi_waiting"].includes(item.kind);
   return priority === "all" || (priority === "priority" ? mention : !mention);
 }
 
@@ -46,19 +47,27 @@ export function inboxAgentSubject(entry: InboxEntry): AgentSubject | null {
 // stay in the Done list for up to 30 days.
 const KIND_LABELS: Record<string, string> = {
   pr_mention: "Mention",
+  pr_group_mention: "Team",
   pr_reply: "Reply",
   pr_review_request: "Review",
   pr_returned: "Returned",
+  pr_waiting: "Waiting",
   wi_mention: "WI mention",
+  wi_reply: "WI reply",
+  wi_waiting: "Waiting",
   wi_assigned: "Assigned",
 };
 
 const KIND_CLASSES: Record<string, string> = {
-  pr_mention: "text-amber-700 dark:text-amber-300",
+  pr_mention: "text-amber-800 dark:text-amber-300",
+  pr_group_mention: "text-orange-700 dark:text-orange-300",
   pr_reply: "text-sky-700 dark:text-sky-300",
   pr_review_request: "text-blue-700 dark:text-blue-300",
   pr_returned: "text-violet-700 dark:text-violet-300",
   wi_mention: "text-emerald-700 dark:text-emerald-300",
+  wi_reply: "text-teal-700 dark:text-teal-300",
+  pr_waiting: "text-rose-700 dark:text-rose-300",
+  wi_waiting: "text-rose-700 dark:text-rose-300",
   wi_assigned: "text-emerald-700 dark:text-emerald-300",
 };
 
@@ -77,7 +86,7 @@ export function isPullRequestItem(item: Pick<InboxItem, "kind">): boolean {
 
 /** A comment on a pull request thread the user can answer in place. */
 export function isThreadItem(item: Pick<InboxItem, "kind">): boolean {
-  return item.kind === "pr_mention" || item.kind === "pr_reply";
+  return ["pr_mention", "pr_group_mention", "pr_reply", "pr_waiting"].includes(item.kind);
 }
 
 export function isWorkItemItem(item: Pick<InboxItem, "kind">): boolean {
@@ -92,14 +101,14 @@ export function inboxSubjectLabel(item: InboxEntry): string {
 }
 
 /**
- * The PR / work item title for rows whose own text is a comment, so the row
- * says what the comment is about. Rows that already show the title (no
- * comment) and non-PR / WI rows have none.
+ * What a row is about: `!42 PR title` / `#123 work item title`, so the comment
+ * next to it needs no guessing. The repository / project moves to the tooltip.
  */
-export function inboxRowTitle(item: InboxItem): string | null {
-  if (!item.snippet || !item.title) return null;
-  if (!isPullRequestItem(item) && !isWorkItemItem(item)) return null;
-  return item.title === item.snippet ? null : item.title;
+export function inboxRowSubject(item: InboxEntry): string {
+  if (!item.title) return inboxSubjectLabel(item);
+  if (isPullRequestItem(item)) return `!${item.subjectId} ${item.title}`;
+  if (isWorkItemItem(item)) return `#${item.subjectId} ${item.title}`;
+  return inboxSubjectLabel(item);
 }
 
 /** `refs/heads/feature/x` → `feature/x`. */
@@ -110,7 +119,9 @@ export function shortRefName(ref: string): string {
 export function matchesInboxFilter(item: InboxItem, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return [item.title, item.author, item.snippet, item.repositoryName, item.projectName, `!${item.subjectId}`]
+  // The id as the row shows it: `!42` for a pull request, `#42` for a work item.
+  const id = `${isPullRequestItem(item) ? "!" : "#"}${item.subjectId}`;
+  return [item.title, item.author, item.snippet, item.repositoryName, item.projectName, id]
     .filter((value): value is string => !!value)
     .some((value) => value.toLowerCase().includes(needle));
 }

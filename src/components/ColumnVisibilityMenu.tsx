@@ -6,7 +6,9 @@ import { useEffect, useRef, type ReactNode } from "react";
  * or Escape, matching the column-filter dropdowns.
  *
  * Keyboard: opens focused on the first toggle; Up/Down move between the
- * checkboxes and the "Show all" action; Space toggles; Escape closes. On close
+ * checkboxes and the "Show all" action; Space toggles; Alt+Up/Down moves the
+ * focused column within the order (visible columns are listed first, in display
+ * order); Escape closes. On close
  * focus returns to the originating grid (`data-primary-grid="true"`) so keyboard
  * navigation resumes there instead of being stranded (issue #442). Navigation
  * keys are contained so the grid behind the popover does not also react.
@@ -19,6 +21,7 @@ export function ColumnVisibilityMenu<K extends string>({
   visibleColumns,
   requiredColumns,
   onToggle,
+  onMove,
   onReset,
   onClose,
   children,
@@ -28,6 +31,8 @@ export function ColumnVisibilityMenu<K extends string>({
   visibleColumns: K[];
   requiredColumns: K[];
   onToggle: (key: K) => void;
+  /** Reorders a visible column by `delta` positions (Alt+Up/Down, or the arrow buttons). */
+  onMove?: (key: K, delta: number) => void;
   onReset: () => void;
   onClose: () => void;
   children?: ReactNode;
@@ -98,7 +103,23 @@ export function ColumnVisibilityMenu<K extends string>({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
+  function moveColumn(key: K, delta: number) {
+    onMove?.(key, delta);
+    // The row re-renders at its new position; keep focus on the same checkbox.
+    window.requestAnimationFrame(() =>
+      ref.current?.querySelector<HTMLElement>(`[data-colvis-key="${key}"]`)?.focus(),
+    );
+  }
+
   function handleMenuKeyDown(event: React.KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    const key = target.dataset?.colvisKey as K | undefined;
+    if (event.altKey && key && onMove && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (visibleColumns.includes(key)) moveColumn(key, event.key === "ArrowUp" ? -1 : 1);
+      return;
+    }
     // Keep navigation inside the menu; let Space/Enter act on the focused
     // control (checkbox toggle / button) without the grid also reacting.
     if (event.key === "ArrowDown") {
@@ -130,17 +151,44 @@ export function ColumnVisibilityMenu<K extends string>({
         Visible columns
       </div>
       <div className="py-1">
-        {columns.map(({ key, label }) => {
+        {[...visibleColumns, ...columns.map((c) => c.key).filter((k) => !visibleColumns.includes(k))].map((key, index) => {
+          const label = columns.find((c) => c.key === key)?.label ?? key;
           const required = requiredColumns.includes(key);
+          const visible = index < visibleColumns.length;
           return (
             <label
               key={key}
               className="flex cursor-pointer select-none items-center justify-between gap-2 rounded px-2 py-1 text-xs hover:bg-secondary"
             >
-              <span>{label}</span>
+              <span className="flex-1">{label}</span>
+              {onMove && visible ? (
+                <span className="flex">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={`Move ${label} up`}
+                    disabled={index === 0}
+                    onClick={(event) => { event.preventDefault(); moveColumn(key, -1); }}
+                    className="rounded px-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={`Move ${label} down`}
+                    disabled={index === visibleColumns.length - 1}
+                    onClick={(event) => { event.preventDefault(); moveColumn(key, 1); }}
+                    className="rounded px-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                </span>
+              ) : null}
               <input
                 type="checkbox"
                 data-colvis-item="true"
+                data-colvis-key={key}
                 aria-label={label}
                 checked={visibleColumns.includes(key)}
                 disabled={required}

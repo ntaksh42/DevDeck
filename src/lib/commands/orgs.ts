@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
 } from "@/lib/reviewSettings";
@@ -53,6 +54,11 @@ export const appSettingsSchema = z.object({
   agentWorkspacePath: z.string().nullable().default(null),
   inboxInsightEnabled: z.boolean().default(false),
   inboxInsightModel: z.string().nullable().default(null),
+  inboxInsightMaxPerSync: z.number().int().default(3),
+  autoAgentEnabled: z.boolean().default(false),
+  autoAgentMaxPerSync: z.number().int().default(DEFAULT_AUTO_AGENT_MAX_PER_SYNC),
+  autoAgentIntervalMinutes: z.number().int().default(15),
+  autoAgentPipelinesEnabled: z.boolean().default(false),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
   notificationContentPreviewEnabled: z.boolean().default(true),
@@ -198,6 +204,10 @@ export type DeleteOrganizationInput = {
 
 export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
+  autoAgentEnabled?: boolean;
+  autoAgentMaxPerSync?: number;
+  autoAgentIntervalMinutes?: number;
+  autoAgentPipelinesEnabled?: boolean;
   workItemResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
   agentCommand?: string | null;
@@ -211,6 +221,7 @@ export type UpdateAppSettingsInput = {
   agentWorkspacePath?: string | null;
   inboxInsightEnabled?: boolean;
   inboxInsightModel?: string | null;
+  inboxInsightMaxPerSync?: number;
   readOnlyValidationModeEnabled?: boolean;
   desktopNotificationsEnabled?: boolean;
   notificationContentPreviewEnabled?: boolean;
@@ -276,6 +287,14 @@ export async function getWorkItemResultPreview(
 ): Promise<WorkItemResultPreview | null> {
   const result = await invokeCommand("get_work_item_result_preview", { input });
   return workItemResultPreviewSchema.nullable().parse(result);
+}
+
+export type ResultTarget = "pull-request" | "work-item";
+
+/** Ids of the pull requests / work items that have a result HTML file. */
+export async function listResultItemIds(target: ResultTarget): Promise<number[]> {
+  const result = await invokeCommand("list_result_item_ids", { input: { target } });
+  return z.array(z.number()).parse(result);
 }
 
 export async function addPatOrganization(

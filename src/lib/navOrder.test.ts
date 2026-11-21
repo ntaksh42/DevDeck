@@ -9,18 +9,17 @@ describe("normalizeNavOrder", () => {
   });
 
   it("preserves a valid reordering of all known ids", () => {
-    const reordered = ["analyze", "pipelines", "workItems", "pullRequests"];
+    const reordered = ["pipelines", "workItems", "pullRequests"];
     expect(normalizeNavOrder(reordered)).toEqual(reordered);
   });
 
-  it("drops unknown ids (including the retired 'commits' and 'codeSearch') and duplicates", () => {
-    const raw = ["commits", "codeSearch", "pipelines", "bogus", "pipelines", "pullRequests"];
+  it("drops unknown ids (including retired views) and duplicates", () => {
+    const raw = ["commits", "codeSearch", "analyze", "pipelines", "bogus", "pipelines", "pullRequests"];
     expect(normalizeNavOrder(raw)).toEqual([
       "pipelines",
       "pullRequests",
       // remaining known ids appended in default order
       "workItems",
-      "analyze",
     ]);
   });
 
@@ -30,7 +29,6 @@ describe("normalizeNavOrder", () => {
       "pipelines",
       "pullRequests",
       "workItems",
-      "analyze",
     ]);
   });
 
@@ -46,7 +44,6 @@ describe("reorderNav", () => {
       "pipelines",
       "pullRequests",
       "workItems",
-      "analyze",
     ]);
   });
 
@@ -56,7 +53,6 @@ describe("reorderNav", () => {
       "workItems",
       "pipelines",
       "pullRequests",
-      "analyze",
     ]);
   });
 
@@ -66,7 +62,7 @@ describe("reorderNav", () => {
 
   it("does not mutate the input array", () => {
     const input = [...DEFAULT_NAV_ORDER];
-    reorderNav(input, "analyze", "pullRequests");
+    reorderNav(input, "pipelines", "pullRequests");
     expect(input).toEqual(DEFAULT_NAV_ORDER);
   });
 });

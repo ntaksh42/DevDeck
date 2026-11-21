@@ -103,14 +103,14 @@ pub async fn get_review(
     })
 }
 
-fn build_reviewers(
-    detail: &PullRequestDetail,
+/// Each reviewer's review state as GitHub shows it: the latest approval or
+/// change request, and a comment-only review only when there is neither (a
+/// later comment does not take back an approval).
+fn latest_review_states(
     reviews: &[ReviewItem],
-    me: &str,
-) -> Vec<PrReviewer> {
-    use std::collections::HashMap;
-    // Latest definitive review state per reviewer login.
-    let mut latest: HashMap<String, (String, Option<String>)> = HashMap::new();
+) -> std::collections::HashMap<String, (String, Option<String>)> {
+    let mut latest: std::collections::HashMap<String, (String, Option<String>)> =
+        std::collections::HashMap::new();
     for review in reviews {
         let Some(login) = review.user.as_ref().map(|u| u.login.clone()) else {
             continue;
@@ -122,11 +122,24 @@ fn build_reviewers(
         let entry = latest
             .entry(login)
             .or_insert((state.clone(), review.submitted_at.clone()));
-        // Keep the most recent submission.
-        if review.submitted_at >= entry.1 {
+        let replace = match (entry.0 == "COMMENTED", state == "COMMENTED") {
+            (true, false) => true,
+            (false, true) => false,
+            _ => review.submitted_at >= entry.1,
+        };
+        if replace {
             *entry = (state, review.submitted_at.clone());
         }
     }
+    latest
+}
+
+fn build_reviewers(
+    detail: &PullRequestDetail,
+    reviews: &[ReviewItem],
+    me: &str,
+) -> Vec<PrReviewer> {
+    let latest = latest_review_states(reviews);
 
     let mut reviewers: Vec<PrReviewer> = Vec::new();
     for (login, (state, _)) in &latest {
@@ -384,3 +397,33 @@ pub use mutations::{
     set_reviewer_required, set_thread_status, submit_vote, update_pull_request,
     update_pull_request_details,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn review(login: &str, state: &str, at: &str) -> ReviewItem {
+        serde_json::from_value(json!({
+            "id": 1,
+            "user": { "login": login },
+            "state": state,
+            "submitted_at": at,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_later_comment_keeps_the_approval() {
+        let reviews = [
+            review("alice", "APPROVED", "2026-01-01T00:00:00Z"),
+            review("alice", "COMMENTED", "2026-01-02T00:00:00Z"),
+            review("bob", "COMMENTED", "2026-01-01T00:00:00Z"),
+            review("carol", "CHANGES_REQUESTED", "2026-01-01T00:00:00Z"),
+            review("carol", "APPROVED", "2026-01-03T00:00:00Z"),
+        ];
+        let latest = latest_review_states(&reviews);
+        assert_eq!(latest["alice"].0, "APPROVED");
+        assert_eq!(latest["bob"].0, "COMMENTED");
+        assert_eq!(latest["carol"].0, "APPROVED");
+    }
+}

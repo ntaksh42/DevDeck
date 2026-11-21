@@ -9,6 +9,9 @@ All notable changes to DevDeck (formerly AzDoDeck) are documented here.
 - Inbox items can be marked and moved to Done or snoozed in bulk (#726).
 - Inbox shows every related link above the conversation — linked work items / pull requests with titles and states, plus links from the description, all comments and attachments — so a reply needs no trip to the browser.
 
+### Changed
+- **Legibility.** Small text in lists and previews is 12px or larger (was 11px), secondary grey text is darker, pane tab strips are 28px tall (was 20px), and every text color measures 4.5:1 or more against its background in both themes.
+
 ## [0.2.30] — 2026-10-17
 
 ### Added

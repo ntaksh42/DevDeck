@@ -7,7 +7,7 @@ const BUTTON = "rounded border px-2 py-0.5 text-xs";
 const IDLE = "border-border bg-card hover:bg-secondary";
 const PRESSED = "border-primary bg-primary/10 text-primary";
 /** A toggle with nothing behind it: no frame, so the bar reads as text until there is something to look at. */
-const EMPTY = "border-transparent text-muted-foreground/70 hover:bg-secondary";
+const EMPTY = "border-transparent text-muted-foreground/80 hover:bg-secondary";
 
 function toggleClass(toggle: StateToggle): string {
   return toggle.active ? PRESSED : toggle.count === 0 ? EMPTY : IDLE;

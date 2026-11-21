@@ -4,8 +4,10 @@ import {
   extractInboxLinks,
   inboxKindLabel,
   inboxLocationLabel,
-  inboxRowTitle,
+  inboxRowSubject,
+  isThreadItem,
   matchesInboxFilter,
+  matchesInboxPriority,
   shortRefName,
 } from "./inboxPresentation";
 
@@ -63,17 +65,16 @@ describe("extractInboxLinks", () => {
   });
 });
 
-describe("inboxRowTitle", () => {
-  it("returns the title for comment rows so the row says what it is about", () => {
-    expect(inboxRowTitle(item())).toBe("Fix null handling");
-    expect(inboxRowTitle(item({ kind: "wi_mention", title: "Login is slow" }))).toBe(
-      "Login is slow",
+describe("inboxRowSubject", () => {
+  it("names the PR or work item by id and title so the row says what it is about", () => {
+    expect(inboxRowSubject(item())).toBe("!42 Fix null handling");
+    expect(inboxRowSubject(item({ kind: "wi_mention", subjectId: 7, title: "Login is slow" }))).toBe(
+      "#7 Login is slow",
     );
   });
 
-  it("has none when the row already shows the title", () => {
-    expect(inboxRowTitle(item({ kind: "pr_review_request", snippet: null }))).toBeNull();
-    expect(inboxRowTitle(item({ snippet: "Fix null handling" }))).toBeNull();
+  it("falls back to the repository or project when there is no title", () => {
+    expect(inboxRowSubject(item({ title: "" }))).toBe("!42 api-gateway");
   });
 });
 
@@ -99,6 +100,12 @@ describe("inbox presentation helpers", () => {
     expect(matchesInboxFilter(target, "!42")).toBe(true);
     expect(matchesInboxFilter(target, "billing")).toBe(false);
   });
+
+  it("finds a work item by #id, as its row shows it", () => {
+    const target = item({ kind: "wi_mention", subjectId: 123 });
+    expect(matchesInboxFilter(target, "#123")).toBe(true);
+    expect(matchesInboxFilter(target, "!123")).toBe(false);
+  });
 });
 
 describe("inboxLocationLabel", () => {
@@ -106,5 +113,28 @@ describe("inboxLocationLabel", () => {
     expect(inboxLocationLabel({ filePath: "/src/app/dashboard.ts", line: 7 })).toBe("dashboard.ts:7");
     expect(inboxLocationLabel({ filePath: "/README.md", line: null })).toBe("README.md");
     expect(inboxLocationLabel({ filePath: null, line: null })).toBeNull();
+  });
+});
+
+describe("team mentions and work item replies", () => {
+  it("files them under Other and keeps team mentions answerable in their thread", () => {
+    for (const kind of ["pr_group_mention", "wi_reply"]) {
+      expect(matchesInboxPriority({ kind }, "priority")).toBe(false);
+      expect(matchesInboxPriority({ kind }, "other")).toBe(true);
+    }
+    expect(inboxKindLabel("pr_group_mention")).toBe("Team");
+    expect(inboxKindLabel("wi_reply")).toBe("WI reply");
+    expect(isThreadItem({ kind: "pr_group_mention" })).toBe(true);
+  });
+});
+
+describe("Waiting rows (an overdue reply reminder)", () => {
+  it("are labelled Waiting, count as Priority and keep their PR thread", () => {
+    expect(inboxKindLabel("pr_waiting")).toBe("Waiting");
+    expect(inboxKindLabel("wi_waiting")).toBe("Waiting");
+    expect(matchesInboxPriority(item({ kind: "pr_waiting" }), "priority")).toBe(true);
+    expect(matchesInboxPriority(item({ kind: "wi_waiting" }), "other")).toBe(false);
+    expect(isThreadItem({ kind: "pr_waiting" })).toBe(true);
+    expect(isThreadItem({ kind: "wi_waiting" })).toBe(false);
   });
 });

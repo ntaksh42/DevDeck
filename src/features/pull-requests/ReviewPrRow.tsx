@@ -11,6 +11,7 @@ type ReviewPrRowProps = {
   selected: boolean;
   inMultiSelection: boolean;
   returned: boolean;
+  updated?: boolean;
   columnTemplate: string;
   visibleColumns: SortKey[];
   staleThresholdDays: number;
@@ -24,6 +25,7 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
       selected,
       inMultiSelection,
       returned,
+      updated = false,
       columnTemplate,
       visibleColumns,
       staleThresholdDays,
@@ -52,13 +54,13 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
             else focusPrimaryPreview();
           }
         }}
-        className={`grid cursor-pointer select-none items-center whitespace-nowrap gap-2 border-b border-border px-2 py-1 text-sm outline-none
+        className={`grid h-[29px] cursor-pointer select-none items-center gap-2 overflow-hidden whitespace-nowrap border-b border-border px-2 text-sm outline-none
         focus:ring-2 focus:ring-inset focus:ring-ring
         ${gridRowStateClass({ selected, inMultiSelection, isStale })}`}
         style={{ gridTemplateColumns: columnTemplate }}
       >
         {visibleColumns.map((key) => (
-          <Fragment key={key}>{renderPrCell(key, pr, isStale, returned)}</Fragment>
+          <Fragment key={key}>{renderPrCell(key, pr, isStale, returned, updated)}</Fragment>
         ))}
       </div>
     );

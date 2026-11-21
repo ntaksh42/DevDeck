@@ -256,3 +256,29 @@ fn migrating_to_v27_folds_existing_rows_per_thread() {
         ]
     );
 }
+
+#[test]
+fn a_waiting_conversation_keeps_its_strongest_kind() {
+    let (_tf, db) = setup();
+    db.insert_inbox_items(&[
+        comment("pr_group_mention", 1, 7, 101),
+        comment("pr_reply", 1, 7, 102),
+    ])
+    .unwrap();
+    assert_eq!(open(&db)[0].kind, "pr_group_mention");
+    db.insert_inbox_items(&[comment("pr_mention", 1, 7, 103)])
+        .unwrap();
+    assert_eq!(open(&db)[0].kind, "pr_mention");
+
+    // Replies on a work item fold into its row like mentions do.
+    let mut reply = comment("wi_reply", 9, 0, 201);
+    reply.repository_id = String::new();
+    let mut later = comment("wi_reply", 9, 0, 202);
+    later.repository_id = String::new();
+    db.insert_inbox_items(&[reply, later]).unwrap();
+    let work_item = open(&db).into_iter().find(|i| i.subject_id == 9).unwrap();
+    assert_eq!(
+        (work_item.kind.as_str(), work_item.hit_count),
+        ("wi_reply", 2)
+    );
+}

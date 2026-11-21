@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2 } from "lucide-react";
 import type { WorkItemPreview } from "@/lib/azdoCommands";
 import { commandErrorMessage, listWorkItemUpdates } from "@/lib/azdoCommands";
-import { formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { workItemQueryKeys } from "./queryKeys";
 import { workItemFieldLabel } from "./workItemPreviewHelpers";
 import { SectionGrip, usePreviewSectionHeaderMoveProps } from "./PreviewSectionMover";
@@ -35,7 +35,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         {...move}
-        className="group flex w-full items-center gap-1 rounded border-l-4 border-l-muted-foreground bg-info/10 px-1.5 py-1 text-left hover:bg-info/20 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="group flex w-full items-center gap-1 rounded border-l-4 border-l-muted-foreground bg-info/10 px-1.5 py-0.5 text-left hover:bg-info/20 focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <ChevronRight
           className={`h-3 w-3 shrink-0 text-info transition-transform ${
@@ -43,7 +43,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
           }`}
           aria-hidden="true"
         />
-        <h3 className="text-2xs font-extrabold uppercase tracking-wider leading-4 text-foreground">
+        <h3 className="text-sm font-semibold leading-5 text-foreground">
           History
         </h3>
         {open && updatesQuery.isFetching ? (
@@ -72,7 +72,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
                   {update.revisedDate ? (
                     <span
                       className="shrink-0 text-muted-foreground"
-                      title={new Date(update.revisedDate).toLocaleString()}
+                      title={formatDate(update.revisedDate)}
                     >
                       {formatRelativeDate(update.revisedDate)}
                     </span>

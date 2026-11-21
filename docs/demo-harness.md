@@ -17,13 +17,17 @@ localStorage.setItem("azdodeck:demo:scenario", "large-data");
 
 URL parameters take precedence over local storage.
 
+With `large-data`, `wiCount` sets how many work items the demo generates
+(default 420), e.g. `?scenario=large-data&wiCount=3000`, to profile scrolling
+on very long lists.
+
 ## Scenarios
 
 | Scenario | Purpose |
 | --- | --- |
 | `default` | Normal demo data used by the browser preview and smoke tests. |
 | `empty` | Empty PR and work item lists. |
-| `large-data` | Hundreds of PRs, review PRs, work items, comments, and long rich fields. |
+| `large-data` | Hundreds of PRs, review PRs, work items, notifications, inbox items, comments, and long rich fields. |
 | `rich-text` | Azure DevOps-like HTML with mentions, tables, images, links, blockquotes, and code blocks. |
 | `api-errors` | Selected commands throw errors to exercise error handling and rollback paths. |
 | `slow-network` | Adds extra latency to every demo command. |

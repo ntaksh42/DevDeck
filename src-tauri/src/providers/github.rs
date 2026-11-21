@@ -9,10 +9,10 @@ use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::github;
 use crate::pipelines::{
-    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    CancelPipelineRunInput, FlakyTestReport, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListFlakyTestsInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
     RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
@@ -33,7 +33,7 @@ use crate::prs::{
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::repos::{ListBranchesInput, ListRepositoriesInput, RepoBranch, RepositoryOption};
-use crate::search::{SearchAllInput, SearchAllResult, SearchAllTotals};
+use crate::search::{SearchAllInput, SearchAllResult};
 use crate::secrets::SecretStore;
 use crate::wiki::{GetWikiPageInput, SearchWikiInput, WikiPageContent, WikiSearchResults};
 use crate::work_items::{
@@ -47,9 +47,6 @@ use crate::work_items::{
 };
 
 use super::{Provider, ProviderCapabilities};
-
-/// Upper bound for GitHub PR search result sets.
-const PR_RESULT_LIMIT: u32 = 100;
 
 pub(crate) struct GithubProvider {
     org: Organization,
@@ -80,42 +77,7 @@ impl Provider for GithubProvider {
         &self,
         input: SearchPullRequestsInput,
     ) -> Result<PullRequestSearchResult> {
-        let active_only = input
-            .statuses
-            .as_ref()
-            .map(|s| s.is_empty() || s.iter().all(|s| s.eq_ignore_ascii_case("active")))
-            .unwrap_or(true);
-        let query = input.query.clone().unwrap_or_default();
-        // The repository / target-branch / date filters translate into GitHub
-        // search qualifiers. Previously every field except `query`, `statuses`
-        // and `exclude_drafts` was dropped on the floor, so the search screen's
-        // filters silently did nothing on a GitHub connection.
-        let qualifiers = github::prs::PrSearchQualifiers::from_input(&input)?;
-        let mut results = github::prs::search_pull_requests(
-            &self.org,
-            &self.secrets,
-            &query,
-            active_only,
-            &qualifiers,
-            PR_RESULT_LIMIT,
-        )
-        .await?;
-        if input.exclude_drafts.unwrap_or(false) {
-            results.retain(|pr| !pr.is_draft);
-        }
-        // `sort_by` is applied locally: GitHub's `sort:` qualifier has no
-        // equivalent for the "title" ordering the UI offers.
-        crate::prs::sort_summaries(
-            &mut results,
-            crate::prs::parse_sort_by(input.sort_by.as_deref()),
-        );
-        let total = results.len();
-        Ok(PullRequestSearchResult {
-            pull_requests: results,
-            total,
-            truncated: false,
-            warnings: Vec::new(),
-        })
+        github::prs::search_from_input(&self.org, &self.secrets, input).await
     }
 
     async fn list_my_created_pull_requests(
@@ -426,6 +388,10 @@ impl Provider for GithubProvider {
         Err(pipelines_unsupported())
     }
 
+    async fn list_flaky_tests(&self, _input: ListFlakyTestsInput) -> Result<FlakyTestReport> {
+        Err(pipelines_unsupported())
+    }
+
     async fn get_pipeline_definition(
         &self,
         _input: GetPipelineDefinitionInput,
@@ -487,16 +453,7 @@ impl Provider for GithubProvider {
     }
 
     async fn search_all(&self, _input: SearchAllInput) -> Result<SearchAllResult> {
-        // The command palette degrades to no results for GitHub (no local cache);
-        // the dedicated PR/Issue screens cover live GitHub search.
-        Ok(SearchAllResult {
-            work_items: Vec::new(),
-            pull_requests: Vec::new(),
-            totals: SearchAllTotals {
-                work_items: 0,
-                pull_requests: 0,
-            },
-        })
+        Err(AppError::NotSupported("Palette search is available for Azure DevOps connections. Use the GitHub PR/Issue search screens for this connection.".into()))
     }
 }
 

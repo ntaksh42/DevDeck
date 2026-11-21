@@ -157,7 +157,7 @@ export function PipelineDefinitionPanel({
         {detail && !editing && (
           <>
             <section className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
                 Triggers
               </h3>
               {detail.triggers.length === 0 ? (
@@ -175,7 +175,7 @@ export function PipelineDefinitionPanel({
             </section>
 
             <section className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
                 Variables
               </h3>
               {detail.variables.length === 0 ? (

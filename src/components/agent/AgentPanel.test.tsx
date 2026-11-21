@@ -26,7 +26,7 @@ vi.mock("@/lib/azdoCommands", async (importOriginal) => {
     getAppSettings: vi.fn(async () => ({ readOnlyValidationModeEnabled: false })),
     listAgentAsks: vi.fn(async () => m.state.asks),
     deleteAgentNote: (input: unknown) => m.deleteAgentNote(input),
-    listAgentNotes: vi.fn(async () => [m.note("pr.md", "Check the retry logic")]),
+    listAgentNotes: vi.fn(async () => m.state.prNotes),
     createAgentNote: (input: unknown) => m.createAgentNote(input),
     replyAgentNote: (input: unknown) => m.replyAgentNote(input),
     runAgent: (input: unknown) => m.runAgent(input),
@@ -37,39 +37,50 @@ vi.mock("./contextDocument", () => ({ buildContextDocument: vi.fn(async () => "#
 
 afterEach(resetFixtures);
 
+/** The conversation rows of the list, in order. */
+const rows = (panel: HTMLElement) => Array.from(panel.querySelectorAll<HTMLButtonElement>("button[data-agent-conversation]"));
+
 describe("Agent panel", () => {
-  it("opens focused on the input; Esc folds it, then closes and returns focus", async () => {
+  it("opens focused on the input; Esc folds it to the list, then closes and returns focus", async () => {
     renderHost();
     const grid = screen.getByRole("button", { name: "grid" });
     grid.focus();
     const panel = await openPanel();
     await waitFor(() => expect(document.activeElement?.tagName).toBe("TEXTAREA"));
-    // Esc folds the empty input back to the conversation list, a second Esc closes.
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    await waitFor(() => expect(document.activeElement?.hasAttribute("aria-expanded")).toBe(true));
+    await waitFor(() => expect(document.activeElement).toBe(rows(panel)[0]));
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(grid));
     expect(panel.isConnected).toBe(false);
   });
 
-  it("folds each conversation; waiting ones start open and done ones folded", async () => {
+  it("lists conversations with waiting ones first, opens one with Enter and goes back with Esc", async () => {
     renderHost();
     const panel = await openPanel();
-    const [waiting, done] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
-    expect(waiting.getAttribute("aria-expanded")).toBe("true");
-    expect(within(panel).getByText("Which culture should the test pin?")).toBeTruthy();
-    expect(done.getAttribute("aria-expanded")).toBe("false");
+    const [waiting, done] = rows(panel);
+    expect(waiting.textContent).toContain("Why did run 412 fail?");
+    expect(waiting.textContent).toContain("Needs you");
+    expect(done.textContent).toContain("Done");
+    // The list shows no messages; opening a conversation shows them, and only its own.
+    expect(within(panel).queryByText("Which culture should the test pin?")).toBeNull();
 
     waiting.focus();
-    fireEvent.keyDown(waiting, { key: "ArrowLeft" });
-    expect(waiting.getAttribute("aria-expanded")).toBe("false");
-    expect(within(panel).queryByText("Which culture should the test pin?")).toBeNull();
     fireEvent.keyDown(waiting, { key: "ArrowDown" });
     expect(document.activeElement).toBe(done);
-    fireEvent.keyDown(done, { key: "ArrowRight" });
-    expect(done.getAttribute("aria-expanded")).toBe("true");
-    expect(within(panel).getByText("✓ Summarized")).toBeTruthy();
+    fireEvent.keyDown(done, { key: "ArrowUp" });
+    fireEvent.keyDown(waiting, { key: "Enter" });
+    const chat = await within(panel).findByLabelText("Conversation: Why did run 412 fail?");
+    await waitFor(() => expect(document.activeElement).toBe(chat));
+    expect(within(chat).getByText("Which culture should the test pin?")).toBeTruthy();
+    expect(within(panel).queryByText("Summarize last week")).toBeNull();
+    // The user's own message sits on the right, the agent's on the left.
+    expect(chat.querySelector('[data-agent-message="user"]')?.textContent).toContain("Why did run 412 fail?");
+    expect(chat.querySelector('[data-agent-message="agent"]')?.textContent).toContain("claude");
+
+    fireEvent.keyDown(chat, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(rows(panel)[0]));
+    expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
   });
 
   it("sends a request without a subject as a new ask and starts the agent", async () => {
@@ -124,7 +135,6 @@ describe("Agent panel", () => {
     // The selection is attached as a chip above the input and named in its placeholder.
     expect(within(panel).getByPlaceholderText("Ask about !68 Add ToDo API… (M)")).toBeTruthy();
     expect(within(panel).getByRole("button", { name: "Attached: !68 Add ToDo API" })).toBeTruthy();
-    expect((await within(panel).findAllByText("Check the retry logic")).length).toBeGreaterThan(0);
     // Only the PR's own conversations: requests about other things stay out.
     expect(within(panel).queryByText("Why did run 412 fail?")).toBeNull();
 
@@ -145,16 +155,18 @@ describe("Agent panel", () => {
     expect(within(panel).getByRole("button", { name: /Ask the agent/ })).toBeTruthy();
   });
 
-  it("replies to the selected conversation with r, in the box under it", async () => {
+  it("replies with r: opens the conversation and uses the one input at the bottom", async () => {
     renderHost();
     const panel = await openPanel();
-    const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const [waiting] = rows(panel);
     waiting.focus();
     fireEvent.keyDown(waiting, { key: "r" });
     const input = await within(panel).findByPlaceholderText(/^Reply…/);
     await waitFor(() => expect(document.activeElement).toBe(input));
-    // The box sits inside the conversation, and typing in it does not trigger list keys.
-    expect(input.closest("[data-agent-conversation]")).toBe(waiting.closest("[data-agent-conversation]"));
+    // One input only: the new-request one is gone while a conversation is open.
+    expect(within(panel).queryByPlaceholderText(/Ask the agent/)).toBeNull();
+    expect(within(panel).queryByRole("button", { name: /Ask the agent/ })).toBeNull();
+    // Typing in it does not trigger the conversation's keys.
     fireEvent.keyDown(input, { key: "x" });
     expect(setAgentNoteStatus).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: "Pin en-US" } });
@@ -165,33 +177,22 @@ describe("Agent panel", () => {
     expect(runAgent).toHaveBeenCalled();
   });
 
-  it("gives every open conversation its own reply box and Esc returns to its header", async () => {
+  it("Esc in the empty reply input returns to the conversation, the next Esc to the list", async () => {
     renderHost();
     const panel = await openPanel();
-    const [waiting, done] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
-    // Unfolded conversations carry a one-line reply box; folded ones carry none.
-    expect(within(waiting.closest("[data-agent-conversation]") as HTMLElement).getByRole("button", { name: /^Reply…/ })).toBeTruthy();
-    expect(within(done.closest("[data-agent-conversation]") as HTMLElement).queryByRole("button", { name: /^Reply…/ })).toBeNull();
-
-    fireEvent.click(within(waiting.closest("[data-agent-conversation]") as HTMLElement).getByRole("button", { name: /^Reply…/ }));
+    const [waiting] = rows(panel);
+    waiting.focus();
+    fireEvent.keyDown(waiting, { key: "r" });
     const input = await within(panel).findByPlaceholderText(/^Reply…/);
     await waitFor(() => expect(document.activeElement).toBe(input));
     fireEvent.keyDown(input, { key: "Escape" });
-    await waitFor(() => expect(document.activeElement).toBe(waiting));
+    const chat = within(panel).getByLabelText("Conversation: Why did run 412 fail?");
+    await waitFor(() => expect(document.activeElement).toBe(chat));
+    fireEvent.keyDown(chat, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(rows(panel)[0]));
   });
 
-  it("Esc on the folded reply button returns to its conversation header and keeps the panel", async () => {
-    renderHost();
-    const panel = await openPanel();
-    const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
-    const replyButton = within(waiting.closest("[data-agent-conversation]") as HTMLElement).getByRole("button", { name: /^Reply…/ });
-    replyButton.focus();
-    fireEvent.keyDown(replyButton, { key: "Escape" });
-    expect(document.activeElement).toBe(waiting);
-    expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
-  });
-
-  it("Esc on a header closes a panel opened from <body> and lands on the view's grid", async () => {
+  it("Esc on a row closes a panel opened from <body> and lands on the view's grid", async () => {
     resetAgentPanelState();
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -204,55 +205,43 @@ describe("Agent panel", () => {
     act(() => toggleAgentPanel());
     const panel = await screen.findByRole("complementary", { name: "Agent" });
     await within(panel).findAllByText("Why did run 412 fail?");
-    const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const [waiting] = rows(panel);
     waiting.focus();
     fireEvent.keyDown(waiting, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("row")));
   });
 
-  it("Delete on a header moves focus to the next conversation, then to the input when none are left", async () => {
+  it("Delete on a row moves focus to the next conversation, then to the input when none are left", async () => {
     renderHost();
     const panel = await openPanel();
-    const headers = () => within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded") && b.closest("[data-agent-conversation]"));
-    const [waiting, done] = headers();
+    const [waiting, done] = rows(panel);
     waiting.focus();
     fireEvent.keyDown(waiting, { key: "Delete" });
     await waitFor(() => expect(deleteAgentNote).toHaveBeenCalledWith(expect.objectContaining({ noteId: "a.md" })));
-    await waitFor(() => expect(headers()).toHaveLength(1));
+    await waitFor(() => expect(rows(panel)).toHaveLength(1));
     await waitFor(() => expect(document.activeElement).toBe(done));
 
-    // The last open conversation: nothing is left to focus, so the input takes it.
+    // The last open conversation, deleted from inside it: back to the list, focus on the input.
     state.asks = [{ ...asks[0], notes: [note("c.md", "Only one")] }];
     cleanup();
     const second = renderHost();
-    const only = await second.findByText("Only one");
-    const header = only.closest("[data-agent-conversation]")!.querySelector("button")!;
-    header.focus();
-    fireEvent.keyDown(header, { key: "Delete" });
+    const only = (await second.findByText("Only one")).closest("button")!;
+    only.focus();
+    fireEvent.keyDown(only, { key: "Enter" });
+    const chat = await second.findByLabelText("Conversation: Only one");
+    fireEvent.keyDown(chat, { key: "Delete" });
     await waitFor(() => expect(second.queryByText("Only one")).toBeNull());
     await waitFor(() => expect(document.activeElement?.closest("[data-agent-composer]")).not.toBeNull());
   });
 });
 
 describe("Agent panel keys", () => {
-  it("lists urgent conversations first and shows no kind, count or time on a folded row", async () => {
-    renderHost();
-    const panel = await openPanel();
-    const [waiting, done] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
-    // Expanded, the header names who/when/kind and the message below shows the text once.
-    expect(waiting.getAttribute("aria-expanded")).toBe("true");
-    expect(waiting.textContent).toContain("You · ");
-    expect(within(panel).getAllByText("Why did run 412 fail?")).toHaveLength(1);
-    // Folded like a PR thread: avatar, first line and state pill; no kind or time.
-    expect(done.textContent).toBe("YOSummarize last weekDone");
-  });
-
   it("pins with p and runs the agent now with Shift+Enter", async () => {
     renderHost();
     act(() => publishAgentSubject(pr));
     const panel = await openPanel("Check the retry logic");
-    const [first] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const [first] = rows(panel);
     first.focus();
     fireEvent.keyDown(first, { key: "p" });
     act(() => publishAgentSubject(null));
@@ -262,20 +251,41 @@ describe("Agent panel keys", () => {
     await waitFor(() => expect(runAgent).toHaveBeenCalled());
     expect(createAgentNote).not.toHaveBeenCalled();
   });
-});
 
-describe("Agent panel M key", () => {
-  it("moves from the conversation list to a new request with m", async () => {
+  it("m in a conversation goes back to the list and a new request", async () => {
     renderHost();
     const panel = await openPanel();
-    const [first] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const [first] = rows(panel);
     first.focus();
-    fireEvent.keyDown(first, { key: "r" });
-    await within(panel).findByPlaceholderText(/^Reply…/);
-    first.focus();
-    fireEvent.keyDown(first, { key: "m" });
+    fireEvent.keyDown(first, { key: "Enter" });
+    const chat = await within(panel).findByLabelText("Conversation: Why did run 412 fail?");
+    fireEvent.keyDown(chat, { key: "m" });
     const input = await within(panel).findByPlaceholderText(/Ask the agent/);
     await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+});
+
+describe("Agent panel proposed comments", () => {
+  it("gathers unposted comments in the tray above the input and points at them in the conversation", async () => {
+    state.prNotes = [
+      note("pr.md", "Review this", {
+        replies: [
+          { author: "claude", createdAt: "2026-10-11T09:05:00+09:00", body: "Two issues." },
+          { author: "claude", createdAt: "2026-10-11T09:06:00+09:00", body: "Guard a zero limit.", kind: "post", postedAt: null, postedRef: null },
+        ],
+      }),
+    ];
+    renderHost();
+    act(() => publishAgentSubject(pr));
+    const panel = await openPanel("Review this");
+    expect(rows(panel)[0].textContent).toContain("1 to post");
+    fireEvent.click(rows(panel)[0]);
+    const chat = await within(panel).findByLabelText("Conversation: Review this");
+    expect(within(chat).getByText(/proposed a comment — waiting below/)).toBeTruthy();
+    expect(within(chat).queryByText("Guard a zero limit.")).toBeNull();
+    const tray = panel.querySelector<HTMLElement>("[data-agent-proposal-tray]")!;
+    expect(within(tray).getByText("Guard a zero limit.")).toBeTruthy();
+    expect(within(tray).getByRole("button", { name: /Proposed comments to post: 1/ })).toBeTruthy();
   });
 });
 
@@ -317,7 +327,7 @@ describe("Agent panel with the Result panel", () => {
   it("resolves the selected conversation with x", async () => {
     renderHost();
     const panel = await openPanel();
-    const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const [waiting] = rows(panel);
     waiting.focus();
     fireEvent.keyDown(waiting, { key: "x" });
     await waitFor(() =>

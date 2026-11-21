@@ -18,7 +18,7 @@ function mount() {
 }
 
 async function runSearch(text: string) {
-  const input = screen.getByPlaceholderText("title, author, branch…");
+  const input = screen.getByPlaceholderText("Search pull requests…");
   fireEvent.change(input, { target: { value: text } });
   await waitFor(() => expect((screen.getByRole("button", { name: /^Search/ }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: /^Search/ }));
@@ -52,7 +52,7 @@ describe("PR Search recent / saved searches", () => {
     row.focus();
     fireEvent.keyDown(row, { key: "Enter" });
     await waitFor(() => expect(screen.queryByText("Recent searches")).toBeNull());
-    expect((screen.getByPlaceholderText("title, author, branch…") as HTMLInputElement).value).toBe("alpha");
+    expect((screen.getByPlaceholderText("Search pull requests…") as HTMLInputElement).value).toBe("alpha");
   });
 
   it("pins with S, moves with arrows and removes with Delete", async () => {

@@ -48,6 +48,19 @@ impl AppDatabase {
         Ok(())
     }
 
+    pub(crate) fn delete_unchanged_snoozed_item(
+        &self,
+        org_id: &str,
+        row: &SnoozedItem,
+    ) -> Result<bool> {
+        let conn = self.open()?;
+        Ok(conn.execute(
+            "DELETE FROM snoozed_items
+             WHERE organization_id = ?1 AND item_type = ?2 AND item_key = ?3 AND created_at = ?4 AND snooze_until = ?5",
+            params![org_id, row.item_type, row.item_key, row.created_at, row.snooze_until],
+        )? > 0)
+    }
+
     pub fn list_snoozed_items(&self, org_id: &str, item_type: &str) -> Result<Vec<SnoozedItem>> {
         let conn = self.open()?;
         list_snoozed_items(&conn, org_id, item_type)
@@ -67,7 +80,8 @@ pub(crate) fn upsert_snoozed_item(
         INSERT INTO snoozed_items(organization_id, item_type, item_key, snooze_until, baseline_activity, created_at)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         ON CONFLICT(organization_id, item_type, item_key)
-        DO UPDATE SET snooze_until = excluded.snooze_until, baseline_activity = excluded.baseline_activity
+        DO UPDATE SET snooze_until = excluded.snooze_until, baseline_activity = excluded.baseline_activity,
+                      created_at = excluded.created_at
         "#,
         params![
             org_id,

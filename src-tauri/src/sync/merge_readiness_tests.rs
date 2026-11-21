@@ -105,4 +105,15 @@ async fn ready_sync_obeys_routing_and_snooze_without_hiding_badge() {
     let history = db.list_notifications(10, None, false, None, None).unwrap();
     assert_eq!(history.items.len(), 1);
     assert_eq!(history.items[0].kind, "prReadyToMerge");
+
+    // A failed check keeps the badge instead of clearing it.
+    server.reset().await;
+    Mock::given(path("/p/_apis/git/repositories/r/pullrequests/42"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    collect_ready_prs(&db, &client, &org, &settings, &budget, &none)
+        .await
+        .unwrap();
+    assert!(db.pr_ready_to_merge("org", "r", 42).unwrap());
 }

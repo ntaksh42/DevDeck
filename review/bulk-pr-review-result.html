@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- report-sheet -->
+<title>My Reviews 一括レビュー依頼</title>
+<style>
+:root{
+  --ag-ink:var(--foreground,#212529);--ag-muted:var(--muted-foreground,#64707C);
+  --ag-line:var(--border,#DEE2E6);--ag-paper:var(--background,#FFFFFF);
+  --ag-red:#DC2626;--ag-amber:#B45309}
+*{box-sizing:border-box}
+body{background:var(--ag-paper);color:var(--ag-ink);font-family:'IBM Plex Sans JP','Yu Gothic UI','Meiryo',sans-serif;font-size:15px;line-height:1.75;margin:0;padding:12px 20px 24px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;line-height:1.45;margin:4px 0 10px}
+h2{font-size:17px;margin:22px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--ag-line)}
+.concl{border:1px solid var(--ag-line);border-left:3px solid var(--ag-red);border-radius:8px;padding:10px 16px}
+.mono{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--ag-muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;margin:6px 0}
+th,td{border-bottom:1px solid var(--ag-line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--ag-muted);font-weight:500;white-space:nowrap}
+td.no{width:2.5em;color:var(--ag-muted);font-family:Consolas,monospace}
+.warn{border-left:3px solid var(--ag-muted);padding:4px 12px;margin:6px 0}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:0 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.badge.guess{color:var(--ag-amber)}
+tr.key td{font-weight:700}
+</style></head>
+<body><main>
+
+<h1>`I` キーで、選んだ PR のレビューをまとめて依頼できる</h1>
+<div class="concl"><b>結論:</b> My Reviews で複数選択して `I` を押すと、確認後に自動レビューと同じ経路で 1 件ずつ実行する。デモで通し確認済み。</div>
+
+<table>
+<tr><th>#</th><th>項目</th><th>中身</th><th>根拠</th></tr>
+<tr><td class="no">①</td><td>操作</td><td>Shift+↑↓ で選択、または未選択ならカーソル行。`I` で確認ダイアログ、Tab → Enter で依頼。閉じるとフォーカスは一覧の行へ戻る</td><td class="mono">Playwright で実行（デモ）</td></tr>
+<tr><td class="no">②</td><td>実行経路</td><td>既存の <code>run_auto_queue</code> を使うためバックエンド変更なし。増分レビュー・再試行・履歴は自動レビューと同じ</td><td class="mono">auto_agent/queue.rs:189</td></tr>
+<tr><td class="no">③</td><td>変更ファイル</td><td>新規 useBulkReviewRequest.tsx と、MyReviewsGrid.tsx の `I` キー、ConfirmDialog の改行表示、Help、仕様書</td><td class="mono">git status</td></tr>
+<tr><td class="no">④</td><td>500 行制限</td><td>MyReviewsGrid.tsx が 505 行になったため、snooze 処理を useMyReviewsGrid.ts へ移し 492 行に収めた</td><td class="mono">wc -l</td></tr>
+<tr><td class="no">⑤</td><td>テスト</td><td>新規 4 件と ConfirmDialog 3 件が成功、<code>tsc</code> も成功</td><td class="mono">vitest / tsc</td></tr>
+<tr class="key"><td class="no">⑥</td><td>全体の vitest</td><td>382 件失敗。<code>localStorage</code> 未定義で、1 ファイルは main でも同じく失敗。残りが同じ原因かは未確認 <span class="badge guess">推測</span></td><td class="mono">workItemViewsStorage.test.ts</td></tr>
+</table>
+
+<h2>要判断</h2>
+<table>
+<tr><th>#</th><th>問い</th><th>推奨と理由</th><th>他案 (利点 / 代償)</th></tr>
+<tr><td class="no">A</td><td>コミットして PR を作るか</td><td>作る — 変更が小さく、デモで通し確認済み</td><td>実機で確認してから — 確実 / tauri dev のビルド待ちで遅れる</td></tr>
+</table>
+
+<h2>注意点</h2>
+<div class="warn">ダイアログの初期フォーカスは Cancel のため、実行は Tab → Enter です。トーストの件数は依頼した数で、push が無く飛ばされた PR も含みます。結果フォルダ未設定だと失敗はログにだけ出ます。実機の Tauri では未確認で、コミットはしていません（ワークツリー worktree-bulk-pr-review）。</div>
+
+</main></body></html>

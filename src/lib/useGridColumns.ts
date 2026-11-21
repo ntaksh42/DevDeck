@@ -3,12 +3,19 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useMemo,
   useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
 import { clamp, gridColumnTemplate, gridColumnsMinWidth, storedNumbers } from "@/lib/utils";
-import { gridRows, hideColumnsToFit, measureColumnContentWidths, shrinkToFit } from "@/lib/gridAutoFit";
+import {
+  gridRows,
+  hideColumnsToFit,
+  measureColumnContentWidths,
+  mutatedGridRows,
+  shrinkToFit,
+} from "@/lib/gridAutoFit";
 
 export type ColumnResizeProps = {
   columnIndex: number;
@@ -23,6 +30,8 @@ export type ColumnResizeProps = {
 
 /** How far the flexible column (the title) may shrink in a narrow pane. */
 const FLEXIBLE_SHRINK_FLOOR = 200;
+// Quiet time after the last row change before new rows are measured (see below).
+const GROW_FIT_SETTLE_MS = 150;
 
 /**
  * Whether a grid's widths are auto-managed. Grids start in auto mode, and so
@@ -169,13 +178,22 @@ export function useGridColumns<K extends string>(options: {
   }, [gridElement]);
 
   const visibleKey = visibleColumns.join("|");
+  // hideColumnsToFit returns a new array on every render. Keep one identity per
+  // column set: the rows are memoized on it, and a fresh array re-rendered
+  // every visible row on every scroll event.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shownColumns = useMemo(() => visibleColumns, [visibleKey]);
   const fitColumns = useCallback(
-    (targets: readonly K[], { growOnly = false }: { growOnly?: boolean } = {}) => {
+    (
+      targets: readonly K[],
+      { growOnly = false, rows }: { growOnly?: boolean; rows?: HTMLElement[] } = {},
+    ) => {
       if (!gridElement) return false;
       const measured = measureColumnContentWidths(
         gridElement,
         prefixColumns.length,
         visibleColumns.length,
+        { rows },
       );
       if (measured.every((width) => width === null)) return false;
       setWidths((prev) => {
@@ -218,21 +236,31 @@ export function useGridColumns<K extends string>(options: {
   // past shorter rows does not make the columns jump back and forth.
   useEffect(() => {
     if (!autoMode || !gridElement || typeof MutationObserver === "undefined") return;
-    let frame = 0;
-    const observer = new MutationObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (!autoFittedRef.current) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Grow-only, so only the rows that just appeared or changed can widen a
+    // column; measuring every rendered row forced a layout per scrolled row.
+    // Measured once the rows settle rather than every frame: a fast scroll
+    // swaps in new rows each frame, and measuring them all mid-scroll (each
+    // cell resized and laid out) made the scrolling stutter.
+    let pending = new Set<HTMLElement>();
+    const observer = new MutationObserver((records) => {
+      mutatedGridRows(records).forEach((row) => pending.add(row));
+      if (pending.size === 0) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const rows = [...pending].filter((row) => row.isConnected);
+        pending = new Set();
+        if (!autoFittedRef.current || rows.length === 0) return;
         fitColumns(
           visibleColumns.filter((column) => column !== flexibleKey),
-          { growOnly: true },
+          { growOnly: true, rows },
         );
-      });
+      }, GROW_FIT_SETTLE_MS);
     });
     observer.observe(gridElement, { childList: true, subtree: true, characterData: true });
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(frame);
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoMode, gridElement, fitColumns, flexibleKey]);
@@ -295,7 +323,7 @@ export function useGridColumns<K extends string>(options: {
   return {
     widths,
     setWidths,
-    shownColumns: visibleColumns,
+    shownColumns,
     template,
     minWidth,
     autoWidths: autoMode,

@@ -2,7 +2,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::app_state::{run_blocking, AppState};
-use crate::db::{InboxCounts, InboxItem, InboxListState};
+use crate::db::{InboxCounts, InboxItem, InboxListState, ReplyReminder, ReplyReminderInput};
 use crate::error::{AppError, Result};
 
 const DEFAULT_LIST_LIMIT: u32 = 200;
@@ -103,4 +103,30 @@ pub async fn generate_action_inbox_insight(
         crate::inbox_insight::start_one(&db, &settings, &app, id).map_err(AppError::InvalidInput)
     })
     .await
+}
+
+/// Sets (or restarts) "remind me if no one replies" for a conversation.
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn set_reply_reminder(
+    input: ReplyReminderInput,
+    state: State<'_, AppState>,
+) -> Result<ReplyReminder> {
+    let db = state.db.clone();
+    run_blocking(move || db.set_reply_reminder(&input)).await
+}
+
+/// Reminders still waiting for a reply.
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_reply_reminders(state: State<'_, AppState>) -> Result<Vec<ReplyReminder>> {
+    let db = state.db.clone();
+    run_blocking(move || db.list_reply_reminders()).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn clear_reply_reminder(id: i64, state: State<'_, AppState>) -> Result<()> {
+    let db = state.db.clone();
+    run_blocking(move || db.clear_reply_reminder(id).map(|_| ())).await
 }

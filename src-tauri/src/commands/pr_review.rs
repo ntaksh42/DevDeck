@@ -14,6 +14,15 @@ use crate::pr_review::{
 use crate::work_items::MentionCandidate;
 
 #[tauri::command]
+pub(crate) async fn upload_comment_image(
+    input: crate::pr_review::CommentImageInput,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.upload_comment_image(input).await
+}
+
+#[tauri::command]
 #[tracing::instrument(skip(state))]
 pub async fn get_pull_request_review(
     input: PrLocator,

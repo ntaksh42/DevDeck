@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { ChevronDown, ChevronUp, Filter } from "lucide-react";
 import { type SortDirection } from "@/lib/utils";
+import type { ColumnDragProps } from "@/lib/columnDrag";
 
 // Sortable column header shared by the grids whose headers sort by a column key
 // (My Reviews, My Pull Requests). The optional filter button renders only when
@@ -15,6 +16,7 @@ export function SortHeaderButton<Key extends string>({
   resizeHandle,
   filterActive,
   onFilterOpen,
+  dragProps,
 }: {
   column: Key;
   label: string;
@@ -23,6 +25,7 @@ export function SortHeaderButton<Key extends string>({
   resizeHandle?: ReactNode;
   filterActive?: boolean;
   onFilterOpen?: (anchorEl: HTMLButtonElement) => void;
+  dragProps?: ColumnDragProps;
 }) {
   const active = sort.key === column;
 
@@ -30,13 +33,15 @@ export function SortHeaderButton<Key extends string>({
     <div
       role="columnheader"
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="relative min-w-0"
+      className="relative min-w-0 data-[drop-target=true]:bg-primary/15 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary"
+      {...dragProps?.cell}
     >
       <div className="flex min-w-0 items-center">
         <button
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(column)}
+          {...dragProps?.handle}
           className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
             active ? "text-foreground" : ""
           }`}

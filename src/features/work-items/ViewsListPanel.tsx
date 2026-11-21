@@ -1,4 +1,4 @@
-import { type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,6 +24,7 @@ import {
   type ViewCountQueryResult,
 } from './ViewsListItems';
 import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { WorkItemViewsOverflowMenu } from './WorkItemViewsOverflowMenu';
 
 export type ViewsListPanelProps = {
@@ -44,6 +45,7 @@ export type ViewsListPanelProps = {
   onPinToggle: () => void;
   onMoveLeft: () => void;
   onMoveRight: () => void;
+  onReorderView: (fromId: string, toId: string) => void;
   onPreviewToggle: () => void;
   onShare: () => void;
   onExport: () => void;
@@ -75,6 +77,7 @@ export function ViewsListPanel({
   onPinToggle,
   onMoveLeft,
   onMoveRight,
+  onReorderView,
   onPreviewToggle,
   onShare,
   onExport,
@@ -88,6 +91,14 @@ export function ViewsListPanel({
   onKeyDown,
 }: ViewsListPanelProps) {
   const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index]));
+  const viewDrag = useColumnDrag(onReorderView);
+
+  // In the one-row chip display the row scrolls sideways; keep the selected
+  // chip visible so a chip is never left half-cut at the edge.
+  useEffect(() => {
+    if (!collapsed || selectedViewIndex < 0) return;
+    viewButtonRefs.current[selectedViewIndex]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [collapsed, selectedViewIndex, viewButtonRefs]);
 
   // "Collapsed" is the default one-row chip display (a borderless toolbar row,
   // same height as the search rows); expanded is the card/compact-row grid.
@@ -302,6 +313,9 @@ export function ViewsListPanel({
                   onPreviewToggle,
                   onMoveLeft,
                   onMoveRight,
+                  canRun: views.length > 0,
+                  onEdit: onEditOpen,
+                  onRun,
                 }
               : undefined
           }
@@ -313,34 +327,38 @@ export function ViewsListPanel({
           onImport={onImport}
           onDelete={onDelete}
         />
-        <button
-          type="button"
-          disabled={!selectedView}
-          onClick={onEditOpen}
-          aria-keyshortcuts="E"
-          title="Edit selected view (E)"
-          className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          disabled={views.length === 0}
-          onClick={onRun}
-          title="Run all views (R)"
-          className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
-        >
-          <Play className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
+        {chips ? null : (
+          <>
+            <button
+              type="button"
+              disabled={!selectedView}
+              onClick={onEditOpen}
+              aria-keyshortcuts="E"
+              title="Edit selected view (E)"
+              className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              disabled={views.length === 0}
+              onClick={onRun}
+              title="Run all views (R)"
+              className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </>
+        )}
         <button
           type="button"
           aria-keyshortcuts="N"
           onClick={onAddOpen}
-          title="Add new view (N)"
+          title="New view (N)"
           className={`inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 ${textBtn}`}
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          Add
+          New view
         </button>
       </div>
     </div>
@@ -393,6 +411,7 @@ export function ViewsListPanel({
             return (
               <Item
                 key={view.id}
+                drag={views.length > 1 ? viewDrag(view.id) : undefined}
                 view={view}
                 query={viewCountQueries[index]}
                 stats={stats[index]}

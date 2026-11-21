@@ -7,6 +7,9 @@ import type {
   WorkItemResultPreview,
 } from "@/lib/azdoCommands";
 import {
+  AUTO_AGENT_MAX_PER_SYNC_MAX,
+  AUTO_AGENT_MAX_PER_SYNC_MIN,
+  DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
 } from "@/lib/reviewSettings";
@@ -43,6 +46,7 @@ export const writeCommands = new Set([
   "set_work_items_priority",
   "set_work_items_tags",
   "post_pull_request_comment",
+  "upload_comment_image",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
   "update_pull_request",
@@ -77,6 +81,11 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   agentWorkspacePath: null,
   inboxInsightEnabled: false,
   inboxInsightModel: null,
+  inboxInsightMaxPerSync: 3,
+  autoAgentEnabled: false,
+  autoAgentMaxPerSync: DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
+  autoAgentIntervalMinutes: 15,
+  autoAgentPipelinesEnabled: false,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
@@ -180,6 +189,29 @@ export function applyDemoSettingsUpdate(
       input && "inboxInsightModel" in input
         ? input.inboxInsightModel?.trim() || null
         : current.inboxInsightModel,
+    inboxInsightMaxPerSync:
+      input?.inboxInsightMaxPerSync !== undefined
+        ? Math.min(10, Math.max(1, Math.round(input.inboxInsightMaxPerSync)))
+        : current.inboxInsightMaxPerSync,
+    autoAgentEnabled:
+      input && "autoAgentEnabled" in input
+        ? input.autoAgentEnabled === true
+        : current.autoAgentEnabled,
+    autoAgentMaxPerSync:
+      input?.autoAgentMaxPerSync !== undefined
+        ? Math.min(
+            AUTO_AGENT_MAX_PER_SYNC_MAX,
+            Math.max(AUTO_AGENT_MAX_PER_SYNC_MIN, Math.round(input.autoAgentMaxPerSync)),
+          )
+        : current.autoAgentMaxPerSync,
+    autoAgentIntervalMinutes:
+      input?.autoAgentIntervalMinutes !== undefined
+        ? Math.min(1440, Math.max(1, Math.round(input.autoAgentIntervalMinutes)))
+        : current.autoAgentIntervalMinutes,
+    autoAgentPipelinesEnabled:
+      input && "autoAgentPipelinesEnabled" in input
+        ? input.autoAgentPipelinesEnabled === true
+        : current.autoAgentPipelinesEnabled,
     readOnlyValidationModeEnabled:
       input && "readOnlyValidationModeEnabled" in input
         ? Boolean(input.readOnlyValidationModeEnabled)
@@ -321,6 +353,19 @@ export function demoDiagnosticsExport(
   };
 }
 
+const DEMO_REVIEW_RESULT_IDS = [101, 189];
+const DEMO_WORK_ITEM_RESULT_IDS = [118, 123];
+
+export function demoResultItemIds(
+  folderPath: string | null,
+  target: "pull-request" | "work-item" | undefined,
+): number[] {
+  if (!folderPath) {
+    return [];
+  }
+  return target === "pull-request" ? DEMO_REVIEW_RESULT_IDS : DEMO_WORK_ITEM_RESULT_IDS;
+}
+
 export function demoReviewResultPreview(
   folderPath: string | null,
   pullRequestId: number | undefined,
@@ -328,7 +373,7 @@ export function demoReviewResultPreview(
   if (!folderPath || !pullRequestId) {
     return null;
   }
-  if (pullRequestId !== 101 && pullRequestId !== 189) {
+  if (!DEMO_REVIEW_RESULT_IDS.includes(pullRequestId)) {
     return null;
   }
 
@@ -369,7 +414,7 @@ export function demoWorkItemResultPreview(
   if (!folderPath || !workItemId) {
     return null;
   }
-  if (workItemId !== 123 && workItemId !== 118) {
+  if (!DEMO_WORK_ITEM_RESULT_IDS.includes(workItemId)) {
     return null;
   }
 

@@ -10,10 +10,11 @@ import {
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { focusPrimaryPreview } from "@/lib/utils";
+import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
@@ -82,7 +83,15 @@ export function ReviewTab({
     confirmDialogProps,
   } = usePrReviewActions(pr);
 
+  const imageTarget = pr.webUrl?.includes("/_git/") ? {
+    organizationId: pr.organizationId,
+    projectId: pr.projectId,
+    pr: { repositoryId: pr.repositoryId, pullRequestId: pr.pullRequestId },
+  } : undefined;
   const mentionSearch = usePrMentionSearch(pr.organizationId);
+  const descriptionMentionNames = useMentionIdentityNames(pr.organizationId, [
+    review?.description,
+  ]);
   const resolvePreviewImage = useCallback(
     (url: string) => fetchWorkItemImageCached({ organizationId: pr.organizationId, url }),
     [pr.organizationId],
@@ -149,7 +158,8 @@ export function ReviewTab({
           <select
             id="pr-vote-select"
             value={myVote}
-            disabled={voteMutation.isPending}
+            disabled={readOnly || voteMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : undefined}
             onChange={(event) =>
               voteMutation.mutate({
                 ...prLocator(pr),
@@ -255,6 +265,8 @@ export function ReviewTab({
                   value={draftTitle}
                   onChange={(event) => setDraftTitle(event.target.value)}
                   onKeyDown={(event) => {
+                    // Enter / Escape that confirm or cancel an IME conversion belong to the IME.
+                    if (isImeComposing(event)) return;
                     if (event.key === "Escape") {
                       event.stopPropagation();
                       setEditingDetails(false);
@@ -275,6 +287,8 @@ export function ReviewTab({
                   value={draftDescription}
                   onChange={(event) => setDraftDescription(event.target.value)}
                   onKeyDown={(event) => {
+                    // Enter / Escape that confirm or cancel an IME conversion belong to the IME.
+                    if (isImeComposing(event)) return;
                     if (event.key === "Escape") {
                       event.stopPropagation();
                       setEditingDetails(false);
@@ -317,6 +331,7 @@ export function ReviewTab({
                   className="text-xs text-foreground"
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
+                  mentionDisplayNames={descriptionMentionNames}
                 />
               ) : (
                 <p className="text-xs italic text-muted-foreground">No description.</p>
@@ -366,8 +381,10 @@ export function ReviewTab({
                   thread={thread}
                   busy={commentMutation.isPending || statusMutation.isPending}
                   mentionSearch={mentionSearch}
+                  imageTarget={imageTarget}
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
+                  organizationId={pr.organizationId}
                   onReply={(content) =>
                     commentMutation.mutateAsync({
                       ...prLocator(pr),
@@ -412,6 +429,7 @@ export function ReviewTab({
           placeholder="Add a comment…"
           busy={commentMutation.isPending}
           mentionSearch={mentionSearch}
+          imageTarget={imageTarget}
           onSubmit={(content) =>
             commentMutation.mutateAsync({ ...prLocator(pr), content }).then(() => undefined)
           }

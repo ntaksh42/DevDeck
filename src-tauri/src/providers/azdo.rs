@@ -8,10 +8,10 @@ use crate::app_state::run_blocking;
 use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::pipelines::{
-    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    CancelPipelineRunInput, FlakyTestReport, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListFlakyTestsInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineService, PipelineTestResults,
     QueuePipelineRunInput, RerunPipelineRunInput, RetryPipelineStageInput,
@@ -392,6 +392,10 @@ impl Provider for AzdoProvider {
         input: ListPipelineTestResultsInput,
     ) -> Result<PipelineTestResults> {
         self.pipelines.list_test_results(input).await
+    }
+
+    async fn list_flaky_tests(&self, input: ListFlakyTestsInput) -> Result<FlakyTestReport> {
+        self.pipelines.list_flaky_tests(input).await
     }
 
     async fn get_pipeline_definition(

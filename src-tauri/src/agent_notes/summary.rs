@@ -26,6 +26,8 @@ pub struct AgentNoteSummary {
     pub needs_you: usize,
     pub drafts: usize,
     pub done: usize,
+    /// Done notes the agent finished (not the ones the user resolved).
+    pub done_by_agent: usize,
     /// Latest agent reply across the item's notes.
     pub last_agent_reply_at: Option<String>,
     /// Changes whenever any note file of the item changes.
@@ -75,6 +77,9 @@ fn summarize_item(item_id: i64, notes: &[AgentNote]) -> AgentNoteSummary {
         needs_you: count(&|n| needs_you(n)),
         drafts: count(&|n| n.status == "draft"),
         done: count(&|n| n.status == "done"),
+        done_by_agent: count(&|n| {
+            n.status == "done" && n.resolved.as_deref() != Some(super::ops::RESOLVED_BY_USER)
+        }),
         last_agent_reply_at: notes
             .iter()
             .flat_map(|n| n.replies.iter())

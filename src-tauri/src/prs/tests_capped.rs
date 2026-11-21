@@ -57,6 +57,7 @@ fn old_pr(org_id: &str) -> CachedPr {
 async fn sync_with(
     returned: usize,
     reuse_shared_cache: bool,
+    creator: Option<&str>,
 ) -> (AppDatabase, String, Option<String>, tempfile::NamedTempFile) {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -67,6 +68,37 @@ async fn sync_with(
         })))
         .mount(&server)
         .await;
+    if let Some(user) = creator {
+        let mut authored = pr_json(700);
+        authored["createdBy"] = json!({ "id": user });
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.creatorId", user))
+            .and(query_param("$skip", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 0, "value": []
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.creatorId", user))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1, "value": [authored]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.reviewerId", user))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 0, "value": []
+            })))
+            .mount(&server)
+            .await;
+    }
     let prs: Vec<_> = (1..=returned as i64).map(pr_json).collect();
     Mock::given(method("GET"))
         .and(path("/project-1/_apis/git/pullrequests"))
@@ -89,13 +121,15 @@ async fn sync_with(
             base_url: "https://dev.azure.com/contoso".to_string(),
             auth_provider: "pat".to_string(),
             credential_key: "azdodeck:org:contoso:pat".to_string(),
-            authenticated_user_id: None,
+            authenticated_user_id: creator.map(str::to_owned),
             authenticated_user_display_name: None,
             authenticated_user_unique_name: None,
             provider_kind: "azdo".to_string(),
         })
         .unwrap();
-    db.replace_pull_requests_for_projects(&org.id, &["project-1"], &[old_pr(&org.id)])
+    let mut cached = old_pr(&org.id);
+    cached.created_by_id = creator.map(str::to_owned);
+    db.replace_pull_requests_for_projects(&org.id, &["project-1"], &[cached])
         .unwrap();
 
     let base_url = Url::parse(&format!("{}/", server.uri())).unwrap();
@@ -120,7 +154,7 @@ async fn sync_with(
 
 #[tokio::test]
 async fn capped_project_keeps_cached_prs_outside_the_fetched_window() {
-    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, false).await;
+    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, false, None).await;
 
     let titles: Vec<String> = db
         .search_pull_requests(&org_id, None, None, None)
@@ -136,7 +170,7 @@ async fn capped_project_keeps_cached_prs_outside_the_fetched_window() {
 
 #[tokio::test]
 async fn capped_shared_snapshot_keeps_cached_prs_on_the_next_sync() {
-    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, true).await;
+    let (db, org_id, warning, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, true, None).await;
     let prs = db.search_pull_requests(&org_id, None, None, None).unwrap();
     assert!(prs.iter().any(|pr| pr.pull_request_id == 999_999));
     assert!(warning.unwrap().contains("or more active PRs"));
@@ -144,7 +178,7 @@ async fn capped_shared_snapshot_keeps_cached_prs_on_the_next_sync() {
 
 #[tokio::test]
 async fn uncapped_project_still_drops_prs_that_are_no_longer_active() {
-    let (db, org_id, warning, _file) = sync_with(3, false).await;
+    let (db, org_id, warning, _file) = sync_with(3, false, None).await;
 
     let titles: Vec<String> = db
         .search_pull_requests(&org_id, None, None, None)
@@ -157,4 +191,12 @@ async fn uncapped_project_still_drops_prs_that_are_no_longer_active() {
     // (The org has no signed-in user id, so an unrelated My Reviews warning is
     // expected; there must be no cap warning.)
     assert!(warning.is_none_or(|w| !w.contains("or more active PRs")));
+}
+
+#[tokio::test]
+async fn capped_project_reconciles_authored_prs_outside_the_fetched_window() {
+    let (db, org_id, _, _file) = sync_with(PROJECT_PR_SYNC_TOP as usize, false, Some("me")).await;
+    let authored = db.list_created_pull_requests(&org_id, "me").unwrap();
+    let ids: Vec<_> = authored.iter().map(|row| row.pr.pull_request_id).collect();
+    assert_eq!(ids, [700]);
 }

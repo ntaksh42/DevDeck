@@ -19,9 +19,9 @@ describe("Inbox priority", () => {
     expect(priorityButton("Other").textContent).toBe("Other 1");
     expect(priorityButton("All").textContent).toBe("All 4");
     expect(screen.queryByText(/direct PR \/ WI mentions/)).toBeNull();
-    expect(rowFor(list, "!42 azdo-dashboard").textContent).toContain("Fix first");
+    expect(rowFor(list, "!42").textContent).toContain("Fix first");
     expect(rowFor(list, "#123").textContent).toContain("Reply");
-    expect(rowFor(list, "!103 api-gateway").querySelector('[title="Verdict by Claude"]')).toBeNull();
+    expect(rowFor(list, "!103").querySelector('[title="Verdict by Claude"]')).toBeNull();
     expect(rowFor(list, "#123").querySelector('[title="Verdict by Claude"]')?.textContent).toBe("Reply");
   });
 
@@ -31,11 +31,11 @@ describe("Inbox priority", () => {
     expect(priorityButton("All").getAttribute("aria-checked")).toBe("true");
     fireEvent.click(priorityButton("Priority"));
     expect(storedRows(list)).toHaveLength(3);
-    expect(rowFor(list, "!42 azdo-dashboard").textContent).toContain("null 扱いの補足");
+    expect(rowFor(list, "!42").textContent).toContain("null 扱いの補足");
     expect(rowFor(list, "#123")).toBeTruthy();
     fireEvent.click(priorityButton("Other"));
     expect(storedRows(list)).toHaveLength(1);
-    expect(rowFor(list, "!103 api-gateway")).toBeTruthy();
+    expect(rowFor(list, "!103")).toBeTruthy();
     fireEvent.click(priorityButton("All"));
     expect(storedRows(list)).toHaveLength(4);
     expect(demoListInboxItems({ state: "done" })).toHaveLength(0);
@@ -44,7 +44,7 @@ describe("Inbox priority", () => {
   it("drops hidden marks so Done and Undo only change visible conversations", async () => {
     renderView();
     const list = await openList();
-    fireEvent.click(rowFor(list, "!103 api-gateway"));
+    fireEvent.click(rowFor(list, "!103"));
     fireEvent.keyDown(list, { key: "x" });
     fireEvent.click(priorityButton("Priority"));
     expect(screen.queryByText(/marked \(Esc/)).toBeNull();

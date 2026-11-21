@@ -291,7 +291,6 @@ pub(super) fn work_item_notification_items(
             }
             None
         })
-        .take(20)
         .collect()
 }
 

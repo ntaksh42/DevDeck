@@ -35,6 +35,14 @@ describe("keybindings registry", () => {
     expect(resolveKeybindings()).toEqual(defaultKeybindingMap());
   });
 
+  it("uses A for Agent Work and ignores retired Analyze overrides", () => {
+    window.localStorage.setItem(KEYBINDINGS_STORAGE_KEY, JSON.stringify({ gotoAnalyze: "Z" }));
+    expect(resolveKeybindings().gotoAutoQueue).toBe("A");
+    expect(loadKeybindingOverrides()).toEqual({});
+    saveKeybindingOverrides({ gotoAutoQueue: "Z" });
+    expect(resolveKeybindings().gotoAutoQueue).toBe("Z");
+  });
+
   it("applies stored overrides and falls back to defaults for the rest", () => {
     saveKeybindingOverrides({ commandPalette: "Ctrl+J" });
     const map = resolveKeybindings();
@@ -85,6 +93,13 @@ describe("matchesCombo", () => {
     expect(matchesCombo("?", evt("?"))).toBe(true);
   });
 
+  it("tells Shift+letter combos apart from the plain letter", () => {
+    expect(matchesCombo("Ctrl+Shift+P", evt("P", { ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(matchesCombo("Ctrl+Shift+P", evt("p", { ctrlKey: true }))).toBe(false);
+    expect(matchesCombo("Ctrl+P", evt("P", { ctrlKey: true, shiftKey: true }))).toBe(false);
+    expect(matchesCombo("Ctrl+P", evt("P", { ctrlKey: true }))).toBe(true); // Caps Lock
+  });
+
   it("matches the comma settings binding", () => {
     expect(matchesCombo("Ctrl+,", evt(",", { ctrlKey: true }))).toBe(true);
   });
@@ -102,6 +117,11 @@ describe("comboFromEvent", () => {
 
   it("drops a lone Shift for printable characters", () => {
     expect(comboFromEvent(evt("?", { shiftKey: true }))).toBe("?");
+  });
+
+  it("keeps Shift for letters", () => {
+    expect(comboFromEvent(evt("K", { shiftKey: true }))).toBe("Shift+K");
+    expect(comboFromEvent(evt("P", { ctrlKey: true, shiftKey: true }))).toBe("Ctrl+Shift+P");
   });
 });
 

@@ -19,7 +19,8 @@ import { navigateToWorkItem } from "@/lib/crossLinks";
 import { openExternalUrl } from "@/lib/openExternal";
 import { clamp } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
-import { HeaderToolbarPortal } from "@/components/HeaderToolbarSlot";
+import { parkGridFocus } from "@/lib/parkGridFocus";
+import { SEGMENT_GROUP, segmentClass } from "@/components/segmentedFilter";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { NotificationRow, NOTIFICATION_ROW_HEIGHT } from "./NotificationRow";
 import {
@@ -155,6 +156,7 @@ export function NotificationsView({
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight: virtualTotalHeight,
     scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: entries.length,
@@ -167,9 +169,19 @@ export function NotificationsView({
   const selectedRecord = items[selectedIndex];
   usePublishAgentSubject(selectedRecord ? resolveNotificationAgentSubject(selectedRecord) : null);
 
+  // New notifications arrive at the top; keep the same record selected rather
+  // than whatever row now sits at its old position.
+  // (The follow effect must run before the one recording the selected id.)
+  const selectedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(items.length - 1, 0)));
-  }, [items.length]);
+    const kept = selectedIdRef.current === null
+      ? -1
+      : items.findIndex((record) => record.id === selectedIdRef.current);
+    setSelectedIndex((index) => (kept >= 0 ? kept : Math.min(index, Math.max(items.length - 1, 0))));
+  }, [items]);
+  useEffect(() => {
+    selectedIdRef.current = selectedRecord?.id ?? null;
+  }, [selectedRecord?.id]);
 
   // Rows outside the virtual window unmount, so roving focus is restored once
   // the row for the new selection is mounted again. This effect runs on every
@@ -195,8 +207,10 @@ export function NotificationsView({
 
   function moveSelectionTo(index: number) {
     const next = clamp(index, 0, items.length - 1);
+    parkGridFocus(rowRefs.current[next]);
     restoreFocusRef.current = true;
     scrollRowIntoView(entryIndexOf[next] ?? next);
+    selectedIdRef.current = items[next]?.id ?? null;
     setSelectedIndex(next);
   }
 
@@ -305,9 +319,19 @@ export function NotificationsView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <HeaderToolbarPortal>
-        <div role="group" aria-label="Notification toolbar" className="flex shrink-0 items-center gap-2">
-          <div role="group" aria-label="Filter by notification category" className="flex items-center gap-1">
+
+      {listQuery.isError ? (
+        <ErrorState
+          message={commandErrorMessage(listQuery.error)}
+          onRetry={() => void listQuery.refetch()}
+        />
+      ) : null}
+
+      <div data-grid-focus-fallback="true" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
+        {/* Tab band, as in the docked lists: category segments, unread, organization. */}
+        <div role="group" aria-label="Notification toolbar" className="flex h-7 shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-2">
+          <span className="text-xs font-semibold">Items</span>
+          <div role="group" aria-label="Filter by notification category" className={SEGMENT_GROUP}>
             {categoryButtons.map((button, position) => {
               const count = categoryCounts[button.value] ?? 0;
               const active = category === button.value;
@@ -325,37 +349,28 @@ export function NotificationsView({
                     setSelectedIndex(0);
                   }}
                   onKeyDown={(event) => handleCategoryKeyDown(event, position)}
-                  className={`inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-ring ${
-                    active
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : `border-border bg-card hover:bg-secondary ${count === 0 ? "text-muted-foreground/50" : ""}`
-                  }`}
+                  className={`${segmentClass(active)} ${!active && count === 0 ? "text-muted-foreground/60" : ""}`}
                 >
-                  {button.label}
-                  <span className="tabular-nums">{count}</span>
+                  {button.label} <span className="tabular-nums">{count}</span>
                 </button>
               );
             })}
           </div>
-
-          <label className="flex items-center gap-1.5 whitespace-nowrap text-sm">
+          <label className="flex items-center gap-1 whitespace-nowrap text-2xs text-muted-foreground">
             <input
               type="checkbox"
               checked={unreadOnly}
               onChange={(event) => setUnreadOnly(event.target.checked)}
-              className="h-4 w-4"
+              className="h-3 w-3"
             />
             Unread only
           </label>
-
-        {showOrgFilter ? (
-          <label className="flex items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">Organization</span>
+          {showOrgFilter ? (
             <select
               value={organizationId}
               onChange={(event) => setOrganizationId(event.target.value)}
               aria-label="Filter by organization"
-              className="h-7 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">All organizations</option>
               {organizations.map((org) => (
@@ -364,28 +379,8 @@ export function NotificationsView({
                 </option>
               ))}
             </select>
-          </label>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => markAllReadMutation.mutate()}
-          disabled={markAllReadMutation.isPending}
-          className="inline-flex h-7 items-center rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Mark all read
-        </button>
+          ) : null}
         </div>
-      </HeaderToolbarPortal>
-
-      {listQuery.isError ? (
-        <ErrorState
-          message={commandErrorMessage(listQuery.error)}
-          onRetry={() => void listQuery.refetch()}
-        />
-      ) : null}
-
-      <div data-grid-focus-fallback="true" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
         {listQuery.isLoading ? (
           <LoadingState />
         ) : items.length === 0 ? (
@@ -401,7 +396,8 @@ export function NotificationsView({
             className="flex min-h-0 flex-1 flex-col outline-none"
             onKeyDown={handleKeyDown}
           >
-            <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+              <div style={{ minHeight: virtualTotalHeight }}>
               {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
               {virtualEntries.map((entry) => {
                 if (entry.type === "header") {
@@ -437,6 +433,7 @@ export function NotificationsView({
                 );
               })}
               {virtualBottomPadding > 0 ? <div style={{ height: virtualBottomPadding }} /> : null}
+              </div>
             </div>
             {listQuery.hasNextPage ? (
               <div className="flex shrink-0 justify-center border-t border-border py-2">
@@ -457,7 +454,16 @@ export function NotificationsView({
         )}
         <ListStatusBar
           summary={[itemCount(items.length), `${items.filter((record) => !record.isRead).length} unread`]}
-        />
+        >
+          <button
+            type="button"
+            onClick={() => markAllReadMutation.mutate()}
+            disabled={markAllReadMutation.isPending}
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Mark all read
+          </button>
+        </ListStatusBar>
       </div>
     </div>
   );

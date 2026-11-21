@@ -1,6 +1,6 @@
 import { ActiveFilters } from "@/components/ActiveFilters";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
-import { formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate } from "@/lib/utils";
 import type { WorkItemSummary } from "@/lib/azdoCommands";
 
 export function WiGridStatusBar({
@@ -64,7 +64,7 @@ export function WiGridStatusBar({
       summary={[
         count,
         dataUpdatedAt ? (
-          <span key="updated" title={new Date(dataUpdatedAt).toLocaleString()}>
+          <span key="updated" title={formatDate(new Date(dataUpdatedAt).toISOString())}>
             updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
           </span>
         ) : null,

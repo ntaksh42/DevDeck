@@ -182,7 +182,7 @@ export function PipelineDefinitionEditForm({
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
               Variables
             </h3>
             <button
@@ -261,7 +261,7 @@ export function PipelineDefinitionEditForm({
         </section>
 
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
             CI trigger
           </h3>
           <label className="flex items-center gap-2 text-xs">

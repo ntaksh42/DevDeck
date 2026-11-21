@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus};
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, TimeZone, Utc};
 
 use super::*;
 use crate::db::{CachedPr, Organization};
@@ -125,7 +125,11 @@ pub(crate) fn sort_summaries(results: &mut [PullRequestSummary], sort_by: SortBy
 ///
 /// 100ns ("tick") precision, not nanoseconds: Azure DevOps receives this value
 /// directly, and ticks are the finest resolution its own .NET timestamps use.
-pub(crate) fn parse_date_bound(value: Option<&str>, end_of_day: bool) -> Result<Option<String>> {
+pub(crate) fn parse_date_bound(
+    value: Option<&str>,
+    end_of_day: bool,
+    utc_offset_minutes: Option<i32>,
+) -> Result<Option<String>> {
     let Some(trimmed) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
@@ -137,9 +141,26 @@ pub(crate) fn parse_date_bound(value: Option<&str>, end_of_day: bool) -> Result<
         NaiveTime::from_hms_opt(0, 0, 0)
     }
     .expect("valid constant time");
-    Ok(Some(
-        Utc.from_utc_datetime(&date.and_time(time)).to_rfc3339(),
-    ))
+    // The picked date is a day on the user's calendar, so its bounds are local
+    // midnights, not UTC ones (a 9-hour shift in Japan otherwise).
+    let offset = local_offset(utc_offset_minutes)?;
+    let local = offset
+        .from_local_datetime(&date.and_time(time))
+        .single()
+        .ok_or_else(|| AppError::InvalidInput(format!("invalid date: {trimmed}")))?;
+    Ok(Some(local.with_timezone(&Utc).to_rfc3339()))
+}
+
+/// The user's UTC offset; omitted means UTC. Real offsets stay within ±14h.
+pub(crate) fn local_offset(utc_offset_minutes: Option<i32>) -> Result<FixedOffset> {
+    let minutes = utc_offset_minutes.unwrap_or(0);
+    if minutes.abs() > 14 * 60 {
+        return Err(AppError::InvalidInput(format!(
+            "invalid UTC offset: {minutes} minutes"
+        )));
+    }
+    FixedOffset::east_opt(minutes * 60)
+        .ok_or_else(|| AppError::InvalidInput(format!("invalid UTC offset: {minutes} minutes")))
 }
 
 /// Inclusive RFC3339 range check, comparing parsed instants rather than the
@@ -229,7 +250,7 @@ pub(crate) fn cached_pr_to_summary(pr: CachedPr) -> PullRequestSummary {
 
 /// Maps a live Azure DevOps PR into a search summary, falling back to the
 /// queried project's id/name when the PR omits repository project metadata.
-fn live_pr_to_summary(
+pub(super) fn live_pr_to_summary(
     org: &Organization,
     default_project_id: &str,
     default_project_name: &str,

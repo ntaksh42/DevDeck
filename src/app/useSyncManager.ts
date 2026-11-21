@@ -6,7 +6,7 @@ import { invalidateSyncedDataQueries, invalidationScopesForSyncScope } from "./a
 import { HOT_SYNC_FOCUS_MIN_INTERVAL_MS } from "./types";
 import type { View } from "./types";
 
-function currentViewSyncScope(activeView: View): SyncScope {
+export function currentViewSyncScope(activeView: View): SyncScope {
   if (
     activeView === "workItems" ||
     activeView === "myWorkItems" ||
@@ -14,7 +14,17 @@ function currentViewSyncScope(activeView: View): SyncScope {
   ) {
     return "myWorkItems";
   }
-  if (activeView === "settings") return "all";
+  // These views show pull requests and work items together (the Inbox's work
+  // item mentions come from the work item sync), so refresh both.
+  if (
+    activeView === "settings" ||
+    activeView === "inbox" ||
+    activeView === "notifications" ||
+    activeView === "autoQueue" ||
+    activeView === "crossOrgSummary"
+  ) {
+    return "all";
+  }
   return "myReviews";
 }
 

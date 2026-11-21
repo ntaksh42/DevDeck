@@ -41,8 +41,11 @@ pub(super) async fn collect_ready_prs(
         let ready = match result {
             Ok(value) => value,
             Err(error) => {
+                // Keep the stored state: a failed check says nothing about the
+                // PR, and writing `false` would hide the Ready to merge badge
+                // until the next sync.
                 tracing::warn!(pr = pr.pull_request_id, %error, "merge readiness fetch failed");
-                false
+                continue;
             }
         };
         let notify = !snoozed.contains(&format!("{}:{}", pr.repository_id, pr.pull_request_id))
