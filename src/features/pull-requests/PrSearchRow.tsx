@@ -88,7 +88,7 @@ export const PrSearchRow = forwardRef<
           else focusPrimaryPreview();
         }
       }}
-      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
+      className={`grid h-[29px] cursor-pointer select-none items-center whitespace-nowrap gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
