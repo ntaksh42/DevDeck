@@ -1,3 +1,4 @@
+import type { WorkItemSummary, PullRequestSummary } from "@/lib/azdoCommands";
 import type { KeybindingMap } from "@/lib/keybindings";
 
 export type View =
@@ -10,15 +11,16 @@ export type View =
   | "pipelines"
   | "notifications"
   | "inbox"
+  | "home"
+  | "autoQueue"
   | "crossOrgSummary"
-  | "analyze"
   | "settings";
 
 export type NavSectionId = "pullRequests" | "workItems";
 
-export type PaletteSearchKind = "workItems" | "pullRequests" | "wiki";
+export type PaletteSearchKind = "workItems" | "pullRequests" | "wiki" | "inbox";
 
-export type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
+export type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string; workItem?: WorkItemSummary; pullRequest?: PullRequestSummary };
 
 export const DEFAULT_SIDEBAR_WIDTH = 232;
 export const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
@@ -37,8 +39,9 @@ export const GOTO_BINDING_VIEWS = {
   gotoPipelines: "pipelines",
   gotoNotifications: "notifications",
   gotoInbox: "inbox",
+  gotoHome: "home",
   gotoCrossOrgSummary: "crossOrgSummary",
-  gotoAnalyze: "analyze",
+  gotoAutoQueue: "autoQueue",
   gotoSettings: "settings",
 } satisfies Partial<Record<keyof KeybindingMap, View>>;
 

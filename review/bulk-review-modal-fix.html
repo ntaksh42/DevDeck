@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- report-sheet -->
+<title>一括レビュー依頼のモーダル修正</title>
+<style>
+:root{
+  --ag-ink:var(--foreground,#212529);--ag-muted:var(--muted-foreground,#64707C);
+  --ag-line:var(--border,#DEE2E6);--ag-paper:var(--background,#FFFFFF);
+  --ag-red:#DC2626;--ag-amber:#B45309}
+*{box-sizing:border-box}
+body{background:var(--ag-paper);color:var(--ag-ink);font-family:'IBM Plex Sans JP','Yu Gothic UI','Meiryo',sans-serif;font-size:15px;line-height:1.75;margin:0;padding:12px 20px 24px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;line-height:1.45;margin:4px 0 10px}
+h2{font-size:17px;margin:22px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--ag-line)}
+.concl{border:1px solid var(--ag-line);border-left:3px solid var(--ag-red);border-radius:8px;padding:10px 16px}
+.mono{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--ag-muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;margin:6px 0}
+th,td{border-bottom:1px solid var(--ag-line);padding:6px 8px;text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--ag-muted);font-weight:500;white-space:nowrap}
+td.no{width:2.5em;color:var(--ag-muted);font-family:Consolas,monospace}
+.warn{border-left:3px solid var(--ag-muted);padding:4px 12px;margin:6px 0}
+tr.key td{font-weight:700}
+</style></head>
+<body><main>
+
+<h1>ダイアログ内のキーが背後に漏れていたので、モーダルにした</h1>
+<div class="concl"><b>結論:</b> 漏れ 3 件を直し、ブラウザで再確認した。あわせて「Points to check」欄を追加した。</div>
+
+<table>
+<tr><th>#</th><th>漏れ</th><th>原因</th><th>直し方</th><th>根拠</th></tr>
+<tr class="key"><td class="no">①</td><td>ダイアログ内の a / s / x / z / d などが背後のグリッドに届く</td><td>ダイアログがグリッドの React ツリー内にあり、キーが親へ伝わる</td><td>ダイアログ根で <code>stopPropagation</code></td><td class="mono">BulkReviewDialog.tsx</td></tr>
+<tr class="key"><td class="no">②</td><td><code>G</code> の画面移動チェーンと <code>Ctrl+K</code> が効く</td><td>全体ショートカットが window の capture で先に動く</td><td><code>aria-modal</code> が開いている間は <code>G</code> チェーンを始めない。フォーカスが外へ出たらダイアログへ戻す</td><td class="mono">useKeyboardShortcuts.ts:91</td></tr>
+<tr><td class="no">③</td><td>背景クリックで閉じ、入力中のメモが消える</td><td>背景の mousedown を取り消しにしていた</td><td>背景クリックは何もせず、フォーカスも動かさない</td><td class="mono">BulkReviewDialog.tsx</td></tr>
+<tr><td class="no">④</td><td>追加: 「Points to check」欄</td><td>気になる点を Agent に伝えたい</td><td>最大 2,000 文字。選んだ全 PR の Note に引用で足し、各点への所見を結果 HTML に書かせる (<code>run_auto_queue</code> の <code>focus</code>)</td><td class="mono">auto_agent/runner.rs</td></tr>
+</table>
+
+<h2>確認</h2>
+<table>
+<tr><th>#</th><th>確認</th><th>結果</th></tr>
+<tr><td class="no">a</td><td>ブラウザで 6 項目 (背景クリック・入力・Ctrl+K・各キー・Escape・フォーカス戻り)</td><td>背後に漏れず、Escape で閉じ、一覧へフォーカスが戻る</td></tr>
+<tr><td class="no">b</td><td>vitest (<code>--no-webstorage</code>)</td><td>新規 6 件と <code>src/app</code> 含む 114 件が成功</td></tr>
+<tr><td class="no">c</td><td>Rust (<code>cargo test</code> の <code>auto_agent</code>、<code>fmt</code>、<code>clippy</code>)</td><td>33 件成功、fmt・clippy とも指摘なし</td></tr>
+</table>
+
+<h2>注意点</h2>
+<div class="warn"><code>aria-modal</code> のガードは他のモーダルにも効きます。<code>--no-webstorage</code> は Node 26 で <code>localStorage</code> が未定義になる環境差の回避で、付けないと全体 vitest は多数失敗します。実機の Tauri では未確認で、コミットもしていません（ワークツリー worktree-bulk-pr-review）。</div>
+
+</main></body></html>

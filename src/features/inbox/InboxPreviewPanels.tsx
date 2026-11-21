@@ -12,6 +12,7 @@ import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { PrThreadCard } from "@/features/pull-requests/PrThreadCard";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
 import { commentRichHtml } from "@/features/work-items/workItemHtml";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import type { InboxEntry } from "./inboxPresentation";
 
 /** Text to start the reply box with; a new `key` remounts the composer with it. */
@@ -21,7 +22,7 @@ export const ACTION_BUTTON =
   "inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs font-medium hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Kbd({ children }: { children: string }) {
-  return <kbd className="rounded border border-border bg-muted px-1 text-[10px] font-mono">{children}</kbd>;
+  return <kbd className="rounded border border-border bg-muted px-1 text-3xs font-mono">{children}</kbd>;
 }
 
 export function ThreadPanel({
@@ -69,16 +70,17 @@ export function ThreadPanel({
         mentionSearch={mentionSearch}
         resolveImageSource={resolveImageSource}
         baseUrl={item.webUrl}
+        organizationId={item.organizationId}
         onReply={onReply}
         onToggleStatus={onToggleStatus}
       />
       {beforeComposer}
       {readOnly ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-2xs text-muted-foreground">
           Read-only validation mode: replies and status changes are disabled.
         </p>
       ) : (
-        <div data-inbox-composer="true" className="sticky bottom-0 z-10 mt-1 border-t border-border bg-card pt-1">
+        <div data-inbox-composer="true" className="sticky -bottom-2 z-10 mt-1 border-t border-border bg-card pb-2 pt-1">
           <CommentComposer
             key={draft?.key ?? 0}
             initialValue={draft?.text ?? ""}
@@ -87,6 +89,11 @@ export function ThreadPanel({
             submitLabel="Reply"
             busy={busy}
             mentionSearch={mentionSearch}
+            imageTarget={item.repositoryId && item.webUrl?.includes("/_git/") ? {
+              organizationId: item.organizationId,
+              projectId: item.projectId,
+              pr: { repositoryId: item.repositoryId, pullRequestId: item.subjectId },
+            } : undefined}
             onSubmit={onReply}
             onAltSubmit={thread.isResolved ? undefined : onReplyAndResolve}
             altSubmitHint={thread.isResolved ? undefined : "Ctrl+Shift+Enter to post & resolve"}
@@ -156,6 +163,11 @@ export function WorkItemPanel({
     if (draft) setReplyTo(null);
   }, [draft]);
 
+  const mentionDisplayNames = useMentionIdentityNames(
+    item.organizationId,
+    workItem?.comments.flatMap((comment) => [comment.text, comment.renderedText]) ?? [],
+  );
+
   if (!workItem) {
     return (
       <p className="py-2 text-xs text-muted-foreground">
@@ -167,7 +179,6 @@ export function WorkItemPanel({
   const mentionIndex = workItem.comments.findIndex((comment) => comment.id === item.commentId);
   const shown = Math.max(3, mentionIndex + 1);
   const latest = workItem.comments.slice(0, showAll ? undefined : shown);
-  const mentionDisplayNames = new Map<string, string>();
   return (
     <div className="space-y-1.5 py-1">
       <p className="text-xs text-muted-foreground">
@@ -183,10 +194,10 @@ export function WorkItemPanel({
             <div
               key={comment.id}
               className={`px-2 py-1 ${
-                comment.id === item.commentId ? "border-l-[3px] border-l-amber-400 bg-amber-50/40 dark:bg-amber-950/20" : ""
+                comment.id === item.commentId ? "border-l-[3px] border-l-warning bg-warning/10" : ""
               }`}
             >
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
                 <span className="font-medium text-foreground">{comment.createdBy ?? "Unknown"}</span>
                 {comment.createdDate ? <span>{formatRelativeDate(comment.createdDate)}</span> : null}
                 {readOnly ? null : (
@@ -218,20 +229,20 @@ export function WorkItemPanel({
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+          className="text-2xs text-muted-foreground hover:text-foreground hover:underline"
         >
           Show {workItem.comments.length - shown} older comments
         </button>
       ) : null}
       {readOnly ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Read-only validation mode: commenting is disabled.
         </p>
       ) : (
         // Pinned to the bottom of the preview so it stays in reach of long discussions.
         <div ref={composerRef} data-inbox-composer="true" className="sticky bottom-0 z-10 bg-card pt-1">
           {replyTo ? (
-            <div className="mb-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="mb-0.5 flex items-center gap-1.5 text-2xs text-muted-foreground">
               <span>Replying to {replyTo.comment.createdBy ?? "Unknown"}</span>
               <button
                 type="button"
@@ -251,6 +262,7 @@ export function WorkItemPanel({
             initialMentions={replyTo ? workItemReplyDraft(replyTo.comment).mentions : undefined}
             busy={busy}
             mentionSearch={mentionSearch}
+            imageTarget={{ organizationId: item.organizationId, projectId: item.projectId }}
             onSubmit={onComment}
             onSubmitted={() => setReplyTo(null)}
           />

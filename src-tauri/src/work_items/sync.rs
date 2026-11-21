@@ -113,8 +113,8 @@ struct ProjectWorkItemFetch {
 ///
 /// `was_full_sync` decides how the "all" result is written to the shared
 /// cache (`shared_cache` module, read by waypoint): a full result replaces
-/// that project's rows outright, while a delta result only carries items
-/// that changed and must be upserted rather than replacing the snapshot.
+/// that project's rows outright unless the query hit its cap. Delta and capped
+/// results must be upserted rather than replacing the snapshot.
 #[allow(clippy::too_many_arguments)]
 async fn fetch_project_work_items(
     client: AdoClient,

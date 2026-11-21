@@ -33,6 +33,17 @@ export function firstCustomView(views: WorkItemQueryView[]): WorkItemQueryView |
   return views.find((view) => !view.id.startsWith("builtin-")) ?? null;
 }
 
+export function reorderWorkItemViews(views: WorkItemQueryView[], fromId: string, toId: string): WorkItemQueryView[] {
+  if (fromId === toId) return views;
+  const fromIndex = views.findIndex((view) => view.id === fromId);
+  const toIndex = views.findIndex((view) => view.id === toId);
+  if (fromIndex < 0 || toIndex < 0) return views;
+  const next = [...views];
+  const [view] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, view);
+  return next;
+}
+
 const WIQL_KEYWORDS = [
   "SELECT",
   "FROM",
@@ -254,6 +265,32 @@ export function parseAzdoQueryUrl(url: string): {
 export function viewExportFileName(): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `azdodeck-work-item-views-${stamp}.json`;
+}
+
+/** Index of the card one row above (step -1) or below (step 1) the card at `index`. */
+export function viewCardVerticalIndex(container: HTMLElement, index: number, step: 1 | -1): number {
+  if (window.getComputedStyle(container).display !== "flex") {
+    return index + step * viewCardColumnCount(container);
+  }
+  // Wrapped cards have varying widths, so pick the nearest card horizontally in the adjacent row.
+  const items = Array.from(container.children) as HTMLElement[];
+  const current = items[index];
+  if (!current) return index;
+  const tops = items.map((item) => item.offsetTop).filter((top) => step * (top - current.offsetTop) > 0);
+  if (tops.length === 0) return index;
+  const rowTop = step > 0 ? Math.min(...tops) : Math.max(...tops);
+  const center = (item: HTMLElement) => item.offsetLeft + item.offsetWidth / 2;
+  let best = index;
+  let bestDistance = Infinity;
+  items.forEach((item, itemIndex) => {
+    if (item.offsetTop !== rowTop) return;
+    const distance = Math.abs(center(item) - center(current));
+    if (distance < bestDistance) {
+      best = itemIndex;
+      bestDistance = distance;
+    }
+  });
+  return best;
 }
 
 export function viewCardColumnCount(container: HTMLElement): number {

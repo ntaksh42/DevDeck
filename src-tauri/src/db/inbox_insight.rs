@@ -16,8 +16,8 @@ use super::{AppDatabase, InboxItem};
 /// Kinds that get a summary: comments addressed to the user. The PR and work
 /// item syncs run side by side, and each summarizes only its own kinds, since
 /// only the PR sync has the full comment threads at hand.
-pub const PR_INSIGHT_KINDS: [&str; 2] = ["pr_mention", "pr_reply"];
-pub const WI_INSIGHT_KINDS: [&str; 1] = ["wi_mention"];
+pub const PR_INSIGHT_KINDS: [&str; 3] = ["pr_mention", "pr_group_mention", "pr_reply"];
+pub const WI_INSIGHT_KINDS: [&str; 2] = ["wi_mention", "wi_reply"];
 /// How long a failed insight waits before it is written again.
 const FAILED_RETRY_HOURS: i64 = 1;
 
@@ -122,7 +122,7 @@ impl AppDatabase {
         let sql = format!(
             "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id, \
                     repository_name, thread_id, comment_id, title, author, snippet, web_url, \
-                    state, snoozed_until, detected_at, done_at, file_path, line \
+                    state, snoozed_until, detected_at, done_at, file_path, line, hit_count \
              FROM action_inbox_items i \
              WHERE org_id = ?1 AND state = 'open' AND kind IN ({kinds}) \
                AND NOT EXISTS (SELECT 1 FROM action_inbox_insights s WHERE s.item_id = i.id \
@@ -137,6 +137,23 @@ impl AppDatabase {
             super::action_inbox::map_inbox_item,
         )?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// The open item `id` when it is one of `kinds`.
+    pub fn get_open_inbox_item_for_insight(
+        &self,
+        id: i64,
+        kinds: &[&str],
+    ) -> Result<Option<InboxItem>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id,                     repository_name, thread_id, comment_id, title, author, snippet, web_url,                     state, snoozed_until, detected_at, done_at, file_path, line, hit_count              FROM action_inbox_items WHERE id = ?1 AND state = 'open'",
+        )?;
+        let item = stmt
+            .query_map(params![id], super::action_inbox::map_inbox_item)?
+            .next()
+            .transpose()?;
+        Ok(item.filter(|item| kinds.contains(&item.kind.as_str())))
     }
 
     pub fn save_inbox_insight(&self, item_id: i64, insight: &InboxInsight) -> Result<()> {

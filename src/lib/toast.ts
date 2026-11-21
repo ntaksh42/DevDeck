@@ -3,6 +3,8 @@ export type Toast = {
   message: string;
   /** When set, the toast shows a Retry button that invokes this. */
   onRetry?: () => void;
+  /** Omit to keep the message until it is dismissed. */
+  durationMs?: number;
 };
 
 // Module-scope store so any call site can raise a toast without threading a
@@ -26,11 +28,19 @@ export function getSnapshot(): Toast[] {
   return toasts;
 }
 
-export function pushToast(message: string, onRetry?: () => void): number {
+export function pushToast(message: string, onRetry?: () => void, durationMs?: number): number {
   const id = nextId++;
-  toasts = [...toasts, { id, message, onRetry }];
+  toasts = [...toasts, { id, message, onRetry, durationMs }];
   emit();
   return id;
+}
+
+/** How long a success message stays; errors stay until dismissed. */
+export const NOTICE_TOAST_MS = 5000;
+
+/** A success message that closes on its own (errors use `pushToast`). */
+export function pushNotice(message: string): number {
+  return pushToast(message, undefined, NOTICE_TOAST_MS);
 }
 
 export function dismissToast(id: number) {

@@ -6,7 +6,7 @@ import { buildContextDocument } from "./contextDocument";
 import { publishAgentListScope } from "./agentListScope";
 import { resetAgentPanelState } from "./agentPanelStore";
 import { publishAgentSubject, toggleAgentPanel, type AgentSubject } from "./agentSubject";
-import { asks, createAgentNote, deleteAgentNote, replyAgentNote, runAgent, state } from "./agentPanelTestMocks";
+import { asks, createAgentNote, deleteAgentNote, prNotes, replyAgentNote, runAgent, state } from "./agentPanelTestMocks";
 
 export * from "./agentPanelTestMocks";
 
@@ -22,6 +22,7 @@ export function resetFixtures() {
   replyAgentNote.mockClear();
   deleteAgentNote.mockClear();
   state.asks = asks;
+  state.prNotes = prNotes;
 }
 
 export const pr: AgentSubject = {

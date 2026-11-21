@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { FileText, Pencil, Plus, Star, Trash2, X } from "lucide-react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import {
   MAX_TEMPLATE_PRIORITY,
   MIN_TEMPLATE_PRIORITY,
@@ -20,8 +21,10 @@ import {
   type TemplateDraft,
   draftFromTemplate,
   emptyDraft,
+  templateFromDraft,
   templateSummary,
 } from "./workItemTemplatesDraft";
+import { isImeComposing } from "@/lib/utils";
 
 type WorkItemTemplatesPanelProps = {
   /**
@@ -40,12 +43,16 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
   const [draft, setDraft] = useState<TemplateDraft>(() => emptyDraft());
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // The menu is fixed-positioned so a clipping ancestor (the header toolbar slot scrolls) cannot cut it off.
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
 
   const manageButtonRef = useRef<HTMLButtonElement | null>(null);
   const createButtonRef = useRef<HTMLButtonElement | null>(null);
   const createMenuRef = useRef<HTMLDivElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -96,42 +103,13 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
 
   function saveDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = draft.name.trim();
-    const workItemType = draft.workItemType.trim();
-    if (!name) {
-      setFormError("Template name is required.");
+    const result = templateFromDraft(draft, editingId ?? newWorkItemTemplateId(), editingId ? templates.find((t) => t.id === editingId)?.isDefault : undefined);
+    if ("error" in result) {
+      setFormError(result.error);
       return;
     }
-    if (!workItemType) {
-      setFormError("Work item type is required.");
-      return;
-    }
-    const priorityInput = draft.priority.trim();
-    let priority: number | undefined;
-    if (priorityInput) {
-      const parsed = Number(priorityInput);
-      if (!Number.isFinite(parsed) || parsed < MIN_TEMPLATE_PRIORITY || parsed > MAX_TEMPLATE_PRIORITY) {
-        setFormError(`Priority must be between ${MIN_TEMPLATE_PRIORITY} and ${MAX_TEMPLATE_PRIORITY}.`);
-        return;
-      }
-      priority = Math.round(parsed);
-    }
-    const tags = draft.tags
-      .split(/[;,]/)
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-
-    const next: WorkItemTemplate = {
-      id: editingId ?? newWorkItemTemplateId(),
-      name,
-      isDefault: editingId ? templates.find((t) => t.id === editingId)?.isDefault : undefined,
-      workItemType,
-      title: draft.title.trim() || undefined,
-      priority,
-      areaPath: draft.areaPath.trim() || undefined,
-      iteration: draft.iteration.trim() || undefined,
-      tags,
-    };
+    const next = result.template;
+    const name = next.name;
 
     setTemplates((current) =>
       editingId && current.some((t) => t.id === editingId)
@@ -209,6 +187,8 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
             aria-expanded={createMenuOpen}
             onClick={() => {
               restoreFocusRef.current = createButtonRef.current;
+              const rect = createButtonRef.current?.getBoundingClientRect();
+              if (rect) setMenuPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 256) });
               setCreateMenuOpen((open) => !open);
             }}
             className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
@@ -228,7 +208,8 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                 role="menu"
                 aria-label="Create from template"
                 onKeyDown={handleCreateMenuKeyDown}
-                className="absolute right-0 z-50 mt-1 max-h-72 w-64 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
+                style={menuPos}
+                className="fixed z-50 max-h-72 w-64 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"
               >
                 {templates.map((template) => (
                   <button
@@ -242,10 +223,10 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                     <span className="flex w-full items-center gap-1 text-sm font-medium">
                       <span className="min-w-0 truncate">{template.name}</span>
                       {template.isDefault ? (
-                        <Star className="h-3 w-3 shrink-0 fill-current text-amber-500" aria-label="Default" />
+                        <Star className="h-3 w-3 shrink-0 fill-current text-warning" aria-label="Default" />
                       ) : null}
                     </span>
-                    <span className="w-full truncate text-[11px] text-muted-foreground">
+                    <span className="w-full truncate text-2xs text-muted-foreground">
                       {templateSummary(template)}
                     </span>
                   </button>
@@ -271,7 +252,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
       </button>
 
       {status ? (
-        <span role="status" className="truncate text-[11px] text-muted-foreground">
+        <span role="status" className="truncate text-2xs text-muted-foreground">
           {status}
         </span>
       ) : null}
@@ -279,15 +260,19 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
       {managerOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          onClick={closeManager}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeManager();
+          }}
         >
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="wi-template-dialog-title"
             className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Escape") {
                 event.stopPropagation();
                 closeManager();
@@ -317,12 +302,12 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         <div className="flex items-center gap-1 text-sm font-medium">
                           <span className="min-w-0 truncate">{template.name}</span>
                           {template.isDefault ? (
-                            <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                            <span className="shrink-0 rounded bg-warning/15 px-1 text-2xs font-medium text-warning">
                               Default
                             </span>
                           ) : null}
                         </div>
-                        <p className="truncate text-[11px] text-muted-foreground">
+                        <p className="truncate text-2xs text-muted-foreground">
                           {templateSummary(template)}
                         </p>
                       </div>
@@ -334,7 +319,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
                       >
                         <Star
-                          className={`h-3.5 w-3.5 ${template.isDefault ? "fill-current text-amber-500" : ""}`}
+                          className={`h-3.5 w-3.5 ${template.isDefault ? "fill-current text-warning" : ""}`}
                           aria-hidden="true"
                         />
                       </button>

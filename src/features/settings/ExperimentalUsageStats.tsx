@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BarChart3 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import {
   loadUsageStats,
@@ -8,6 +7,7 @@ import {
   type UsageStats,
 } from '@/lib/usageStats';
 import { useExperimentalFlag } from './useExperimentalFlags';
+import { SettingsRow } from './SettingsRow';
 
 const FIELDS: { key: keyof UsageStats; label: string }[] = [
   { key: 'votes', label: 'Review votes' },
@@ -36,22 +36,11 @@ export function ExperimentalUsageStats() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <BarChart3 className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Usage stats</h2>
-            <p className="text-sm text-muted-foreground">
-              Counted on this machine only. Nothing is sent anywhere.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-3">
+    <SettingsRow
+      title="Usage stats"
+      description={<>Counted on this machine only. Nothing is sent anywhere.</>}
+    >
+      <div className="grid gap-3">
         <dl className="grid gap-2 sm:grid-cols-3">
           {FIELDS.map(({ key, label }) => (
             <div key={key} className="rounded-md border border-border px-3 py-2">
@@ -85,6 +74,6 @@ export function ExperimentalUsageStats() {
           onCancel={() => setConfirmReset(false)}
         />
       )}
-    </div>
+    </SettingsRow>
   );
 }

@@ -7,13 +7,20 @@ use crate::db::AppDatabase;
 use crate::secrets::SecretStore;
 
 mod inbox;
+mod merge_readiness;
 mod notifications;
 mod org;
+mod reply_reminders;
 mod runner;
+mod wi_candidates;
 mod wi_mentions;
 
 #[cfg(test)]
+mod merge_readiness_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod wi_mentions_tests;
 
 pub use notifications::{PrNotificationItem, PrNotificationKind};
 

@@ -22,12 +22,12 @@ export function StagedStatusChip({
     <>
       {stagedEntries.length > 0 ? (
         <span
-          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-0.5 text-[11px] dark:border-amber-800 dark:bg-amber-950/50"
+          className="flex shrink-0 items-center gap-1 rounded-full border border-warning/30 bg-warning/10 py-0.5 pl-2 pr-0.5 text-2xs"
           title={stagedEntries
             .map((entry) => `${entry.label}: ${entry.from} → ${entry.to}`)
             .join("\n")}
         >
-          <span className="font-medium text-amber-900 dark:text-amber-200">{stagedEntries.length} pending</span>
+          <span className="font-medium text-warning">{stagedEntries.length} pending</span>
           <button
             type="button"
             onClick={onApply}
@@ -44,15 +44,15 @@ export function StagedStatusChip({
             title="Discard (Esc)"
             onClick={onDiscard}
             disabled={applying}
-            className="rounded-full p-0.5 text-amber-900/70 hover:bg-amber-100 hover:text-amber-900 disabled:opacity-50 dark:text-amber-200/70 dark:hover:bg-amber-900 dark:hover:text-amber-100"
+            className="rounded-full p-0.5 text-warning/70 hover:bg-warning/20 hover:text-warning disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </span>
       ) : null}
       {undoState && stagedEntries.length === 0 ? (
-        <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 py-0.5 pl-2 pr-0.5 text-[11px] dark:border-emerald-800 dark:bg-emerald-950/50">
-          <span className="text-emerald-900 dark:text-emerald-200">Applied {undoState.count}</span>
+        <span className="flex shrink-0 items-center gap-1 rounded-full border border-success/30 bg-success/10 py-0.5 pl-2 pr-0.5 text-2xs">
+          <span className="text-success">Applied {undoState.count}</span>
           <button
             type="button"
             onClick={onUndo}
@@ -67,7 +67,7 @@ export function StagedStatusChip({
       ) : null}
       {applyError ? (
         <span
-          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-[11px] text-destructive"
+          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-2xs text-destructive"
           title={applyError}
         >
           {applyError}

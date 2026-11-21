@@ -15,12 +15,19 @@ use crate::secrets::SecretStore;
 pub struct PullRequestService {
     db: AppDatabase,
     #[allow(dead_code)]
-    secrets: SecretStore,
+    pub(super) secrets: SecretStore,
+    pub(super) palette_cache: super::palette::PalettePrCache,
+    pub(super) search_sessions: super::progressive::SearchSessions,
 }
 
 impl PullRequestService {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
-        Self { db, secrets }
+        Self {
+            db,
+            secrets,
+            palette_cache: Default::default(),
+            search_sessions: Default::default(),
+        }
     }
 
     pub fn list_my_reviews(
@@ -69,9 +76,8 @@ impl PullRequestService {
         Ok(results)
     }
 
-    // PRs the user authored are fetched live from Azure DevOps (not cached),
-    // mirroring how PR search hits the API on demand. The server filters by
-    // `searchCriteria.creatorId`, so we fan out one query per project and merge.
+    // PRs the user authored come from the synced active-PR cache, matched by the
+    // author's identity id, so the list shows at once and refreshes with each sync.
     pub async fn list_my_created_pull_requests(
         &self,
         input: ListMyCreatedPullRequestsInput,
@@ -79,31 +85,43 @@ impl PullRequestService {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
 
         // Without an authenticated user id we cannot identify "my" PRs.
-        let Some(user_id) = organization.authenticated_user_id.clone() else {
+        let Some(user_id) = organization.authenticated_user_id.as_deref() else {
             return Ok(MyCreatedPullRequestsResult::default());
         };
 
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let projects = project_id_name_pairs(&client).await?;
-
-        let mut tasks: JoinSet<(String, Result<Vec<MyCreatedPullRequestSummary>>)> = JoinSet::new();
-        for (project_id, project_name) in projects {
-            let client = client.clone();
-            let org = organization.clone();
-            let user_id = user_id.clone();
-            tasks.spawn(async move {
-                let result =
-                    fetch_created_prs_for_project(&client, &org, &project_id, &user_id).await;
-                (project_name, result)
-            });
-        }
-
-        let fetched = collect_project_prs(tasks).await?;
-        let (mut results, warnings) = fetched.finish()?;
-        results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        let pull_requests = self
+            .db
+            .list_created_pull_requests(&organization.id, user_id)?
+            .into_iter()
+            .map(|row| {
+                let pr = row.pr;
+                let ready_to_merge = !pr.is_draft
+                    && self
+                        .db
+                        .pr_ready_to_merge(&organization.id, &pr.repository_id, pr.pull_request_id)
+                        .unwrap_or(false);
+                MyCreatedPullRequestSummary {
+                    organization_id: pr.org_id,
+                    project_id: pr.project_id,
+                    project_name: pr.project_name,
+                    repository_id: pr.repository_id,
+                    repository_name: pr.repository_name,
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title,
+                    creation_date: pr.creation_date,
+                    source_ref_name: pr.source_ref_name,
+                    target_ref_name: pr.target_ref_name,
+                    web_url: pr.web_url,
+                    is_draft: pr.is_draft,
+                    approvals: row.approvals,
+                    reviewer_count: row.reviewer_count,
+                    ready_to_merge,
+                }
+            })
+            .collect();
         Ok(MyCreatedPullRequestsResult {
-            pull_requests: results,
-            warnings,
+            pull_requests,
+            warnings: Vec::new(),
         })
     }
 
@@ -114,6 +132,19 @@ impl PullRequestService {
     // branches. Target-branch and date-window filters are pushed to the server
     // on the live path and applied in memory on the cache path.
     pub async fn search(&self, input: SearchPullRequestsInput) -> Result<PullRequestSearchResult> {
+        if input.progressive.unwrap_or(false) {
+            return self.search_progressive(input).await;
+        }
+        if input.author_id.is_some()
+            || input.reviewer_id.is_some()
+            || input.exclude_words.is_some()
+            || input.continuation_token.is_some()
+            || input.search_id.is_some()
+        {
+            return Err(AppError::InvalidInput(
+                "Advanced search requires progressive mode".into(),
+            ));
+        }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
 
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
@@ -131,8 +162,9 @@ impl PullRequestService {
                 normalize_optional(Some(branch)).map(|value| short_ref(&value).to_string())
             })
             .collect();
-        let from_rfc = parse_date_bound(input.from_date.as_deref(), false)?;
-        let to_rfc = parse_date_bound(input.to_date.as_deref(), true)?;
+        let from_rfc =
+            parse_date_bound(input.from_date.as_deref(), false, input.utc_offset_minutes)?;
+        let to_rfc = parse_date_bound(input.to_date.as_deref(), true, input.utc_offset_minutes)?;
         if let (Some(from), Some(to)) = (&from_rfc, &to_rfc) {
             if from > to {
                 return Err(AppError::InvalidInput(
@@ -231,6 +263,7 @@ impl PullRequestService {
             total,
             truncated,
             warnings,
+            ..Default::default()
         })
     }
 
@@ -319,7 +352,7 @@ impl PullRequestService {
         collect_project_prs(tasks).await
     }
 
-    fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
+    pub(super) fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
     }
 }

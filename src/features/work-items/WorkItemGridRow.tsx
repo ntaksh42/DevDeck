@@ -16,6 +16,7 @@ import {
 } from './workItemsGridHelpers';
 import { gridRowStateClass } from '@/lib/gridRowState';
 import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
+import { AgentResultMark } from '@/components/agent-notes/AgentResultMark';
 
 // Reactively reads the row color rules and refreshes when they change in
 // Settings or another tab (mirrors useKeybindings in App.tsx).
@@ -69,7 +70,7 @@ export const WorkItemGridRow = forwardRef<
         openExternalUrl(item.webUrl);
       }
     }}
-    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({
+    className={`grid h-[29px] cursor-pointer select-none items-center gap-2 overflow-hidden border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({
       selected,
       inMultiSelection: checked,
       isStale,
@@ -104,12 +105,13 @@ export const WorkItemGridRow = forwardRef<
               : undefined
           }
         >
+          {isTitle ? <AgentResultMark target="work-item" itemId={item.id} /> : null}
           {isTitle && unread ? (
             <span
               role="img"
               aria-label="Unread activity"
               title="Changed since you last opened it"
-              className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
+              className="h-2 w-2 shrink-0 rounded-full bg-blue-500"
             />
           ) : null}
           {isTitle && isStale ? (
@@ -133,7 +135,7 @@ export const WorkItemGridRow = forwardRef<
           {isTitle && item.hasDraftPullRequest ? (
             <GitPullRequest
               role="img"
-              className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+              className="h-3.5 w-3.5 shrink-0 text-warning"
               aria-label="関連PRあり (Draft)"
             >
               <title>関連PRあり (Draft)</title>

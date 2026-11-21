@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Loader2, Pencil, SmilePlus, Trash2 } from "lucide-react";
-import { formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate, isImeComposing } from "@/lib/utils";
 import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import {
   usePersistedTextareaHeight,
@@ -8,7 +8,8 @@ import {
 } from "@/lib/usePersistedTextareaHeight";
 import { commentAuthorInitials } from "./workItemHtml";
 import { RichHtmlFrame } from "./RichHtmlFrame";
-import { renderAzureMentionMarkdown } from "./workItemMentions";
+import { markdownWithHardLineBreaks, renderAzureMentionMarkdown } from "./workItemMentions";
+import { editableCommentDraft, mentionNamesFromHtml } from "./mentionEditDraft";
 import {
   useWorkItemMentionPicker,
   type WorkItemMentionScope,
@@ -32,6 +33,9 @@ export function CollapsibleComment({
   baseUrl,
   commentHtml,
   commentText,
+  commentFormat,
+  commentRenderedText,
+  mentionDisplayNames,
   createdBy,
   createdDate,
   deleting,
@@ -55,6 +59,9 @@ export function CollapsibleComment({
   baseUrl?: string | null;
   commentHtml: string;
   commentText: string | null;
+  commentFormat?: string | null;
+  commentRenderedText?: string | null;
+  mentionDisplayNames?: ReadonlyMap<string, string>;
   createdBy: string | null;
   createdDate: string | null;
   deleting: boolean;
@@ -80,7 +87,8 @@ export function CollapsibleComment({
   // heavy markup isn't collapsed and a tall one always gets its toggle.
   const [expanded, setExpanded] = useState(commentHtml.length < 700);
   const [editMode, setEditMode] = useState(false);
-  const [draft, setDraft] = useState(commentText ?? "");
+  const [draft, setDraft] = useState("");
+  const [initialDraftText, setInitialDraftText] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const editTextareaRef = usePersistedTextareaHeight(
@@ -164,27 +172,42 @@ export function CollapsibleComment({
     }
   }
 
+  // The stored text as the user should edit it: `@Name` instead of `@<guid>`,
+  // and markdown instead of the HTML of a web UI rich-editor comment.
+  function initialDraft() {
+    const names = new Map(mentionDisplayNames ?? []);
+    for (const [key, name] of mentionNamesFromHtml(commentRenderedText)) names.set(key, name);
+    return editableCommentDraft(commentText, { format: commentFormat, names });
+  }
+
   function startEdit() {
-    setDraft(commentText ?? "");
-    mentionPicker.resetMentions();
+    const initial = initialDraft();
+    setDraft(initial.text);
+    setInitialDraftText(initial.text);
+    mentionPicker.resetMentions(initial.mentions);
     setEditMode(true);
   }
 
   function cancelEdit() {
     setEditMode(false);
-    setDraft(commentText ?? "");
     mentionPicker.resetMentions();
   }
 
   function saveEdit() {
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === (commentText ?? "").trim()) {
+    if (!trimmed || trimmed === initialDraftText.trim()) {
       cancelEdit();
       return;
     }
-    // Resolve any @Name inserted from the picker to Azure DevOps' @<guid> form
-    // so the edited comment actually notifies the mentioned identity.
-    onEdit(id, renderAzureMentionMarkdown(trimmed, mentionPicker.selectedMentions));
+    // Resolve @Name tokens (existing and newly picked) to Azure DevOps'
+    // @<guid> form so the edited comment keeps notifying, and keep single
+    // newlines visible the same way a new comment does.
+    onEdit(
+      id,
+      markdownWithHardLineBreaks(
+        renderAzureMentionMarkdown(trimmed, mentionPicker.selectedMentions),
+      ),
+    );
   }
 
   // Leave edit mode once the in-flight save for this comment resolves.
@@ -198,7 +221,7 @@ export function CollapsibleComment({
     // text, not chrome, carries each entry.
     <article className="group min-w-0 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info/10 text-2xs font-semibold text-info">
           {commentAuthorInitials(createdBy)}
         </span>
         <span className="min-w-0 truncate font-bold">
@@ -206,8 +229,8 @@ export function CollapsibleComment({
         </span>
         {createdDate ? (
           <span
-            className="shrink-0 text-[11px] font-medium text-slate-500 dark:text-slate-400"
-            title={new Date(createdDate).toLocaleString()}
+            className="shrink-0 text-2xs font-medium text-muted-foreground"
+            title={formatDate(createdDate)}
           >
             {formatRelativeDate(createdDate)}
           </span>
@@ -313,6 +336,9 @@ export function CollapsibleComment({
               mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
             }}
             onKeyDown={(event) => {
+              // Enter / Escape that confirm or cancel an IME conversion belong
+              // to the IME, as in the comment composer.
+              if (isImeComposing(event)) return;
               // Ctrl+Enter always saves, matching the composer, even with the
               // picker open; then the picker consumes its own keys; a second
               // Escape (picker already closed) cancels the edit.
@@ -327,7 +353,8 @@ export function CollapsibleComment({
                 cancelEdit();
               }
             }}
-            rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
+            rows={Math.min(10, Math.max(4, draft.split("\n").length + 1))}
+            className="min-h-24"
             overlay={
               <MentionPickerDropdown
                 options={mentionPicker.dropdown.options}
@@ -365,7 +392,7 @@ export function CollapsibleComment({
               <button
                 type="button"
                 onClick={() => setExpanded((value) => !value)}
-                className="mt-1 rounded border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="mt-1 rounded border border-border bg-card px-2 py-0.5 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 {expanded ? "Collapse" : "Expand"}
               </button>
@@ -383,7 +410,7 @@ export function CollapsibleComment({
                       onClick={() => onToggleReaction(id, reaction.type, !mine)}
                       aria-pressed={mine}
                       title={`${reaction.label}${mine ? " (you reacted)" : ""}`}
-                      className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[11px] tabular-nums disabled:cursor-not-allowed disabled:opacity-60 ${
+                      className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-2xs tabular-nums disabled:cursor-not-allowed disabled:opacity-60 ${
                         mine
                           ? "border-primary bg-primary/10 text-foreground"
                           : "border-border bg-card text-muted-foreground hover:bg-accent"

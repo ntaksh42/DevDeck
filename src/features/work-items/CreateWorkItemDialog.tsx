@@ -18,6 +18,7 @@ import {
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from "./queryKeys";
+import { isImeComposing } from "@/lib/utils";
 
 /**
  * Seed values for the create form. All fields are optional: the "New item"
@@ -168,6 +169,7 @@ export function CreateWorkItemDialog({
   // Contain keys so the grid underneath does not also react to typing/arrows.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       close();
@@ -180,7 +182,9 @@ export function CreateWorkItemDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={close}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
       onKeyDown={handleKeyDown}
     >
       <div
@@ -368,7 +372,7 @@ export function CreateWorkItemDialog({
           ) : null}
 
           <div className="flex items-center justify-end gap-2 pt-1">
-            <span className="mr-auto text-[11px] text-muted-foreground">
+            <span className="mr-auto text-2xs text-muted-foreground">
               Ctrl+Enter to create
             </span>
             <button

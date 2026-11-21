@@ -26,25 +26,22 @@ mod follows;
 mod metadata;
 mod mutations;
 mod query;
+mod search;
 mod sync;
 mod types;
+mod types_views;
 pub(crate) use candidates::*;
 use conversions::*;
 pub(crate) use query::*;
 pub(crate) use sync::*;
 pub use types::*;
+pub use types_views::*;
 
 #[cfg(test)]
 mod tests;
 
 const UPDATE_CANDIDATES_TTL: Duration = Duration::from_secs(60);
 const UPDATE_CANDIDATES_CACHE_CAP: usize = 200;
-
-/// Concurrent WIQL round trips while sampling a query's history.
-const COUNT_HISTORY_CONCURRENCY: usize = 4;
-/// Upper bound on points per call, so a malformed request cannot fan out into
-/// an unbounded number of API calls. Covers the widest UI window (90 days).
-const COUNT_HISTORY_MAX_POINTS: usize = 90;
 
 // People recently involved in a work item, derived from its update history.
 // Mention and assignee search both need them for every (debounced) keystroke,
@@ -70,36 +67,6 @@ impl WorkItemService {
         }
     }
 
-    pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
-        let states = normalize_filter_set(input.states);
-        let work_item_types = normalize_filter_set(input.work_item_types);
-        let project_ids = normalize_filter_set(input.project_ids);
-
-        let cached = if query.is_empty() {
-            self.db.search_work_items(
-                &organization.id,
-                project_ids.as_deref(),
-                states.as_deref(),
-                work_item_types.as_deref(),
-                None,
-            )?
-        } else {
-            self.db.search_work_items_text(
-                &organization.id,
-                &query,
-                WorkItemFilters {
-                    project_ids: project_ids.as_deref(),
-                    states: states.as_deref(),
-                    work_item_types: work_item_types.as_deref(),
-                },
-            )?
-        };
-
-        Ok(cached.into_iter().map(cached_wi_to_summary).collect())
-    }
-
     pub fn list_my(&self, input: ListMyWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let cached = self.db.list_my_work_items(&organization.id)?;
@@ -119,26 +86,6 @@ impl WorkItemService {
             .filter(|item| !snoozed.contains(&item.id.to_string()))
             .map(cached_wi_to_summary)
             .collect())
-    }
-
-    pub async fn list_projects(
-        &self,
-        input: ListWorkItemProjectsInput,
-    ) -> Result<Vec<WorkItemProjectOption>> {
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let mut projects = self
-            .projects
-            .list(&client, &organization.id)
-            .await?
-            .into_iter()
-            .map(|project| WorkItemProjectOption {
-                project_id: project.id,
-                project_name: project.name,
-            })
-            .collect::<Vec<_>>();
-        projects.sort_by(|a, b| a.project_name.cmp(&b.project_name));
-        Ok(projects)
     }
 
     pub async fn run_query(&self, input: RunWorkItemQueryInput) -> Result<Vec<WorkItemSummary>> {
@@ -260,104 +207,32 @@ impl WorkItemService {
         // With a limit, fetch one extra id so the frontend can render "limit+"
         // when results overflow. Without one, the exact count is returned.
         let probe = work_item_query_limit(input.limit).map(|limit| limit + 1);
-        let count = if is_link_wiql(wiql) {
+        let ids = if is_link_wiql(wiql) {
             let links = client
                 .query_work_item_links(&input.project_id, wiql, probe)
                 .await?;
-            flatten_work_item_links(links, probe).0.len()
+            flatten_work_item_links(links, probe).0
         } else {
-            let ids = client
+            client
                 .query_work_item_ids(&input.project_id, wiql, probe)
-                .await?;
-            probe.map_or(ids.len(), |probe| ids.len().min(probe))
+                .await?
         };
-        Ok(count)
-    }
-
-    /// Counts the query at each requested instant by appending an `ASOF`
-    /// clause, so a saved query yields a history without anything having been
-    /// recorded locally beforehand.
-    ///
-    /// A point Azure DevOps cannot answer is returned with `count: None` and
-    /// the message, leaving the rest of the series usable; only a failure that
-    /// applies to every point (an invalid query, an unreachable organization)
-    /// fails the whole call.
-    pub async fn count_query_history(
-        &self,
-        input: CountWorkItemQueryHistoryInput,
-    ) -> Result<Vec<WorkItemQueryCountPoint>> {
-        let wiql = validate_work_item_wiql(&input.wiql)?;
-        if azdo_client::has_asof_clause(wiql) {
-            return Err(AppError::InvalidInput(
-                "WIQL must not contain an ASOF clause; the analyze view adds one per point"
-                    .to_string(),
-            ));
-        }
-        if input.timestamps.len() > COUNT_HISTORY_MAX_POINTS {
-            return Err(AppError::InvalidInput(format!(
-                "at most {COUNT_HISTORY_MAX_POINTS} points can be requested at once"
-            )));
-        }
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let link_query = is_link_wiql(wiql);
-
-        let mut points: Vec<Option<WorkItemQueryCountPoint>> =
-            (0..input.timestamps.len()).map(|_| None).collect();
-        // Bounded concurrency: each point is its own WIQL round trip, so a
-        // 90-day window would otherwise open 90 connections at once. Tasks
-        // carry their index because they complete out of order.
-        for (offset, chunk) in input
-            .timestamps
-            .chunks(COUNT_HISTORY_CONCURRENCY)
-            .enumerate()
-        {
-            let mut tasks: JoinSet<(usize, String, Result<usize>)> = JoinSet::new();
-            for (index, timestamp) in chunk.iter().enumerate() {
-                let index = offset * COUNT_HISTORY_CONCURRENCY + index;
-                let timestamp = timestamp.clone();
-                let client = client.clone();
-                let project_id = input.project_id.clone();
-                let prepared = azdo_client::with_asof(wiql, &timestamp);
-                tasks.spawn(async move {
-                    let sampled = match prepared {
-                        Ok(sampled) => sampled,
-                        Err(error) => return (index, timestamp, Err(AppError::from(error))),
-                    };
-                    let count = if link_query {
-                        client
-                            .query_work_item_links(&project_id, &sampled, None)
-                            .await
-                            .map(|links| flatten_work_item_links(links, None).0.len())
-                    } else {
-                        client
-                            .query_work_item_ids(&project_id, &sampled, None)
-                            .await
-                            .map(|ids| ids.len())
-                    };
-                    (index, timestamp, count.map_err(AppError::from))
-                });
-            }
-
-            while let Some(joined) = tasks.join_next().await {
-                let (index, timestamp, result) = joined.map_err(|error| {
-                    AppError::AzureDevOps(format!("query history task failed: {error}"))
-                })?;
-                points[index] = Some(match result {
-                    Ok(count) => WorkItemQueryCountPoint {
-                        timestamp,
-                        count: Some(count),
-                        error: None,
-                    },
-                    Err(error) => WorkItemQueryCountPoint {
-                        timestamp,
-                        count: None,
-                        error: Some(error.to_string()),
-                    },
-                });
-            }
-        }
-        Ok(points.into_iter().flatten().collect())
+        let now = chrono::Utc::now();
+        let snoozed: std::collections::HashSet<i64> = self
+            .db
+            .list_snoozed_items(&organization.id, crate::snooze::ITEM_TYPE_WORK_ITEM)?
+            .into_iter()
+            .filter(|row| crate::snooze::snooze_is_active(now, &row.snooze_until))
+            .filter_map(|row| row.item_key.parse().ok())
+            .collect();
+        let limit = work_item_query_limit(input.limit).unwrap_or(ids.len());
+        let count = ids
+            .iter()
+            .take(limit)
+            .filter(|id| !snoozed.contains(id))
+            .count();
+        let overflow = count == limit && ids.get(limit).is_some_and(|id| !snoozed.contains(id));
+        Ok(count + usize::from(overflow))
     }
 
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {

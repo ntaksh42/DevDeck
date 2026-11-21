@@ -1,3 +1,5 @@
+mod work_items;
+
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -182,37 +184,6 @@ impl SnoozeService {
         Ok(result)
     }
 
-    /// Work item counterpart to [`reconcile_pull_requests`], using ChangedDate as
-    /// the activity marker.
-    pub fn reconcile_work_items(
-        &self,
-        org_id: &str,
-        current: &[CachedWorkItem],
-        now: &str,
-    ) -> Result<SnoozeReconcile> {
-        let rows = self.db.list_snoozed_items(org_id, ITEM_TYPE_WORK_ITEM)?;
-        let by_key: HashMap<String, &CachedWorkItem> = current
-            .iter()
-            .map(|item| (item.id.to_string(), item))
-            .collect();
-        let mut result = SnoozeReconcile::default();
-        for row in rows {
-            let live_changed = by_key
-                .get(&row.item_key)
-                .and_then(|item| item.changed_date.as_deref());
-            let new_activity =
-                work_item_activity_advanced(row.baseline_activity.as_deref(), live_changed);
-            if should_revive(now, &row.snooze_until, new_activity) {
-                self.db
-                    .delete_snoozed_item(org_id, ITEM_TYPE_WORK_ITEM, &row.item_key)?;
-                result.revived.push(row.item_key);
-            } else {
-                result.still_snoozed.push(row.item_key);
-            }
-        }
-        Ok(result)
-    }
-
     /// Captures the current activity marker so a later sync can tell whether the
     /// item saw new activity while snoozed. For PRs that is the last-seen comment
     /// id; for work items it is the cached `System.ChangedDate`.
@@ -328,13 +299,14 @@ pub fn pr_activity_advanced(baseline: Option<&str>, current: Option<i64>) -> boo
     }
 }
 
-/// ChangedDate is ISO8601; lexicographic comparison matches chronological order.
-pub fn work_item_activity_advanced(baseline: Option<&str>, current: Option<&str>) -> bool {
-    match (baseline, current) {
-        (Some(base), Some(now)) => now > base,
-        (None, Some(_)) => true,
-        _ => false,
-    }
+/// Compare instants because Azure DevOps and our cache spell UTC differently.
+fn work_item_activity_advanced(baseline: Option<&str>, current: Option<&str>) -> bool {
+    let Some(current) = current.and_then(|value| DateTime::parse_from_rfc3339(value).ok()) else {
+        return false;
+    };
+    baseline
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .is_none_or(|baseline| current > baseline)
 }
 
 fn validate_item_type(item_type: &str) -> Result<&'static str> {

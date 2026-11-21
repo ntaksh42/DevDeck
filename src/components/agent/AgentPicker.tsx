@@ -44,7 +44,7 @@ export function AgentPicker({
 
   return (
     <div
-      className="mb-1 flex items-center gap-1 text-[11px]"
+      className="mb-1 flex items-center gap-1 text-2xs"
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
@@ -82,7 +82,7 @@ export function AgentPicker({
         value={model}
         onChange={(event) => onModelChange(event.target.value)}
         title="Model · ↑↓ to pick (Settings sets the default and the list)"
-        className="ml-1 h-5 min-w-0 max-w-[10rem] rounded border border-border bg-background px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
+        className="ml-1 h-5 min-w-0 max-w-[10rem] rounded border border-border bg-background px-1 text-2xs focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <option value="">CLI default</option>
         {models.map((name) => (

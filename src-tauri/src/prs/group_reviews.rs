@@ -60,19 +60,18 @@ pub(crate) async fn member_group_ids(
         }
         Err(e) => {
             tracing::warn!(org = %org.name, error = %e, "sync: failed to list group memberships");
-            // Keep using the last known groups: dropping them for one pass would
-            // remove the group reviews and announce them again as new requests
-            // on the next one.
-            let last_known = entries()
+            // Group membership rarely changes, so an expired lookup still beats
+            // dropping every team review until the next successful lookup.
+            let stale = entries()
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .get(&key)
                 .map(|(_, ids)| ids.clone());
-            match last_known {
+            match stale {
                 Some(ids) => (
                     ids.into_iter().collect(),
                     Some(format!(
-                        "Your groups/teams could not be refreshed; using the last known ones: {e}."
+                        "Group membership lookup failed; using the previous group list: {e}."
                     )),
                 ),
                 None => (
@@ -282,6 +281,6 @@ mod tests {
         );
         let (ids, warning) = member_group_ids(&db, &client, &org, "me").await;
         assert_eq!(ids, groups(&["team"]));
-        assert!(warning.unwrap().contains("last known"));
+        assert!(warning.unwrap().contains("previous group list"));
     }
 }

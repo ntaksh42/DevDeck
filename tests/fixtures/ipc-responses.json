@@ -1,0 +1,202 @@
+{
+  "get_app_settings": {
+    "agentAutoPostEnabled": false,
+    "agentCommand": null,
+    "agentWorkspacePath": null,
+    "autoAgentEnabled": false,
+    "autoAgentIntervalMinutes": 15,
+    "autoAgentMaxPerSync": 10,
+    "autoAgentPipelinesEnabled": false,
+    "claudeModel": null,
+    "claudeModelChoices": null,
+    "codexCommand": null,
+    "codexModel": null,
+    "codexModelChoices": null,
+    "defaultAgent": null,
+    "desktopNotificationsEnabled": false,
+    "experimentalAutoUpdateCheck": false,
+    "experimentalCrossOrgSummary": false,
+    "experimentalDiagnosticsExport": false,
+    "experimentalFeaturesEnabled": false,
+    "experimentalRetryToasts": false,
+    "experimentalUsageStats": false,
+    "inboxInsightEnabled": false,
+    "inboxInsightMaxPerSync": 3,
+    "inboxInsightModel": null,
+    "notificationContentPreviewEnabled": true,
+    "notificationRules": [],
+    "notifyPrCommentReplies": true,
+    "notifyPrReviewRequests": true,
+    "notifyPrVoteResets": true,
+    "notifyWorkItemAssignments": true,
+    "notifyWorkItemStateChanges": true,
+    "quietHoursEnabled": false,
+    "quietHoursEnd": "08:00",
+    "quietHoursStart": "22:00",
+    "readOnlyValidationModeEnabled": false,
+    "reviewResultFolderPath": null,
+    "reviewStaleThresholdDays": 3,
+    "showWindowHotkey": null,
+    "workItemResultFolderPath": null,
+    "workItemStaleThresholdDays": 7
+  },
+  "get_home_bot": {
+    "brief": [
+      "Two reviews wait on you."
+    ],
+    "look": {
+      "error": null,
+      "failuresInARow": 0,
+      "lastLookedAt": "2026-10-01T12:00:00Z",
+      "nextAt": "2026-10-01T12:00:00Z",
+      "running": false,
+      "tookMs": 48000
+    },
+    "newCount": 1,
+    "settings": {
+      "agent": "claude",
+      "enabled": true,
+      "every": "twice-daily",
+      "focus": "",
+      "model": "sonnet",
+      "weekdaysOnly": true
+    },
+    "suggestions": [
+      {
+        "ask": "Summarize the diff of !101.",
+        "createdAt": "2026-10-01T12:00:00Z",
+        "id": "s-1",
+        "isNew": true,
+        "kind": "pr",
+        "target": "pr:fixture-org/fixture-repo/101",
+        "targetLabel": "!101",
+        "title": "Review !101",
+        "urgency": "now",
+        "webUrl": null,
+        "why": "Requested three days ago."
+      }
+    ]
+  },
+  "get_home_chat": {
+    "chatId": "chat-20261001120000000",
+    "error": null,
+    "messages": [
+      {
+        "author": "orchestrator",
+        "body": "Started a worker on !101.",
+        "createdAt": "2026-10-01T12:00:00Z",
+        "id": 1,
+        "workerIds": [
+          "d-1"
+        ]
+      }
+    ],
+    "state": "waiting",
+    "waitingOn": 1,
+    "workers": [
+      {
+        "agent": "codex",
+        "askId": 1790856000000,
+        "createdAt": "2026-10-01T12:00:00Z",
+        "endedAt": null,
+        "id": "d-1",
+        "model": null,
+        "noteTarget": "ask",
+        "startedAt": "2026-10-01T12:00:00Z",
+        "status": "running",
+        "subject": null,
+        "targetLabel": "!101",
+        "title": "Summarize the diff"
+      }
+    ]
+  },
+  "list_agent_work": [
+    {
+      "askId": 1790856000000,
+      "error": "Agent did not finish the investigation note.",
+      "excluded": false,
+      "exitCode": null,
+      "failures": 1,
+      "finishedAt": "2026-10-01T12:00:00Z",
+      "hasLog": true,
+      "id": 42,
+      "nextRetryAt": null,
+      "organizationId": "fixture-org",
+      "organizationName": "Fixture organization",
+      "projectId": "fixture-project",
+      "scope": "Platform",
+      "scopeId": "fixture-project",
+      "startedAt": "2026-10-01T12:00:00Z",
+      "status": "failed",
+      "target": "pipeline",
+      "title": "CI investigation",
+      "webUrl": "https://dev.azure.com/fixture-org/Platform/_build/results?buildId=42"
+    }
+  ],
+  "list_my_created_pull_requests": {
+    "pullRequests": [
+      {
+        "approvals": 1,
+        "creationDate": "2026-10-01T12:00:00Z",
+        "isDraft": false,
+        "organizationId": "fixture-org",
+        "projectId": "fixture-project",
+        "projectName": "Platform",
+        "pullRequestId": 101,
+        "readyToMerge": false,
+        "repositoryId": "fixture-repo",
+        "repositoryName": "Service",
+        "reviewerCount": 2,
+        "sourceRefName": "feature",
+        "targetRefName": "main",
+        "title": "Add a release check",
+        "webUrl": null
+      }
+    ],
+    "warnings": []
+  },
+  "list_pipeline_runs": [
+    {
+      "buildId": 42,
+      "buildNumber": "20261001.1",
+      "definitionId": 4,
+      "definitionName": "CI",
+      "finishTime": "2026-10-01T12:00:00Z",
+      "organizationId": "fixture-org",
+      "projectId": "fixture-project",
+      "projectName": "Platform",
+      "queueTime": null,
+      "reason": null,
+      "requestedFor": null,
+      "result": "failed",
+      "sourceBranch": "refs/heads/main",
+      "startTime": "2026-10-01T12:00:00Z",
+      "status": "completed",
+      "webUrl": "https://dev.azure.com/fixture-org/Platform/_build/results?buildId=42"
+    }
+  ],
+  "run_work_item_query": [
+    {
+      "assignedTo": null,
+      "changedDate": "2026-10-01T12:00:00Z",
+      "depth": 1,
+      "extraFields": [
+        {
+          "referenceName": "Custom.Risk",
+          "value": "Low"
+        }
+      ],
+      "hasActivePullRequest": true,
+      "hasDraftPullRequest": false,
+      "id": 121,
+      "organizationId": "fixture-org",
+      "projectId": "fixture-project",
+      "projectName": "Platform",
+      "state": "Active",
+      "tags": "release; docs",
+      "title": "Update the release process",
+      "webUrl": null,
+      "workItemType": "Task"
+    }
+  ]
+}

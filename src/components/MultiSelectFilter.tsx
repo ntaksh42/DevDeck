@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { isImeComposing } from "@/lib/utils";
 
 export type MultiSelectOption = { value: string; label: string };
 
@@ -109,6 +110,7 @@ export function MultiSelectFilter({
   }
 
   function onPopoverKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -121,10 +123,14 @@ export function MultiSelectFilter({
       e.preventDefault();
       e.stopPropagation();
       moveRow(-1);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.stopPropagation();
+      if (e.key === "Enter" && e.target instanceof HTMLInputElement) e.preventDefault();
     }
   }
 
   function onTriggerKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       setOpen(true);
@@ -156,7 +162,7 @@ export function MultiSelectFilter({
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {selected.length > 0 ? (
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none text-primary-foreground">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold leading-none text-primary-foreground">
               {selected.length}
             </span>
           ) : null}
@@ -218,6 +224,7 @@ export function MultiSelectFilter({
                     data-msf-row="true"
                     onClick={() => toggle(option.value)}
                     onKeyDown={(e) => {
+                      if (isImeComposing(e)) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         e.stopPropagation();

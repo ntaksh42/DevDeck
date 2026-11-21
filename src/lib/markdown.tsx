@@ -10,6 +10,10 @@ import { applyHydratedImageSource, toAzdoAttachmentUrl } from "@/lib/azdoAttachm
 // in the preview. This inline extension keeps the literal token visible as
 // text. It runs as a real marked token, so it never fires inside code spans or
 // fenced code blocks where "@<guid>" must stay verbatim.
+// Display names for the `renderMarkdownHtml` call in progress. marked renders
+// synchronously, so a module-level slot lets the inline extension see them.
+let activeMentionNames: ReadonlyMap<string, string> | undefined;
+
 const azdoMentionExtension: TokenizerAndRendererExtension = {
   name: "azdoMention",
   level: "inline",
@@ -23,7 +27,12 @@ const azdoMentionExtension: TokenizerAndRendererExtension = {
     return { type: "azdoMention", raw: match[0], text: match[1] };
   },
   renderer(token) {
-    return `@&lt;${escapeMentionText(String(token.text))}&gt;`;
+    const id = String(token.text);
+    const name = activeMentionNames?.get(id) ?? activeMentionNames?.get(id.toLowerCase());
+    if (name) {
+      return `<span class="font-medium text-primary">@${escapeMentionText(name)}</span>`;
+    }
+    return `@&lt;${escapeMentionText(id)}&gt;`;
   },
 };
 
@@ -130,8 +139,17 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 
-export function renderMarkdownHtml(text: string): string {
-  const html = marked.parse(text, { async: false, gfm: true, breaks: true });
+export function renderMarkdownHtml(
+  text: string,
+  mentionNames?: ReadonlyMap<string, string>,
+): string {
+  activeMentionNames = mentionNames;
+  let html: string;
+  try {
+    html = marked.parse(text, { async: false, gfm: true, breaks: true });
+  } finally {
+    activeMentionNames = undefined;
+  }
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["target"],
@@ -169,13 +187,19 @@ export function MarkdownView({
   className,
   resolveImageSource,
   baseUrl,
+  mentionDisplayNames,
 }: {
   text: string;
   className?: string;
   resolveImageSource?: (url: string) => Promise<string | null>;
   baseUrl?: string | null;
+  /** Names for `@<guid>` mentions, keyed by lower-case id. */
+  mentionDisplayNames?: ReadonlyMap<string, string>;
 }) {
-  const html = useMemo(() => renderMarkdownHtml(text), [text]);
+  const html = useMemo(
+    () => renderMarkdownHtml(text, mentionDisplayNames),
+    [text, mentionDisplayNames],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

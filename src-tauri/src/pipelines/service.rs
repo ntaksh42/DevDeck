@@ -13,7 +13,10 @@ use super::convert::{
 use super::definition_update::apply_definition_update;
 use super::types::*;
 
+mod flaky_fetch;
+
 const RUN_LIST_TOP: u32 = 50;
+/// Page size of the definition list; every page is fetched.
 const DEFINITION_LIST_TOP: u32 = 200;
 const DEFAULT_LOG_TAIL_LINES: usize = 200;
 /// Failed tests listed per build; more are reported as `truncated`.

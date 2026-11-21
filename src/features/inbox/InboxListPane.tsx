@@ -1,11 +1,15 @@
 import type { KeyboardEvent, RefObject } from "react";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
+import { activeColumnFilterCount } from "@/lib/columnFilters";
 import { isEditableTarget } from "@/lib/utils";
+import { InboxColumnFilterBar } from "./InboxColumnFilterBar";
+import type { InboxFilterColumn } from "./inboxColumnFilters";
 import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
-import type { InboxEntry, InboxTab } from "./inboxPresentation";
+import { useInboxScanLimit } from "./useInboxScanLimit";
+import type { InboxEntry, InboxPriority, InboxTab } from "./inboxPresentation";
 import type { InboxUndo } from "./useInboxStateChanges";
 
 const EMPTY_MESSAGE: Record<InboxTab, string> = {
@@ -21,9 +25,13 @@ const EMPTY_MESSAGE: Record<InboxTab, string> = {
  */
 export function InboxListPane({
   tab,
+  priority,
   tabCounts,
   onTabChange,
   filterText,
+  columnFilters,
+  onOpenColumnFilter,
+  onClearColumnFilters,
   listRef,
   focusHandlers,
   onFocusList,
@@ -31,6 +39,7 @@ export function InboxListPane({
   virtual,
   entries,
   selectedIndex,
+  checkedIds,
   isLoading,
   error,
   onRetry,
@@ -41,9 +50,13 @@ export function InboxListPane({
   onUndo,
 }: {
   tab: InboxTab;
+  priority: InboxPriority;
   tabCounts: Record<InboxTab, number>;
   onTabChange: (tab: InboxTab) => void;
   filterText: string;
+  columnFilters: Partial<Record<InboxFilterColumn, Set<string>>>;
+  onOpenColumnFilter: (column: InboxFilterColumn, anchorEl: HTMLButtonElement) => void;
+  onClearColumnFilters: () => void;
   listRef: RefObject<HTMLDivElement | null>;
   focusHandlers: ReturnType<typeof useInboxListFocus>;
   onFocusList: () => void;
@@ -51,6 +64,7 @@ export function InboxListPane({
   virtual: ReturnType<typeof useGridVirtualizer>;
   entries: InboxEntry[];
   selectedIndex: number;
+  checkedIds: ReadonlySet<number>;
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -60,12 +74,13 @@ export function InboxListPane({
   undo: InboxUndo | null;
   onUndo: () => void;
 }) {
+  const scanLimit = useInboxScanLimit();
   const selected = entries[selectedIndex];
   const virtualRows = entries.slice(virtual.firstRow, virtual.lastRow);
 
   // Escape from the Done / Snoozed list (rows or status bar) returns to the open list.
   function handleSectionKeyDown(event: KeyboardEvent) {
-    if (event.key !== "Escape" || tab === "open" || isEditableTarget(event.target)) return;
+    if (event.key !== "Escape" || event.defaultPrevented || tab === "open" || isEditableTarget(event.target)) return;
     event.preventDefault();
     onTabChange("open");
     window.setTimeout(() => listRef.current?.focus(), 0);
@@ -77,6 +92,11 @@ export function InboxListPane({
       onKeyDown={handleSectionKeyDown}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
     >
+      <InboxColumnFilterBar
+        columnFilters={columnFilters}
+        onOpenFilter={onOpenColumnFilter}
+        onClear={onClearColumnFilters}
+      />
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : isLoading ? (
@@ -99,10 +119,11 @@ export function InboxListPane({
         >
           {entries.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {filterText.trim() ? "No items match the filter." : EMPTY_MESSAGE[tab]}
+              {filterText.trim() || priority !== "all" || activeColumnFilterCount(columnFilters) > 0 ? "No items match the filter." : EMPTY_MESSAGE[tab]}
             </div>
           ) : (
-            <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={virtual.scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+              <div style={{ minHeight: virtual.totalHeight }}>
               {virtual.topPadding > 0 ? <div style={{ height: virtual.topPadding }} /> : null}
               {virtualRows.map((entry, offset) => {
                 const rowIndex = virtual.firstRow + offset;
@@ -116,19 +137,29 @@ export function InboxListPane({
                     tab={tab}
                     domId={`inbox-row-${entry.id}`}
                     selected={rowIndex === selectedIndex}
+                    checked={checkedIds.has(entry.id)}
                     onSelect={() => onSelect(rowIndex)}
                     onOpen={() => onOpen(entry)}
                   />
                 );
               })}
               {virtual.bottomPadding > 0 ? <div style={{ height: virtual.bottomPadding }} /> : null}
+              </div>
             </div>
           )}
         </div>
       )}
 
       <ListStatusBar
-        summary={[itemCount(entries.length)]}
+        summary={[
+          itemCount(entries.length),
+          checkedIds.size > 0 && `${checkedIds.size} marked (Esc clears)`,
+          scanLimit && (
+            <span key="scan" title={scanLimit} className="text-amber-600 dark:text-amber-400">
+              Scan limited — some comments may be missing
+            </span>
+          ),
+        ]}
         done={{ count: tabCounts.done, active: tab === "done", onToggle: () => onTabChange(tab === "done" ? "open" : "done") }}
         snoozed={{
           count: tabCounts.snoozed,
@@ -146,7 +177,7 @@ export function InboxListPane({
               title="Undo (U)"
               className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring"
             >
-              Undo <kbd className="font-mono text-[10px]">U</kbd>
+              Undo <kbd className="font-mono text-3xs">U</kbd>
             </button>
           </span>
         ) : null}

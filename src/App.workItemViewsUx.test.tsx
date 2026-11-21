@@ -52,7 +52,7 @@ async function openViewsScreen() {
 }
 
 async function addView(main: ReturnType<typeof within>, name: string) {
-  fireEvent.click(await main.findByRole("button", { name: /Add/ }));
+  fireEvent.click(await main.findByRole("button", { name: /New view/ }));
   await screen.findByRole("dialog", { name: "Add View" });
   await main.findByText("Platform");
   fireEvent.change(main.getByLabelText("Name"), { target: { value: name } });
@@ -238,6 +238,22 @@ describe("App — Work Item Views UX", () => {
     expect(screen.getByRole("dialog", { name: "Add View" })).toBeTruthy();
   });
 
+  it("stays open when a text selection drag ends on the backdrop", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Drag view");
+
+    const dialog = screen.getByRole("dialog", { name: "Add View" });
+    const backdrop = dialog.parentElement as HTMLElement;
+    // A drag that starts in the WIQL box and is released outside the dialog
+    // makes the browser fire the click on the backdrop.
+    fireEvent.mouseDown(main.getByLabelText("WIQL"));
+    fireEvent.click(backdrop);
+    expect(screen.getByRole("dialog", { name: "Add View" })).toBeTruthy();
+
+    fireEvent.mouseDown(backdrop);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add View" })).toBeNull());
+  });
+
   it("reformats the draft query from the Format button", async () => {
     const main = await openViewsScreen();
     await addView(main, "Format view");
@@ -300,6 +316,50 @@ describe("App — Work Item Views UX", () => {
     expect(
       invokeMock.mock.calls.some(([command]) => command === "count_work_item_query"),
     ).toBe(false);
+  });
+
+  it("switches between the URL and existing-query tabs with the arrow keys", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Tab view");
+
+    const urlTab = screen.getByRole("tab", { name: "Paste URL" });
+    const queryTab = screen.getByRole("tab", { name: "From existing query" });
+    expect(urlTab.getAttribute("aria-selected")).toBe("true");
+    expect(queryTab.getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.keyDown(urlTab, { key: "ArrowRight" });
+    await waitFor(() => expect(queryTab.getAttribute("aria-selected")).toBe("true"));
+    await waitFor(() => expect(document.activeElement).toBe(queryTab));
+    expect(screen.getByRole("combobox", { name: /Import an Azure DevOps query/ })).toBeTruthy();
+
+    fireEvent.keyDown(queryTab, { key: "ArrowLeft" });
+    await waitFor(() => expect(urlTab.getAttribute("aria-selected")).toBe("true"));
+  });
+
+  it("builds WHERE conditions from the Build conditions tab", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Grid view");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Build conditions" }));
+    const field = screen.getByLabelText("Field for condition 1") as HTMLInputElement;
+    await waitFor(() => expect(document.activeElement).toBe(field));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    const rows = screen.getAllByLabelText(/^Value for condition/);
+    fireEvent.change(rows[rows.length - 1], { target: { value: "login" } });
+    expect((main.getByLabelText("WIQL") as HTMLTextAreaElement).value).toBe(
+      "SELECT [System.Id] FROM WorkItems\nWHERE [System.WorkItemType] = 'Bug'\n  AND [System.Title] CONTAINS 'login'",
+    );
+  });
+
+  it("keeps the rarely used settings in a collapsed section", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Advanced view");
+
+    const details = screen.getByText("Advanced settings").closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    fireEvent.click(details.querySelector("summary") as HTMLElement);
+    await waitFor(() => expect(details.open).toBe(true));
   });
 
   it("expands the WIQL editor and shrinks it again", async () => {

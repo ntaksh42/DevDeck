@@ -14,3 +14,6 @@ export * from "./commands/snooze";
 export * from "./commands/notifications";
 export * from "./commands/actionInbox";
 export * from "./commands/agentNotes";
+export * from "./commands/autoQueue";
+export * from "./commands/agentWork";
+export * from "./commands/homeBot";

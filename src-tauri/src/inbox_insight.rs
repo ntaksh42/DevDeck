@@ -21,10 +21,11 @@ use tauri::{AppHandle, Emitter};
 use crate::agent_notes::launch::{
     is_plain_folder_name, is_plain_model_name, shell_command, AZURE_TOKEN_VARS,
 };
-use crate::db::{AppDatabase, AppSettings, InboxInsight, InboxItem, InsightEvidence};
+use crate::db::{
+    AppDatabase, AppSettings, InboxInsight, InboxItem, InsightEvidence, PR_INSIGHT_KINDS,
+    WI_INSIGHT_KINDS,
+};
 
-/// Items summarized per sync; the rest wait for the next one.
-const ITEMS_PER_RUN: u32 = 3;
 const DEFAULT_MODEL: &str = "sonnet";
 const TIMEOUT: Duration = Duration::from_secs(300);
 /// Longest thread text sent to the model.
@@ -88,7 +89,11 @@ pub(crate) fn start(
     if !settings.inbox_insight_enabled || RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
-    let items = match db.inbox_items_needing_insight(org_id, kinds, ITEMS_PER_RUN) {
+    let items = match db.inbox_items_needing_insight(
+        org_id,
+        kinds,
+        settings.inbox_insight_max_per_sync as u32,
+    ) {
         Ok(items) if !items.is_empty() => items,
         Ok(_) => {
             RUNNING.store(false, Ordering::SeqCst);
@@ -100,48 +105,103 @@ pub(crate) fn start(
             return;
         }
     };
+    let (model, workspace) = run_settings(settings);
+    let db = db.clone();
+    let handle = handle.clone();
+    std::thread::spawn(move || {
+        for item in &items {
+            let thread = threads.get(&(item.repository_id.clone(), item.thread_id));
+            write_insight(
+                &db,
+                &handle,
+                item,
+                thread.map(String::as_str),
+                &model,
+                workspace.as_deref(),
+            );
+        }
+        RUNNING.store(false, Ordering::SeqCst);
+    });
+}
+
+/// Writes the summary of one more open item the user asked for, replacing any
+/// earlier one (e.g. a failed run, or an item past the per-sync limit). The
+/// full thread is only at hand during the PR sync, so this works from the
+/// stored excerpt. Fails when summaries are off, the item is gone or not open
+/// or not a comment kind, or another run is going.
+pub(crate) fn start_one(
+    db: &AppDatabase,
+    settings: &AppSettings,
+    handle: &AppHandle,
+    item_id: i64,
+) -> Result<(), String> {
+    if !settings.inbox_insight_enabled {
+        return Err("Inbox summaries are turned off in Settings".into());
+    }
+    let item = db
+        .get_open_inbox_item_for_insight(
+            item_id,
+            &[PR_INSIGHT_KINDS.as_slice(), WI_INSIGHT_KINDS.as_slice()].concat(),
+        )
+        .map_err(|e| e.to_string())?
+        .ok_or("this item cannot be summarized")?;
+    if RUNNING.swap(true, Ordering::SeqCst) {
+        return Err("another summary is being written; try again in a moment".into());
+    }
+    let (model, workspace) = run_settings(settings);
+    let db = db.clone();
+    let handle = handle.clone();
+    std::thread::spawn(move || {
+        write_insight(&db, &handle, &item, None, &model, workspace.as_deref());
+        RUNNING.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
+fn run_settings(settings: &AppSettings) -> (String, Option<PathBuf>) {
     let model = settings
         .inbox_insight_model
         .clone()
         .filter(|model| is_plain_model_name(model))
         .unwrap_or_else(|| DEFAULT_MODEL.to_string());
-    let workspace = settings.agent_workspace_path.clone().map(PathBuf::from);
-    let db = db.clone();
-    let handle = handle.clone();
-    std::thread::spawn(move || {
-        for item in &items {
-            let pending = InboxInsight {
-                status: "pending".into(),
+    (
+        model,
+        settings.agent_workspace_path.clone().map(PathBuf::from),
+    )
+}
+
+/// Marks `item` pending, runs Claude Code and saves what it answered.
+fn write_insight(
+    db: &AppDatabase,
+    handle: &AppHandle,
+    item: &InboxItem,
+    thread: Option<&str>,
+    model: &str,
+    workspace: Option<&std::path::Path>,
+) {
+    let pending = InboxInsight {
+        status: "pending".into(),
+        ..InboxInsight::default()
+    };
+    if db.save_inbox_insight(item.id, &pending).is_err() {
+        return;
+    }
+    notify(handle);
+    let insight = match run_claude(item, thread, model, workspace) {
+        Ok(insight) => insight,
+        Err(error) => {
+            tracing::warn!(item = item.id, %error, "inbox insight: run failed");
+            InboxInsight {
+                status: "failed".into(),
+                error: Some(error),
                 ..InboxInsight::default()
-            };
-            if db.save_inbox_insight(item.id, &pending).is_err() {
-                continue;
             }
-            notify(&handle);
-            let thread = threads.get(&(item.repository_id.clone(), item.thread_id));
-            let insight = match run_claude(
-                item,
-                thread.map(String::as_str),
-                &model,
-                workspace.as_deref(),
-            ) {
-                Ok(insight) => insight,
-                Err(error) => {
-                    tracing::warn!(item = item.id, %error, "inbox insight: run failed");
-                    InboxInsight {
-                        status: "failed".into(),
-                        error: Some(error),
-                        ..InboxInsight::default()
-                    }
-                }
-            };
-            if let Err(e) = db.save_inbox_insight(item.id, &insight) {
-                tracing::warn!(item = item.id, error = ?e, "inbox insight: failed to save");
-            }
-            notify(&handle);
         }
-        RUNNING.store(false, Ordering::SeqCst);
-    });
+    };
+    if let Err(e) = db.save_inbox_insight(item.id, &insight) {
+        tracing::warn!(item = item.id, error = ?e, "inbox insight: failed to save");
+    }
+    notify(handle);
 }
 
 fn notify(handle: &AppHandle) {
@@ -353,128 +413,4 @@ fn parse_output(output: &str) -> Result<InboxInsight, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reads_the_answer_inside_the_cli_result() {
-        let output = r#"{"type":"result","is_error":false,"result":"```json\n{\"verdict\":\"reply\",\"reason\":\"?? で既定値になる\",\"evidence\":[{\"text\":\"既定値 30000\",\"location\":\"a.ts:7\",\"code\":\"x ?? 30000\",\"guess\":false},{\"text\":\" \"}],\"replyDraft\":\"a.ts:7 で既定値になります\"}\n```"}"#;
-        let insight = parse_output(output).unwrap();
-        assert_eq!(insight.status, "ready");
-        assert_eq!(insight.verdict.as_deref(), Some("reply"));
-        assert_eq!(insight.reason.as_deref(), Some("?? で既定値になる"));
-        // Blank evidence is dropped.
-        assert_eq!(insight.evidence.len(), 1);
-        assert_eq!(insight.evidence[0].location.as_deref(), Some("a.ts:7"));
-        assert_eq!(
-            insight.reply_draft.as_deref(),
-            Some("a.ts:7 で既定値になります")
-        );
-    }
-
-    #[test]
-    fn ignores_an_unknown_verdict() {
-        let output = r#"{"is_error":false,"result":"{\"verdict\":\"maybe\",\"reason\":\"r\"}"}"#;
-        let insight = parse_output(output).unwrap();
-        assert_eq!(insight.verdict, None);
-        assert!(insight.evidence.is_empty());
-    }
-
-    #[test]
-    fn reports_errors_and_unexpected_text() {
-        assert!(parse_output("not json").is_err());
-        assert!(parse_output(r#"{"is_error":true,"result":"rate limited"}"#).is_err());
-        assert!(parse_output(r#"{"is_error":false,"result":"no object here"}"#).is_err());
-    }
-
-    #[test]
-    fn runs_locked_down_with_read_only_tools_at_most() {
-        let with_clone = command_line("sonnet", READ_ONLY_TOOLS);
-        assert!(with_clone.contains("--restricted"));
-        assert!(with_clone.contains("--strict-mcp-config"));
-        assert!(with_clone.contains("--tools \"Read,Grep,Glob\""));
-        assert!(!with_clone.contains("dangerously"));
-        assert!(command_line("sonnet", NO_TOOLS).ends_with("--tools \"\""));
-    }
-
-    fn test_item() -> InboxItem {
-        InboxItem {
-            id: 1,
-            organization_id: "org".into(),
-            kind: "pr_mention".into(),
-            subject_id: 42,
-            project_id: "p".into(),
-            project_name: "Platform".into(),
-            repository_id: "r".into(),
-            repository_name: "api".into(),
-            thread_id: 7,
-            comment_id: 1,
-            title: "Fix null".into(),
-            author: None,
-            snippet: Some("@me check this".into()),
-            web_url: None,
-            state: "open".into(),
-            snoozed_until: None,
-            detected_at: String::new(),
-            done_at: None,
-            file_path: Some("/src/a.rs".into()),
-            line: Some(12),
-            insight: None,
-        }
-    }
-
-    #[test]
-    fn asks_for_an_investigation_only_with_a_clone() {
-        let item = test_item();
-        let with_clone = build_prompt(&item, Some("Frank: why null?"), true);
-        assert!(with_clone.contains("Read / Grep / Glob"));
-        assert!(with_clone.contains("/src/a.rs line 12"));
-        assert!(with_clone.contains("Frank: why null?"));
-        let without = build_prompt(&item, None, false);
-        assert!(without.contains("no access to the code"));
-        assert!(without.contains("do not follow"));
-        assert!(without.contains("@me check this"));
-    }
-
-    #[test]
-    fn keeps_the_newest_comments_of_a_long_thread() {
-        let item = test_item();
-        let thread = format!(
-            "Old: {}\n\nNew: @me please answer",
-            "x".repeat(MAX_THREAD_CHARS)
-        );
-        let prompt = build_prompt(&item, Some(&thread), false);
-        assert!(prompt.contains("New: @me please answer"));
-        assert!(!prompt.contains("Old: "));
-    }
-
-    /// On a real Windows shell: `claude` runs under `cmd /C`, so stopping a run
-    /// must end the grandchild too. If it survived, it would keep the output
-    /// pipe open and the reader would wait for it to finish on its own.
-    #[cfg(windows)]
-    #[test]
-    fn kill_tree_ends_the_process_under_cmd() {
-        use std::sync::mpsc;
-
-        let mut child = shell_command("ping -n 30 127.0.0.1")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let mut stdout = child.stdout.take().unwrap();
-        let (done, finished) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut out = Vec::new();
-            let _ = stdout.read_to_end(&mut out);
-            let _ = done.send(());
-        });
-        std::thread::sleep(Duration::from_millis(500));
-
-        kill_tree(&mut child);
-        assert!(
-            finished.recv_timeout(Duration::from_secs(10)).is_ok(),
-            "the process under cmd kept the output pipe open"
-        );
-    }
-}
+mod tests;

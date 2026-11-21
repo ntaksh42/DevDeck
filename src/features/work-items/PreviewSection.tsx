@@ -1,3 +1,4 @@
+import { isImeComposing } from "@/lib/utils";
 import { type ReactNode, useState } from "react";
 import { ChevronRight, Loader2, X } from "lucide-react";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
@@ -34,12 +35,21 @@ export function PreviewControl({
   shortcut?: string;
 }) {
   return (
-    <div className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1">
-      <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
+    // Pickers return focus to their trigger on close. The trigger's own
+    // rectangular outline overlapped this pill's border and label, so the
+    // keyboard focus ring is drawn on the pill itself instead.
+    <div className="group/pill inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-2 pr-1.5 has-[>div>*>button:focus-visible]:border-ring has-[>div>*>button:focus-visible]:ring-1 has-[>div>*>button:focus-visible]:ring-ring">
+      <span className="shrink-0 text-2xs font-medium leading-4 text-muted-foreground">
         {label}
       </span>
-      <div className="flex min-w-0 items-center leading-4">{children}</div>
-      {shortcut ? <ShortcutHint>{shortcut}</ShortcutHint> : null}
+      <div className="flex min-w-0 items-center leading-4 [&>*>button:focus-visible]:outline-none">{children}</div>
+      {/* The key hint only shows while the pill is hovered or focused, so the
+          idle header isn't a row of little boxes. */}
+      {shortcut ? (
+        <span className="hidden group-focus-within/pill:inline-flex group-hover/pill:inline-flex">
+          <ShortcutHint>{shortcut}</ShortcutHint>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -55,15 +65,15 @@ export function PreviewField({
 }) {
   return (
     <div
-      className={`inline-flex max-w-full items-baseline gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-2 ${
+      className={`inline-flex max-w-full items-baseline gap-1 rounded-full border border-border bg-card py-0.5 pl-2 pr-2.5 ${
         wide ? "w-full" : "min-w-0"
       }`}
     >
-      <dt className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
+      <dt className="shrink-0 text-2xs font-medium leading-4 text-muted-foreground">
         {label}
       </dt>
       <dd
-        className={`min-w-0 text-[11px] font-bold leading-4 text-foreground ${
+        className={`min-w-0 text-xs font-semibold leading-4 text-foreground ${
           wide ? "break-words" : "truncate"
         }`}
         title={value}
@@ -75,8 +85,9 @@ export function PreviewField({
 }
 
 export function PreviewSection({
-  accentColor = "border-l-slate-400 dark:border-l-slate-500",
+  accentColor = "border-l-muted-foreground",
   children,
+  primary = false,
   className = "",
   collapseId,
   title,
@@ -84,6 +95,9 @@ export function PreviewSection({
   /** Tailwind `border-l-*` class(es) used for the band's left accent stripe,
       so each section reads as its own kind at a glance while scrolling. */
   accentColor?: string;
+  /** Description / Comments: a larger heading, so sections read apart by size
+      while every band keeps the same look. */
+  primary?: boolean;
   children: ReactNode;
   className?: string;
   collapseId?: string;
@@ -111,30 +125,28 @@ export function PreviewSection({
     <section className={`min-w-0 ${className}`}>
       {/* Light blue band so each section reads as a distinct group and the
           Description ↔ Comments boundary is obvious; collapse stays. */}
-      <div className="sticky top-0 z-10 mb-1 bg-card/95 pt-1 backdrop-blur-sm">
+      <div className={`sticky top-0 z-10 mb-1 bg-card/95 backdrop-blur-sm ${primary ? "pt-3" : "pt-1"}`}>
         {collapseId ? (
           <button
             type="button"
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
             {...move}
-            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-blue-50 px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-blue-950 dark:hover:bg-blue-900 ${accentColor}`}
+            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-info/10 px-1.5 py-0.5 text-left hover:bg-info/20 focus:outline-none focus:ring-1 focus:ring-ring ${accentColor}`}
           >
             <ChevronRight
-              className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
+              className={`h-3 w-3 shrink-0 text-info transition-transform ${
                 collapsed ? "" : "rotate-90"
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:text-blue-100">
+            <h3 className="text-sm font-semibold leading-5 text-foreground">
               {title}
             </h3>
             <SectionGrip show={move !== null} />
           </button>
         ) : (
-          <h3
-            className={`rounded border-l-4 bg-blue-50 px-1.5 py-1 text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:bg-blue-950 dark:text-blue-100 ${accentColor}`}
-          >
+          <h3 className={`rounded border-l-4 bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground ${accentColor}`}>
             {title}
           </h3>
         )}
@@ -168,17 +180,17 @@ export function PreviewTagsField({
 
   return (
     <div className="flex w-full min-w-0 items-baseline gap-1.5">
-      <dt className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
+      <dt className="shrink-0 text-2xs font-extrabold uppercase tracking-wide leading-4 text-muted-foreground">
         {label}
       </dt>
       <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
         {tags.length === 0 && !onChange ? (
-          <span className="text-[11px] font-bold leading-4 text-foreground">—</span>
+          <span className="text-2xs font-bold leading-4 text-foreground">—</span>
         ) : (
           tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-full border border-border bg-secondary px-2 py-px text-[11px] font-semibold leading-4 text-secondary-foreground"
+              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-full border border-border bg-secondary px-2 py-px text-2xs font-semibold leading-4 text-secondary-foreground"
               title={tag}
             >
               {tag}
@@ -205,13 +217,13 @@ export function PreviewTagsField({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               stopPreviewNavigationKeyDown(event);
-              if (event.key === "Enter") {
+              if (event.key === "Enter" && !isImeComposing(event)) {
                 event.preventDefault();
                 addDraftTag();
               }
             }}
             onBlur={addDraftTag}
-            className="w-16 min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-[11px] leading-4 outline-none placeholder:text-muted-foreground focus:border-input focus:bg-background disabled:opacity-50"
+            className="w-16 min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-2xs leading-4 outline-none placeholder:text-muted-foreground focus:border-input focus:bg-background disabled:opacity-50"
           />
         ) : null}
         {pending ? (

@@ -31,6 +31,7 @@ export function resolveNotificationJump(record: NotificationRecord): Notificatio
   switch (parsed.kind) {
     case "prReviewRequested":
     case "prVoteReset":
+    case "prReadyToMerge":
     case "prCommentReply": {
       const pullRequestId = numberField(payload, "pullRequestId");
       if (pullRequestId != null) return { type: "pullRequest", pullRequestId, organizationId };
@@ -45,6 +46,7 @@ export function resolveNotificationJump(record: NotificationRecord): Notificatio
     case "pipelineWatchStarted":
     case "pipelineWatchFinished":
     case "pipelineRunQueued":
+    case "pipelineInvestigationStarted":
       return { type: "view", view: "pipelines" };
     case "syncFailed":
       return { type: "view", view: "settings" };

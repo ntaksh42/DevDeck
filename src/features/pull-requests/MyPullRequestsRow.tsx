@@ -1,6 +1,7 @@
 import { type ReactNode, Fragment, forwardRef } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { type MyCreatedPullRequestSummary } from "@/lib/azdoCommands";
+import type { ColumnDragProps } from "@/lib/columnDrag";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { sortLabels, type SortKey, type SortState } from "./myPullRequestsTypes";
@@ -32,6 +33,9 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
     case "title":
       return (
         <div className="flex min-w-0 items-center gap-1.5">
+          {pr.readyToMerge && !pr.isDraft && (
+            <span className="shrink-0 rounded border border-success px-1.5 py-0.5 text-xs text-success">Ready to merge</span>
+          )}
           {pr.isDraft && (
             <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               Draft
@@ -62,7 +66,7 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
           title={`${pr.approvals} of ${pr.reviewerCount} reviewers approved`}
         >
           <CheckCircle2
-            className={`h-3.5 w-3.5 ${complete ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
+            className={`h-3.5 w-3.5 ${complete ? "text-success" : "text-muted-foreground"}`}
             aria-hidden="true"
           />
           {pr.approvals}/{pr.reviewerCount}
@@ -77,11 +81,13 @@ export function SortHeaderButton({
   sort,
   onSort,
   resizeHandle,
+  dragProps,
 }: {
   column: SortKey;
   sort: SortState;
   onSort: (column: SortKey) => void;
   resizeHandle?: ReactNode;
+  dragProps?: ColumnDragProps;
 }) {
   const active = sort.key === column;
   const label = sortLabels[column];
@@ -89,13 +95,15 @@ export function SortHeaderButton({
     <div
       role="columnheader"
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="relative min-w-0"
+      className="relative min-w-0 data-[drop-target=true]:bg-primary/15 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-primary"
+      {...dragProps?.cell}
     >
       <div className="flex min-w-0 items-center">
         <button
           type="button"
           aria-label={`Sort by ${label}`}
           onClick={() => onSort(column)}
+          {...dragProps?.handle}
           className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
             active ? "text-foreground" : ""
           }`}

@@ -27,6 +27,7 @@ pub(crate) fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkI
         id: comment.id,
         text: comment.text,
         rendered_text: comment.rendered_text,
+        format: comment.format,
         created_by,
         created_by_id,
         created_by_unique_name,

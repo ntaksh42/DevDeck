@@ -129,8 +129,8 @@ export function buildRichHtmlDocument(
   density: "compact" | "comfortable" = "compact",
   theme: "light" | "dark" = "light",
 ): string {
-  const fontSize = density === "comfortable" ? 14 : 12;
-  const lineHeight = density === "comfortable" ? 1.55 : 1.35;
+  const fontSize = density === "comfortable" ? 14 : 13;
+  const lineHeight = density === "comfortable" ? 1.55 : 1.5;
   const paragraphMargin = density === "comfortable" ? 10 : 6;
   const safeHtml = sanitizeRichHtml(html);
   // Hard-coded hex equivalents of the app's `.dark` HSL variables in

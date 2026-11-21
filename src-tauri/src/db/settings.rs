@@ -1,9 +1,9 @@
-use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
+use super::settings_kv::*;
 use super::AppDatabase;
 
 /// A single notification-routing rule. An empty list in a field means "any":
@@ -51,6 +51,9 @@ pub struct AppSettings {
     /// Agent a request goes to unless the composer picks another: `codex`, or
     /// unset for Claude Code.
     pub default_agent: Option<String>,
+    /// Lets DevDeck post the (signed) comments an agent proposes without the
+    /// user approving each one.
+    pub agent_auto_post_enabled: bool,
     /// Model each agent starts with (unset: the agent's own setting), and the
     /// extra models the Agent panel offers, comma-separated.
     pub claude_model: Option<String>,
@@ -67,6 +70,20 @@ pub struct AppSettings {
     pub inbox_insight_enabled: bool,
     /// Model for those summaries; unset means `sonnet`.
     pub inbox_insight_model: Option<String>,
+    /// How many new Inbox items one sync writes notes for (1..=10).
+    pub inbox_insight_max_per_sync: i64,
+    /// After each sync, starts the agent (Agent notes `investigate`) on pull
+    /// requests newly awaiting my review and work items newly assigned to me,
+    /// up to `auto_agent_max_per_sync` per organization and sync. Off by default.
+    pub auto_agent_enabled: bool,
+    /// How many items that automatic run starts per organization and sync (1..=10).
+    pub auto_agent_max_per_sync: i64,
+    /// Minutes between checks for new items to hand to the agent (1..=1440).
+    pub auto_agent_interval_minutes: i64,
+    /// When a watched pipeline's latest run fails, starts the agent on an
+    /// `investigate` request about it (the frontend watches pipelines and
+    /// starts it). Off by default.
+    pub auto_agent_pipelines_enabled: bool,
     pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
@@ -97,6 +114,11 @@ pub struct AppSettings {
     pub experimental_auto_update_check: bool,
 }
 
+pub const DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC: i64 = 3;
+pub const DEFAULT_AUTO_AGENT_MAX_PER_SYNC: i64 = 10;
+pub const MIN_AUTO_AGENT_MAX_PER_SYNC: i64 = 1;
+pub const MAX_AUTO_AGENT_MAX_PER_SYNC: i64 = 10;
+pub const DEFAULT_AUTO_AGENT_INTERVAL_MINUTES: i64 = 15;
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
 pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
@@ -113,6 +135,7 @@ impl Default for AppSettings {
             agent_command: None,
             codex_command: None,
             default_agent: None,
+            agent_auto_post_enabled: false,
             claude_model: None,
             codex_model: None,
             claude_model_choices: None,
@@ -120,6 +143,11 @@ impl Default for AppSettings {
             agent_workspace_path: None,
             inbox_insight_enabled: false,
             inbox_insight_model: None,
+            inbox_insight_max_per_sync: DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC,
+            auto_agent_enabled: false,
+            auto_agent_max_per_sync: DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
+            auto_agent_interval_minutes: DEFAULT_AUTO_AGENT_INTERVAL_MINUTES,
+            auto_agent_pipelines_enabled: false,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
@@ -181,8 +209,27 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         claude_model_choices: get_setting(conn, "claude_model_choices")?,
         codex_model_choices: get_setting(conn, "codex_model_choices")?,
         agent_workspace_path: get_setting(conn, "agent_workspace_path")?,
+        agent_auto_post_enabled: get_bool_setting(conn, "agent_auto_post_enabled", false)?,
         inbox_insight_enabled: get_bool_setting(conn, "inbox_insight_enabled", false)?,
         inbox_insight_model: get_setting(conn, "inbox_insight_model")?,
+        inbox_insight_max_per_sync: get_setting(conn, "inbox_insight_max_per_sync")?
+            .and_then(|raw| raw.trim().parse::<i64>().ok())
+            .map(clamp_inbox_insight_max_per_sync)
+            .unwrap_or(DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC),
+        auto_agent_enabled: get_bool_setting(conn, "auto_agent_enabled", false)?,
+        auto_agent_max_per_sync: get_setting(conn, "auto_agent_max_per_sync")?
+            .and_then(|raw| raw.trim().parse::<i64>().ok())
+            .map(clamp_auto_agent_max_per_sync)
+            .unwrap_or(DEFAULT_AUTO_AGENT_MAX_PER_SYNC),
+        auto_agent_interval_minutes: get_setting(conn, "auto_agent_interval_minutes")?
+            .and_then(|raw| raw.trim().parse::<i64>().ok())
+            .map(clamp_auto_agent_interval_minutes)
+            .unwrap_or(DEFAULT_AUTO_AGENT_INTERVAL_MINUTES),
+        auto_agent_pipelines_enabled: get_bool_setting(
+            conn,
+            "auto_agent_pipelines_enabled",
+            false,
+        )?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
             "read_only_validation_mode_enabled",
@@ -242,38 +289,16 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
     })
 }
 
-fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
-    let value = get_setting(conn, "review_stale_threshold_days")?
-        .and_then(|raw| raw.trim().parse::<i64>().ok())
-        .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
-        .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
-    Ok(value)
+pub fn clamp_inbox_insight_max_per_sync(value: i64) -> i64 {
+    value.clamp(1, 10)
 }
 
-// Accepts a zero-padded "HH:MM" string with valid hour/minute ranges. Used to
-// reject corrupt or legacy values read back from the key-value store.
-fn is_valid_hh_mm(value: &str) -> bool {
-    let Some((h, m)) = value.trim().split_once(':') else {
-        return false;
-    };
-    matches!((h.parse::<u32>(), m.parse::<u32>()), (Ok(hour), Ok(minute)) if hour < 24 && minute < 60)
+pub fn clamp_auto_agent_max_per_sync(value: i64) -> i64 {
+    value.clamp(MIN_AUTO_AGENT_MAX_PER_SYNC, MAX_AUTO_AGENT_MAX_PER_SYNC)
 }
 
-fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
-    let value = get_setting(conn, "work_item_stale_threshold_days")?
-        .and_then(|raw| raw.trim().parse::<i64>().ok())
-        .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
-        .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS);
-    Ok(value)
-}
-
-// Stored as a JSON array string. Corrupt or absent JSON falls back to an empty
-// rule set, which preserves the legacy per-toggle notification behaviour.
-fn get_notification_rules(conn: &Connection) -> Result<Vec<NotificationRule>> {
-    match get_setting(conn, "notification_rules")? {
-        Some(raw) if !raw.trim().is_empty() => Ok(serde_json::from_str(&raw).unwrap_or_default()),
-        _ => Ok(Vec::new()),
-    }
+pub fn clamp_auto_agent_interval_minutes(value: i64) -> i64 {
+    value.clamp(1, 1440)
 }
 
 pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
@@ -311,9 +336,36 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
     )?;
     set_bool_setting(
         conn,
+        "agent_auto_post_enabled",
+        settings.agent_auto_post_enabled,
+    )?;
+    set_bool_setting(
+        conn,
         "inbox_insight_enabled",
         settings.inbox_insight_enabled,
     )?;
+    set_setting(
+        conn,
+        "inbox_insight_max_per_sync",
+        Some(&clamp_inbox_insight_max_per_sync(settings.inbox_insight_max_per_sync).to_string()),
+    )?;
+    set_bool_setting(conn, "auto_agent_enabled", settings.auto_agent_enabled)?;
+    set_setting(
+        conn,
+        "auto_agent_max_per_sync",
+        Some(&clamp_auto_agent_max_per_sync(settings.auto_agent_max_per_sync).to_string()),
+    )?;
+    set_setting(
+        conn,
+        "auto_agent_interval_minutes",
+        Some(&clamp_auto_agent_interval_minutes(settings.auto_agent_interval_minutes).to_string()),
+    )?;
+    set_bool_setting(
+        conn,
+        "auto_agent_pipelines_enabled",
+        settings.auto_agent_pipelines_enabled,
+    )?;
+    set_setting(conn, "auto_agent_approval_enabled", None)?;
     set_bool_setting(
         conn,
         "read_only_validation_mode_enabled",
@@ -414,48 +466,4 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         settings.experimental_auto_update_check,
     )?;
     get_app_settings(conn)
-}
-
-fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
-    Ok(conn
-        .query_row(
-            "SELECT value FROM app_settings WHERE key = ?1",
-            [key],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
-fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> {
-    match value.map(str::trim).filter(|v| !v.is_empty()) {
-        Some(v) => {
-            conn.execute(
-                r#"
-                INSERT INTO app_settings(key, value, updated_at) VALUES (?1, ?2, ?3)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-                "#,
-                params![key, v, Utc::now().to_rfc3339()],
-            )?;
-        }
-        None => {
-            conn.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
-        }
-    }
-    Ok(())
-}
-
-fn get_bool_setting(conn: &Connection, key: &str, default_value: bool) -> Result<bool> {
-    Ok(get_setting(conn, key)?
-        .as_deref()
-        .map(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "true" | "1" | "yes"
-            )
-        })
-        .unwrap_or(default_value))
-}
-
-fn set_bool_setting(conn: &Connection, key: &str, value: bool) -> Result<()> {
-    set_setting(conn, key, Some(if value { "true" } else { "false" }))
 }

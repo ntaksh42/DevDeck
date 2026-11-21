@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type Dispatch, type SetStateAction } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
@@ -15,10 +15,11 @@ import {
   SetupPanel,
   PullRequestSearch,
   MyPullRequestsGrid,
-  AnalyzeView,
   CrossOrgSummaryView,
+  HomeView,
   NotificationsView,
   InboxView,
+  AgentWorkView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
 
@@ -35,7 +36,8 @@ export interface AppContentProps {
   onMyReviewsSelectHandled: () => void;
   onSelectedViewChange: (id: string | null) => void;
   onSelectedViewRequestHandled: () => void;
-  onWorkItemNavViewsChange: (views: WorkItemQueryView[]) => void;
+  workItemNavViews: WorkItemQueryView[];
+  setWorkItemNavViews: Dispatch<SetStateAction<WorkItemQueryView[]>>;
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
   onOpenView: (view: "pipelines" | "settings" | "myReviews" | "myWorkItems") => void;
@@ -54,7 +56,8 @@ export function AppContent({
   onMyReviewsSelectHandled,
   onSelectedViewChange,
   onSelectedViewRequestHandled,
-  onWorkItemNavViewsChange,
+  workItemNavViews,
+  setWorkItemNavViews,
   onOpenSettings,
   onOpenPullRequest,
   onOpenView,
@@ -64,9 +67,9 @@ export function AppContent({
       data-focus-pane="view"
       tabIndex={-1}
       onKeyDownCapture={handlePaneFocusKey}
-      className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 outline-none ${
+      className={`flex min-h-0 flex-1 flex-col outline-none ${
         activeView === "settings" || organizations.length === 0
-          ? "overflow-auto"
+          ? "overflow-auto px-3 py-3 lg:px-5"
           : "overflow-hidden"
       }`}
     >
@@ -103,18 +106,21 @@ export function AppContent({
             selectedViewRequestId={selectedWorkItemViewRequestId}
             onSelectedViewChange={onSelectedViewChange}
             onSelectedViewRequestHandled={onSelectedViewRequestHandled}
-            onViewsChange={onWorkItemNavViewsChange}
+            views={workItemNavViews}
+            setViews={setWorkItemNavViews}
           />
         ) : activeView === "pipelines" ? (
           <PipelinesView />
         ) : activeView === "inbox" ? (
           <InboxView />
+        ) : activeView === "home" ? (
+          <HomeView />
+        ) : activeView === "autoQueue" ? (
+          <AgentWorkView />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (
           <CrossOrgSummaryView onOpenView={onOpenView} />
-        ) : activeView === "analyze" ? (
-          <AnalyzeView />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

@@ -52,3 +52,18 @@ fn recognises_the_user_whatever_the_login_case() {
     assert!(reviewers[0].is_me);
     assert!(!is_me(Some("octocat"), ""));
 }
+
+#[test]
+fn latest_review_states_prefer_a_vote_over_a_later_comment() {
+    let reviews = [
+        review("alice", "APPROVED", "2026-01-01T00:00:00Z"),
+        review("alice", "COMMENTED", "2026-01-02T00:00:00Z"),
+        review("bob", "COMMENTED", "2026-01-01T00:00:00Z"),
+        review("carol", "CHANGES_REQUESTED", "2026-01-01T00:00:00Z"),
+        review("carol", "APPROVED", "2026-01-03T00:00:00Z"),
+    ];
+    let latest = latest_review_states(&reviews);
+    assert_eq!(latest["alice"].0, "APPROVED");
+    assert_eq!(latest["bob"].0, "COMMENTED");
+    assert_eq!(latest["carol"].0, "APPROVED");
+}

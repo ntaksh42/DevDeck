@@ -2,6 +2,7 @@ import { Play } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef } from "react";
 import { FilterableSelect } from "./FilterableSelect";
 import type { useQueueRunForm } from "./useQueueRunForm";
+import { isImeComposing } from "@/lib/utils";
 
 type QueueForm = ReturnType<typeof useQueueRunForm>;
 
@@ -54,6 +55,7 @@ export function PipelineQueuePopover({
   }, [onClose]);
 
   function handleKeyDown(event: ReactKeyboardEvent) {
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();

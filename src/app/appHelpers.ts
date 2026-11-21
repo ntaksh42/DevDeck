@@ -17,8 +17,18 @@ export function invalidateSyncedDataQueries(
   const scopeSet = new Set(scopes);
   const all = scopeSet.has("all");
   const hot = scopeSet.has("hot");
+  // The sync revives snoozes that ran out; the grids also hide rows by this
+  // list, so a stale copy would keep a revived item hidden.
+  if (all || hot || scopeSet.has("myReviews") || scopeSet.has("myWorkItems")) {
+    void queryClient.invalidateQueries({ queryKey: ["snoozedItems"], refetchType });
+    // An Inbox item whose snooze ran out counts as open again at read time;
+    // nothing else announces it, so re-read the Inbox with each sync.
+    void queryClient.invalidateQueries({ queryKey: ["actionInbox"], refetchType });
+  }
   if (all || hot || scopeSet.has("myReviews")) {
     void queryClient.invalidateQueries({ queryKey: ["myReviews"], refetchType });
+    // The same PR sync fills the cache My Pull Requests reads.
+    void queryClient.invalidateQueries({ queryKey: ["myCreatedPullRequests"], refetchType });
   }
   if (all || hot || scopeSet.has("myWorkItems")) {
     void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot(), refetchType });
@@ -33,7 +43,7 @@ export function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncSc
 
 export function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
   // `wiki` must precede `wi` in the alternation so the longer prefix wins.
-  const match = /^(wiki|wi|pr):\s*(.*)$/i.exec(text.trim());
+  const match = /^(wiki|wi|pr|inbox):\s*(.*)$/i.exec(text.trim());
   if (match) {
     const prefix = match[1].toLowerCase();
     const kind: PaletteSearchKind =
@@ -41,10 +51,12 @@ export function parsePaletteSearch(text: string): { kind: PaletteSearchKind | nu
         ? "workItems"
         : prefix === "wiki"
           ? "wiki"
-          : "pullRequests";
-    return { kind, query: match[2].trim() };
+          : prefix === "inbox"
+            ? "inbox"
+            : "pullRequests";
+    return { kind, query: match[2].trim().replace(/^#(?=\d+$)/, "") };
   }
-  return { kind: null, query: text.trim() };
+  return { kind: null, query: text.trim().replace(/^#(?=\d+$)/, "") };
 }
 
 // Resolves the second-key -> view lookup for the goto chain from the current

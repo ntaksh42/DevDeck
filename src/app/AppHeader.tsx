@@ -1,6 +1,7 @@
 import { ChevronRight, PanelLeft, PanelLeftClose } from "lucide-react";
 import type { KeybindingMap } from "@/lib/keybindings";
 import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
+import { HeaderToolbarTarget } from "@/components/HeaderToolbarSlot";
 import type { View } from "./types";
 
 const VIEW_TITLES: Record<View, string> = {
@@ -13,14 +14,15 @@ const VIEW_TITLES: Record<View, string> = {
   pipelines: "Pipelines",
   notifications: "Notifications",
   inbox: "Inbox",
+  home: "Home",
+  autoQueue: "Agent Work",
   crossOrgSummary: "Cross-organization summary",
-  analyze: "Analyze",
   settings: "Settings",
 };
 
 // Breadcrumb path for views nested under a nav section, so the header names
 // both the section and the active screen (e.g. "Work Items › Search") instead
-// of just one or the other. Top-level views (Pipelines, Analyze, Notifications,
+// of just one or the other. Top-level views (Pipelines, Notifications,
 // Settings, ...) are left out and keep a single-segment title.
 const VIEW_BREADCRUMBS: Partial<Record<View, readonly [string, string]>> = {
   pullRequestSearch: ["Pull Requests", "Search"],
@@ -41,8 +43,9 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   pipelines: "Azure DevOps build runs by project",
   notifications: "History of review requests, work item updates, and pipeline alerts",
   inbox: "Mentions and replies that need your response",
+  home: "What to do next across reviews and work items, and the Orchestrator chat",
+  autoQueue: "What the agent is reviewing and investigating, what failed, and its results",
   crossOrgSummary: "Reviews and work items totalled across every connection",
-  analyze: "Query count trends for a group, by day or week",
   settings: "Local Azure DevOps organization setup",
 };
 
@@ -76,8 +79,8 @@ export function AppHeader({
     : [VIEW_TITLES[activeView]];
 
   return (
-    <header className="flex h-9 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="app-frame flex h-9 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -96,7 +99,7 @@ export function AppHeader({
             The visible breadcrumb is decorative (aria-hidden) so screen readers get a single,
             reliably space-separated name from aria-label instead of concatenated child text. */}
         <h1
-          className="flex min-w-0 items-center gap-1 text-base font-semibold"
+          className="flex shrink-0 items-center gap-1 text-base font-semibold"
           title={VIEW_DESCRIPTIONS[activeView]}
           aria-label={segments.join(" ")}
         >
@@ -113,7 +116,8 @@ export function AppHeader({
                   ) : null}
                   <span
                     className={
-                      isLast ? "truncate" : "shrink-0 font-normal text-muted-foreground"
+                      // The last segment (e.g. a long view name) is capped so a header toolbar keeps room.
+                      isLast ? "max-w-[16rem] truncate" : "shrink-0 font-normal text-muted-foreground"
                     }
                   >
                     {segment}
@@ -123,6 +127,7 @@ export function AppHeader({
             })}
           </span>
         </h1>
+        <HeaderToolbarTarget />
       </div>
       {organizationsLength > 0 && (
         <div className="flex items-center gap-2">

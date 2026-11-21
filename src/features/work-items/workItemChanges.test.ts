@@ -3,6 +3,7 @@ import type { WorkItemPreview } from "@/lib/azdoCommands";
 import {
   DUPLICATE_TITLE_PREFIX,
   buildDuplicateDraft,
+  stagedChangesFromPresetFields,
   buildInverseChanges,
   buildWorkItemEmailLink,
   customPreviewFieldValue,
@@ -67,6 +68,11 @@ describe("buildDuplicateDraft", () => {
       tags: ["auth", "security"],
       assignedTo: "Jane Doe",
     });
+  });
+
+  it("assigns the copy by unique name when it is known", () => {
+    const preview = makePreview({ assignedTo: "Jane Doe", assignedToUniqueName: "jane@contoso.com" });
+    expect(buildDuplicateDraft(preview).assignedTo).toBe("Jane Doe <jane@contoso.com>");
   });
 
   it("does not mutate the source preview", () => {
@@ -206,5 +212,16 @@ describe("stagedEntriesForPreview", () => {
   it("falls back to an em dash for empty prior values", () => {
     const entries = stagedEntriesForPreview(makePreview({ tags: "  " }), { tags: [] });
     expect(entries).toEqual([{ key: "tags", label: "Tags", from: "—", to: "—" }]);
+  });
+});
+
+describe("stagedChangesFromPresetFields", () => {
+  it("stages no assignee change when the preset names the current assignee", () => {
+    const preview = makePreview({ assignedTo: "Jane Doe", assignedToUniqueName: "jane@contoso.com" });
+    const staged = stagedChangesFromPresetFields(
+      [{ referenceName: "System.AssignedTo", label: "Assignee", value: "Jane Doe <jane@contoso.com>" }],
+      preview,
+    );
+    expect(staged.assignee).toBeUndefined();
   });
 });

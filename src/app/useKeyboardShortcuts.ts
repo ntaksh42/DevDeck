@@ -13,7 +13,8 @@ import {
 import { dispatchWorkItemCommand, gotoViewMapFromKeybindings } from "./appHelpers";
 import { GOTO_CHAIN_TIMEOUT_MS } from "./types";
 import { toggleAgentPanel } from "@/components/agent/agentSubject";
-import { bindFramePaneFocus } from "@/lib/paneFocus";
+import { resetUiScale, stepUiScale } from "@/lib/uiScale";
+import { bindFramePaneFocus, handlePaneCycleKey } from "@/lib/paneFocus";
 import type { View } from "./types";
 
 export interface UseKeyboardShortcutsParams {
@@ -58,8 +59,13 @@ export function useKeyboardShortcuts({
         bindFramePaneFocus(frame);
       }
     }
+    const onPaneCycleKey = (event: KeyboardEvent) => { handlePaneCycleKey(event); };
     window.addEventListener("blur", onWindowBlur);
-    return () => window.removeEventListener("blur", onWindowBlur);
+    window.addEventListener("keydown", onPaneCycleKey, true);
+    return () => {
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("keydown", onPaneCycleKey, true);
+    };
   }, []);
   // Stable ref so the effects below don't need syncAll in their dep arrays
   // (it's a new lambda every render). The ref is always current.
@@ -84,7 +90,8 @@ export function useKeyboardShortcuts({
 
     function onKeyDownCapture(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      if (isEditableTarget(event.target)) {
+      // A modal dialog owns the keyboard: no view switch may start behind it.
+      if (isEditableTarget(event.target) || document.querySelector('[aria-modal="true"]')) {
         disarm();
         return;
       }
@@ -260,6 +267,28 @@ export function useKeyboardShortcuts({
       if (matchesCombo(keybindings.toggleAgent, event)) {
         event.preventDefault();
         toggleAgentPanel();
+        return;
+      }
+
+      // Ctrl+Shift+= reports key "+", so accept it as zoom-in too.
+      if (
+        matchesCombo(keybindings.uiScaleUp, event) ||
+        (keybindings.uiScaleUp === "Ctrl+=" && event.ctrlKey && event.key === "+")
+      ) {
+        event.preventDefault();
+        stepUiScale(1);
+        return;
+      }
+
+      if (matchesCombo(keybindings.uiScaleDown, event)) {
+        event.preventDefault();
+        stepUiScale(-1);
+        return;
+      }
+
+      if (matchesCombo(keybindings.uiScaleReset, event)) {
+        event.preventDefault();
+        resetUiScale();
         return;
       }
 

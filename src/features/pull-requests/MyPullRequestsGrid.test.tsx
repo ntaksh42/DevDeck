@@ -31,6 +31,7 @@ const pr: MyCreatedPullRequestSummary = {
   isDraft: false,
   approvals: 0,
   reviewerCount: 0,
+  readyToMerge: false,
 };
 
 describe("MyPullRequestsGrid copy shortcuts", () => {
@@ -52,6 +53,27 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     expect(within(grid).getByText(pr.title)).toBeTruthy();
     fireEvent.keyDown(grid, { key: "l" });
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("!77")));
+  });
+
+  it("keeps the selected PR when a sync adds a newer one above it", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    const older = { ...pr, pullRequestId: 70, title: "Older change", creationDate: "2026-06-01T00:00:00Z" };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr, older], warnings: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    fireEvent.keyDown(grid, { key: "j" });
+    const selectedTitle = () =>
+      within(grid).getAllByRole("row").find((row) => row.getAttribute("aria-selected") === "true")?.textContent ?? "";
+    await waitFor(() => expect(selectedTitle()).toContain("Older change"));
+    const newer = { ...pr, pullRequestId: 90, title: "Newest change", creationDate: "2026-07-01T00:00:00Z" };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [newer, pr, older], warnings: [] });
+    await waitFor(() => expect(within(grid).getByText("Newest change")).toBeTruthy());
+    expect(selectedTitle()).toContain("Older change");
   });
 
   it("copies the selected PR as a Markdown link with L", async () => {
@@ -90,6 +112,24 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     fireEvent.keyDown(grid, { key: "/" });
 
     expect(document.activeElement).toBe(await screen.findByRole("combobox", { name: "Filter pull requests" }));
+  });
+
+  it("filters by the PR number as the row shows it (#77)", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    const other = { ...pr, pullRequestId: 80, title: "Other change" };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr, other], warnings: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    fireEvent.keyDown(grid, { key: "/" });
+    const filter = await screen.findByRole("combobox", { name: "Filter pull requests" });
+    fireEvent.change(filter, { target: { value: "#77" } });
+    await waitFor(() => expect(within(grid).queryByText("Other change")).toBeNull());
+    expect(within(grid).getByText(pr.title)).toBeTruthy();
   });
 
   it("hides draft PRs with the always-visible Show Drafts checkbox", async () => {

@@ -24,6 +24,21 @@ export default defineConfig(async () => ({
   // startup bundle the webview has to parse before first paint.
   build: {
     target: "chrome110",
+    rollupOptions: {
+      output: {
+        // Split rarely-changing vendor code out of the entry chunk so app
+        // updates keep these cached and the entry parses less.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("dockview")) return "vendor-dockview";
+          if (id.includes("/zod/")) return "vendor-zod";
+          if (id.includes("/marked/") || id.includes("/dompurify/")) return "vendor-markdown";
+          if (id.includes("/@tanstack/")) return "vendor-query";
+          if (/[\/](react|react-dom|scheduler)[\/]/.test(id)) return "vendor-react";
+          return undefined;
+        },
+      },
+    },
   },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
@@ -55,6 +70,7 @@ export default defineConfig(async () => ({
         // suite runs; watching them made Vite reload every open page mid-test.
         "**/playwright-report/**",
         "**/test-results/**",
+        `${path.resolve(__dirname, "target").replace(/\\/g, "/")}/**`,
       ],
     },
   },

@@ -17,7 +17,6 @@ import {
 } from './workItemViewsStorage';
 import {
   type WiqlCompletion,
-  WIQL_COMPLETIONS,
   defaultWorkItemWiql,
   newWorkItemViewId,
   parseAzdoQueryUrl,
@@ -25,6 +24,7 @@ import {
   wiqlCompletionMatches,
   wiqlTokenRange,
 } from './workItemViewsHelpers';
+import { buildWiqlCompletionPool, viewUrlStatus } from './viewEditorDraftHelpers';
 
 type UseViewEditorDraftParams = {
   selectedOrganizationId: string;
@@ -102,17 +102,7 @@ export function useViewEditorDraft({
     staleTime: 5 * 60_000,
   });
 
-  const wiqlCompletionPool = useMemo(() => {
-    const known = new Set(WIQL_COMPLETIONS.map((c) => c.value.toLowerCase()));
-    const dynamic = (fieldsQuery.data ?? [])
-      .filter((field) => !known.has(`[${field.referenceName.toLowerCase()}]`))
-      .map((field) => ({
-        label: field.referenceName,
-        value: `[${field.referenceName}]`,
-        detail: field.name,
-      }));
-    return [...WIQL_COMPLETIONS, ...dynamic];
-  }, [fieldsQuery.data]);
+  const wiqlCompletionPool = useMemo(() => buildWiqlCompletionPool(fieldsQuery.data), [fieldsQuery.data]);
 
   const wiqlCompletions = useMemo(
     () => wiqlCompletionMatches(draftWiql, wiqlCursor, wiqlCompletionPool),
@@ -261,37 +251,13 @@ export function useViewEditorDraft({
     setDraftUrl(url);
   }
 
-  const urlStatus: { text: string; severity: "success" | "error" | "info" } | null =
-    (() => {
-      if (!draftUrl.trim()) return null;
-      const hasAzdoHost =
-        draftUrl.includes("dev.azure.com") || draftUrl.includes(".visualstudio.com");
-      if (!hasAzdoHost) return { text: "Enter an Azure DevOps URL.", severity: "info" };
-      if (urlQueryId) {
-        if (urlProjectName && !resolvedProjectId && !projectsLoading) {
-          return { text: `Project "${urlProjectName}" not found.`, severity: "error" };
-        }
-        if (savedQueryFetch.isFetching) return { text: "Fetching WIQL…", severity: "info" };
-        if (savedQueryFetch.isError) {
-          return {
-            text: `Fetch error: ${commandErrorMessage(savedQueryFetch.error)}`,
-            severity: "error",
-          };
-        }
-        if (savedQueryFetch.isSuccess && savedQueryFetch.data.wiql == null) {
-          return {
-            text: "No WIQL found at this URL (may be a folder or tree query).",
-            severity: "error",
-          };
-        }
-        if (savedQueryFetch.isSuccess) return { text: "WIQL fetched.", severity: "success" };
-      } else if (urlParsed.orgName ?? urlParsed.projectName) {
-        return { text: "Org / Project auto-filled. Enter WIQL manually.", severity: "info" };
-      } else {
-        return { text: "Azure DevOps query URL not recognized.", severity: "info" };
-      }
-      return null;
-    })();
+  const urlStatus = viewUrlStatus({
+    draftUrl,
+    urlParsed,
+    resolvedProjectId,
+    projectsLoading,
+    savedQuery: savedQueryFetch,
+  });
 
   function saveView(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -2,6 +2,7 @@ import type { PrThread, PullRequestReview, WorkItemPreview } from "@/lib/azdoCom
 import { navigateToWorkItem } from "@/lib/crossLinks";
 import { formatRelativeDate } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
 import { richFieldHtml } from "@/features/work-items/workItemHtml";
 import { InboxCodeSnippet } from "./InboxCodeSnippet";
@@ -29,7 +30,7 @@ function ExpandToggle({ expanded, onToggle, label }: { expanded: boolean; onTogg
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className="rounded px-1 text-[11px] text-primary hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
+      className="rounded px-1 text-2xs text-link hover:underline focus:outline-none focus:ring-1 focus:ring-ring"
     >
       {expanded ? "▾" : "▸"} {label} <Kbd>D</Kbd>
     </button>
@@ -46,7 +47,7 @@ function PullRequestSummary({ review }: { review: PullRequestReview }) {
     requiredWaiting > 0 ? `${requiredWaiting} required reviewer${requiredWaiting === 1 ? "" : "s"} not voted` : null,
     review.autoComplete ? "Auto-complete on" : null,
   ].filter(Boolean);
-  return <p className="text-[11px] text-muted-foreground">{parts.join(" · ")}</p>;
+  return <p className="text-2xs text-muted-foreground">{parts.join(" · ")}</p>;
 }
 
 function WorkItemSummary({ item, workItem }: { item: InboxEntry; workItem: WorkItemPreview }) {
@@ -58,7 +59,7 @@ function WorkItemSummary({ item, workItem }: { item: InboxEntry; workItem: WorkI
   ].filter(Boolean);
   if (stateLine.length === 0 && !parent) return null;
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-2xs text-muted-foreground">
       {stateLine.length > 0 ? <span>{stateLine.join(" · ")}</span> : null}
       {parent ? (
         <button
@@ -101,7 +102,7 @@ export function InboxContextCode({ item, review, thread }: ContextProps) {
     <section aria-label="Context" data-inbox-context="true" className="space-y-1.5 py-1">
       {code}
       {counts && counts.total > 0 ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {counts.sameFile > 0 ? `${counts.sameFile} more open in this file · ` : ""}
           {counts.total} open conversation{counts.total === 1 ? "" : "s"} in the PR
         </p>
@@ -124,6 +125,7 @@ export function InboxContextDescription({
   resolveImageSource: (url: string) => Promise<string | null>;
 }) {
   const markdown = review ? review.description : null;
+  const mentionDisplayNames = useMentionIdentityNames(item.organizationId, [markdown]);
   const html = !review && workItem ? richFieldHtml(workItem.descriptionHtml) : null;
   if (!markdown && !html) return null;
   return (
@@ -135,6 +137,7 @@ export function InboxContextDescription({
           className="mt-1 break-words"
           baseUrl={item.webUrl}
           resolveImageSource={resolveImageSource}
+          mentionDisplayNames={mentionDisplayNames}
         />
       ) : null}
       {expanded && html && workItem ? (

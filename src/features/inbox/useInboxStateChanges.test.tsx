@@ -1,43 +1,35 @@
 import type { ReactNode } from "react";
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { setActionInboxItemState } from "@/lib/azdoCommands";
-import { demoListInboxItems } from "@/lib/demo/actionInbox";
+import { afterEach, expect, it, vi } from "vitest";
+import type { InboxEntry } from "./inboxPresentation";
 import { useInboxStateChanges } from "./useInboxStateChanges";
 
-vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
-  setActionInboxItemState: vi.fn(),
+const update = vi.fn();
+vi.mock("@/lib/azdoCommands", async (original) => ({
+  ...await original<typeof import("@/lib/azdoCommands")>(),
+  setActionInboxItemState: (...args: unknown[]) => update(...args),
 }));
 
-function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>;
-}
+afterEach(() => { cleanup(); update.mockReset(); });
 
-describe("useInboxStateChanges", () => {
-  it("writes an undo only after the change it undoes was saved", async () => {
-    const entries = demoListInboxItems();
-    const calls: string[] = [];
-    let finishDone: () => void = () => {};
-    vi.mocked(setActionInboxItemState).mockImplementation(async (input) => {
-      calls.push(`start ${input.state}`);
-      if (input.state === "done") await new Promise<void>((resolve) => (finishDone = resolve));
-      calls.push(`end ${input.state}`);
-      return 1;
-    });
-    const { result } = renderHook(
-      () => useInboxStateChanges({ entries, tab: "open", onReselect: () => {} }),
-      { wrapper },
-    );
+it("waits for an in-flight change before sending its undo", async () => {
+  let finishChange!: () => void;
+  update.mockImplementationOnce(() => new Promise<void>((resolve) => { finishChange = resolve; }));
+  update.mockResolvedValue(undefined);
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const entry = { id: 42, snoozedUntil: null } as InboxEntry;
+  const { result } = renderHook(() => useInboxStateChanges({
+    entries: [entry], tab: "open", onReselect: vi.fn(),
+  }), { wrapper });
 
-    act(() => result.current.changeState(entries[0], "done"));
-    act(() => {
-      result.current.undoLast();
-    });
-    await waitFor(() => expect(calls).toEqual(["start done"]));
-
-    await act(async () => finishDone());
-    await waitFor(() => expect(calls).toEqual(["start done", "end done", "start open", "end open"]));
-  });
+  act(() => result.current.changeState(entry, "done"));
+  act(() => { expect(result.current.undoLast()).toBe(true); });
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(result.current.visibleEntries).toEqual([]);
+  await act(async () => { finishChange(); });
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+  expect(update).toHaveBeenLastCalledWith({ ids: [42], state: "open", snoozedUntil: undefined });
 });

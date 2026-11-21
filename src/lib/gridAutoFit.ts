@@ -4,8 +4,9 @@
  * - `measureColumnContentWidths` reads the natural (untruncated) width of each
  *   visible column from the rendered header + body rows, so a column can be
  *   fitted to what it actually shows.
- * - `shrinkToFit` redistributes a width overflow so the flexible column (the
- *   title) keeps its space and the other columns give way first.
+ * - `shrinkToFit` removes a width overflow from the flexible column (the title)
+ *   first, so the short columns keep their content readable.
+ * - `hideColumnsToFit` drops low-priority columns while the pane is too narrow.
  */
 
 /** Rows are the elements the grids lay out with an inline grid template. */
@@ -13,6 +14,24 @@ const ROW_SELECTOR = '[style*="grid-template-columns"]';
 
 export function gridRows(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(ROW_SELECTOR));
+}
+
+/** Grid rows that a DOM mutation added or changed (text updates included). */
+export function mutatedGridRows(records: MutationRecord[]): HTMLElement[] {
+  const rows = new Set<HTMLElement>();
+  for (const record of records) {
+    const target = record.target instanceof Element ? record.target : record.target.parentElement;
+    const changedRow = target?.closest<HTMLElement>(ROW_SELECTOR);
+    if (changedRow && record.type === "characterData") rows.add(changedRow);
+    record.addedNodes.forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.matches(ROW_SELECTOR)) rows.add(node);
+      node.querySelectorAll<HTMLElement>(ROW_SELECTOR).forEach((row) => rows.add(row));
+      const parentRow = node.parentElement?.closest<HTMLElement>(ROW_SELECTOR);
+      if (parentRow) rows.add(parentRow);
+    });
+  }
+  return [...rows];
 }
 
 /** Grid items of a row, skipping absolutely positioned decorations. */
@@ -39,10 +58,10 @@ export function measureColumnContentWidths(
   root: HTMLElement,
   trackOffset: number,
   count: number,
-  { headerOnly = false }: { headerOnly?: boolean } = {},
+  { headerOnly = false, rows: onlyRows }: { headerOnly?: boolean; rows?: HTMLElement[] } = {},
 ): (number | null)[] {
   const result: (number | null)[] = Array.from({ length: count }, () => null);
-  const rows = gridRows(root);
+  const rows = onlyRows ?? gridRows(root);
   const measuredRows = (headerOnly ? rows.slice(0, 1) : rows)
     .map(rowCells)
     .filter((cells) => cells.length >= trackOffset + count)
@@ -68,9 +87,9 @@ export function measureColumnContentWidths(
 }
 
 /**
- * Removes `overflow` px from `widths`: first from the non-flexible columns in
- * proportion to their slack above `mins`, then from the flexible column. What
- * cannot be removed without going below the minimums stays (the grid scrolls).
+ * Removes `overflow` px from `widths`: first from the flexible column, then
+ * from the others in proportion to their slack above `mins`. What cannot be
+ * removed without going below the minimums stays (the grid scrolls).
  */
 export function shrinkToFit(
   widths: number[],
@@ -81,19 +100,38 @@ export function shrinkToFit(
   if (overflow <= 0) return widths;
   const next = [...widths];
   let remaining = overflow;
+  if (flexibleIndex >= 0 && flexibleIndex < next.length) {
+    const own = Math.max(0, next[flexibleIndex] - mins[flexibleIndex]);
+    const take = Math.min(own, remaining);
+    next[flexibleIndex] -= take;
+    remaining -= take;
+  }
   const others = next.map((_, i) => i).filter((i) => i !== flexibleIndex);
   const slack = others.reduce((sum, i) => sum + Math.max(0, next[i] - mins[i]), 0);
-  if (slack > 0) {
+  if (remaining > 0 && slack > 0) {
     const take = Math.min(remaining, slack);
     for (const i of others) {
       const own = Math.max(0, next[i] - mins[i]);
       next[i] -= Math.floor((own / slack) * take);
     }
-    remaining -= take;
-  }
-  if (remaining > 0 && flexibleIndex >= 0 && flexibleIndex < next.length) {
-    const own = Math.max(0, next[flexibleIndex] - mins[flexibleIndex]);
-    next[flexibleIndex] -= Math.min(own, remaining);
   }
   return next;
+}
+
+/**
+ * Drops `hideOrder` columns, first to last, until `widthOf` the rest fits in
+ * `available`. A null `available` (pane not measured yet) hides nothing.
+ */
+export function hideColumnsToFit<K>(
+  columns: readonly K[],
+  hideOrder: readonly K[],
+  available: number | null,
+  widthOf: (columns: K[]) => number,
+): K[] {
+  let shown = [...columns];
+  for (const hide of hideOrder) {
+    if (available === null || widthOf(shown) <= available) break;
+    shown = shown.filter((column) => column !== hide);
+  }
+  return shown;
 }

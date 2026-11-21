@@ -1,3 +1,5 @@
+import { demoPaletteSearch } from "./demo/palette";
+import { stopDemoPrSearch } from "./demo/prSearch";
 import type {
   AddAzureCliOrganizationInput,
   AddPatOrganizationInput,
@@ -16,8 +18,8 @@ import type {
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
   GetWorkItemResultPreviewInput,
+  ResultTarget,
   ListPullRequestChangesInput,
-  CountWorkItemQueryHistoryInput,
   ListWorkItemFieldAllowedValuesInput,
   ListWorkItemFieldsInput,
   ListWorkItemTypeStatesInput,
@@ -25,7 +27,6 @@ import type {
   PullRequestChanges,
   RunWorkItemQueryInput,
   SearchAllInput,
-  SearchAllResult,
   SearchPullRequestsInput,
   SearchPullRequestMentionsInput,
   SearchWorkItemAssigneesInput,
@@ -50,6 +51,7 @@ import {
   applyDemoSettingsUpdate,
   demoDiagnosticsExport,
   demoOrganization,
+  demoResultItemIds,
   demoReviewResultPreview,
   demoWorkItemResultPreview,
   DEMO_PREVIEW_IMAGE_DATA_URL,
@@ -75,14 +77,12 @@ import {
 import {
   demoCreateWorkItem,
   demoMyWorkItems,
-  demoCountWorkItemQueryHistory,
   demoProjectQueries,
   demoRunWorkItemQuery,
-  demoUpdateWorkItemFields,
-  demoWorkItemPreview,
   demoWorkItems,
   demoWorkItemProjects,
 } from "@/lib/demo/workItems";
+import { demoUpdateWorkItemFields, demoWorkItemPreview } from "@/lib/demo/workItemPreview";
 import {
   deleteDemoWorkItemComment,
   demoWorkItemComment,
@@ -115,6 +115,11 @@ let demoSettings: AppSettings = { ...DEFAULT_DEMO_SETTINGS };
 let demoSyncStates: SyncState[] = DEFAULT_DEMO_SYNC_STATES.map((s) => ({ ...s }));
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
+  if (command === "stop_pull_request_search") {
+    const input = (args as { input: { organizationId?: string; searchId: string } }).input;
+    stopDemoPrSearch(input);
+    return;
+  }
   await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
 
   if (shouldFailDemoCommand(command)) {
@@ -162,6 +167,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         demoSettings.workItemResultFolderPath,
         input?.workItemId,
       );
+    }
+    case "list_result_item_ids": {
+      const target = (args as { input?: { target?: ResultTarget } } | undefined)?.input?.target;
+      const folder =
+        target === "pull-request"
+          ? demoSettings.reviewResultFolderPath
+          : demoSettings.workItemResultFolderPath;
+      return demoResultItemIds(folder, target);
     }
     case "export_diagnostics": {
       const input = (args as { input?: ExportDiagnosticsInput } | undefined)?.input;
@@ -239,6 +252,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: GetPullRequestFileDiffInput } | undefined)?.input;
       return demoPrFileDiff(input);
     }
+    case "upload_comment_image":
+      return "https://dev.azure.com/demo/_apis/wit/attachments/demo-image";
     case "post_pull_request_comment": {
       const input = (args as { input?: PostPullRequestCommentInput } | undefined)?.input;
       if (!input) throw new Error("missing input");
@@ -302,38 +317,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
       return demoWorkItems(input);
     }
-    case "search_all": {
-      const input = (args as { input?: SearchAllInput } | undefined)?.input;
-      const query = input?.query.trim() ?? "";
-      const limit = input?.limitPerKind ?? 5;
-      if (!query) {
-        return {
-          workItems: [],
-          pullRequests: [],
-          totals: { workItems: 0, pullRequests: 0 },
-        } satisfies SearchAllResult;
-      }
-      const workItems = demoWorkItems({ query });
-      const pullRequests = demoPullRequests({ query }).pullRequests;
-      // Numeric Inbox lookups also reach PRs seeded only in the review cache.
-      const reviewPr = demoReviewPullRequests().find((pr) => String(pr.pullRequestId) === query);
-      if (reviewPr && !pullRequests.some((pr) => pr.pullRequestId === reviewPr.pullRequestId)) {
-        pullRequests.push({
-          ...reviewPr,
-          status: "active",
-          closedDate: null,
-          sourceRefName: demoPrReviewDetail(reviewPr.pullRequestId).sourceRefName,
-        });
-      }
-      return {
-        workItems: workItems.slice(0, limit),
-        pullRequests: pullRequests.slice(0, limit),
-        totals: {
-          workItems: workItems.length,
-          pullRequests: pullRequests.length,
-        },
-      } satisfies SearchAllResult;
-    }
+    case "search_all":
+      return demoPaletteSearch((args as { input?: SearchAllInput } | undefined)?.input);
     case "list_my_work_items": {
       const snoozed = demoSnoozedKeys("work_item");
       return demoMyWorkItems().filter((item) => !snoozed.has(String(item.id)));
@@ -346,11 +331,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "count_work_item_query": {
       const input = (args as { input?: RunWorkItemQueryInput } | undefined)?.input;
-      return demoRunWorkItemQuery(input).length;
-    }
-    case "count_work_item_query_history": {
-      const input = (args as { input?: CountWorkItemQueryHistoryInput } | undefined)?.input;
-      return demoCountWorkItemQueryHistory(input);
+      const snoozed = demoSnoozedKeys("work_item");
+      return demoRunWorkItemQuery(input).filter((item) => !snoozed.has(String(item.id))).length;
     }
     case "get_work_item_preview": {
       const input = (args as { input?: GetWorkItemPreviewInput } | undefined)?.input;
@@ -359,6 +341,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_work_item_mentions": {
       const input = (args as { input?: SearchWorkItemMentionsInput } | undefined)?.input;
       return demoMentionCandidates(input?.query);
+    }
+    case "resolve_mention_identities": {
+      const input = (args as { input?: { ids?: string[] } } | undefined)?.input;
+      const ids = new Set((input?.ids ?? []).map((id) => id.toLowerCase()));
+      return demoMentionCandidates().filter((person) => ids.has(person.id.toLowerCase()));
     }
     case "search_pull_request_mentions": {
       const input = (args as { input?: SearchPullRequestMentionsInput } | undefined)?.input;

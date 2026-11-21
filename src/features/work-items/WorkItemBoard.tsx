@@ -18,6 +18,7 @@ import {
 } from '@/lib/azdoCommands';
 import { focusPrimaryPreview, isEditableTarget } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { useActiveWorkItemSnoozes } from './useActiveWorkItemSnoozes';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import {
   loadCustomPreviewFields,
@@ -74,13 +75,14 @@ export function WorkItemBoard({
     });
   }, [results]);
 
+  const snoozed = useActiveWorkItemSnoozes(organizationId);
   const effectiveResults = useMemo(
     () =>
-      results.map((item) => {
+      results.filter((item) => !snoozed.has(String(item.id))).map((item) => {
         const override = overrides.get(workItemKey(item));
         return override !== undefined ? { ...item, state: override } : item;
       }),
-    [overrides, results],
+    [overrides, results, snoozed],
   );
 
   // The board groups by state, so the relevant work item types are whatever the

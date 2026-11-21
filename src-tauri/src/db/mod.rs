@@ -1,19 +1,27 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use rusqlite::Connection;
 
 use crate::error::Result;
 
 mod action_inbox;
+mod home_bot;
 mod inbox_insight;
 mod inbox_refs;
+mod inbox_threads;
+mod merge_readiness;
 mod migrate;
+mod migrate_early;
 mod notifications;
 mod organizations;
 mod pr_comment_seen;
 mod prs;
+mod reply_reminders;
 mod settings;
+mod settings_kv;
 mod snooze;
 mod sync_state;
 mod util;
@@ -27,6 +35,8 @@ mod test_support;
 #[cfg(test)]
 mod tests_action_inbox;
 #[cfg(test)]
+mod tests_inbox_threads;
+#[cfg(test)]
 mod tests_migrations;
 #[cfg(test)]
 mod tests_misc;
@@ -34,6 +44,8 @@ mod tests_misc;
 mod tests_notifications;
 #[cfg(test)]
 mod tests_prs;
+#[cfg(test)]
+mod tests_reply_reminders;
 #[cfg(test)]
 mod tests_work_item_follows;
 #[cfg(test)]
@@ -48,6 +60,7 @@ pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;
 pub use prs::*;
+pub use reply_reminders::*;
 pub use settings::*;
 pub use sync_state::*;
 pub use work_item_follows::*;
@@ -55,18 +68,24 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 26;
+pub(crate) const SCHEMA_VERSION: i64 = 34;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 pub struct AppDatabase {
     path: PathBuf,
+    /// Set once WAL has been confirmed for this file. The journal mode is
+    /// stored in the database file, so later opens skip the pragma.
+    wal_ready: Arc<AtomicBool>,
 }
 
 impl AppDatabase {
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            wal_ready: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     /// The folder holding the database file, where other app-private files
@@ -97,10 +116,14 @@ impl AppDatabase {
         // Wait instead of failing with SQLITE_BUSY when a sync write overlaps
         // a UI read; NORMAL is durable enough under WAL and much faster.
         conn.busy_timeout(std::time::Duration::from_secs(3))?;
-        // Ensure WAL is applied on every open, not just first-run migration, so
-        // a pre-existing non-WAL DB is upgraded rather than left on a rollback
-        // journal where synchronous=NORMAL weakens crash durability.
-        conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+        // Ensure WAL is applied, not just on first-run migration, so a
+        // pre-existing non-WAL DB is upgraded rather than left on a rollback
+        // journal where synchronous=NORMAL weakens crash durability. The mode
+        // persists in the file, so confirm it once per process, not per open.
+        if !self.wal_ready.load(Ordering::Relaxed) {
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
+            self.wal_ready.store(true, Ordering::Relaxed);
+        }
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         Ok(conn)
     }

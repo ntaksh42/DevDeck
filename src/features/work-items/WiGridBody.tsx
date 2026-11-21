@@ -4,18 +4,23 @@ import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { matchRowColorClass, type RowColorRule } from '@/lib/rowColorRules';
 import { workItemUnreadKey } from './workItemUnreadTracking';
 import { WorkItemGridRow } from './WorkItemGridRow';
-import { workItemSummaryKey, type WiSortKey } from './workItemsGridHelpers';
+import { useVirtualRowWindow } from '@/lib/useGridVirtualizer';
+import {
+  WI_GRID_OVERSCAN,
+  WI_GRID_ROW_HEIGHT,
+  workItemSummaryKey,
+  type WiSortKey,
+} from './workItemsGridHelpers';
 
 export function WiGridBody({
-  paneWidth,
+  scroller,
   showBlockingLoading,
   searched,
   sorted,
   displayed,
   emptyMessage,
+  emptyContent,
   clearAllFilters,
-  firstVirtualRow,
-  virtualRows,
   selectedIndex,
   checkedIds,
   unreadKeys,
@@ -25,24 +30,22 @@ export function WiGridBody({
   staleThresholdDays,
   rowColorRules,
   rowRefs,
-  virtualTopPadding,
-  virtualBottomPadding,
   setSelectedIndex,
   handleCheckboxChange,
   onShiftRangeSelect,
   onCtrlToggleSelect,
   onClearSelection,
 }: {
-  /** Visible width of the scroller: empty states centre within it, not within the wider column grid. */
-  paneWidth: number;
+  /** The scroll container: its viewport picks the rows to render. */
+  scroller: HTMLDivElement | null;
   showBlockingLoading: boolean;
   searched: boolean;
   sorted: WorkItemSummary[];
   displayed: WorkItemSummary[];
   emptyMessage: string | undefined;
+  /** Replaces the default "Run a search" empty state (e.g. recent searches). */
+  emptyContent?: ReactNode;
   clearAllFilters: () => void;
-  firstVirtualRow: number;
-  virtualRows: WorkItemSummary[];
   selectedIndex: number;
   checkedIds: Set<string>;
   unreadKeys: Set<string>;
@@ -52,14 +55,28 @@ export function WiGridBody({
   staleThresholdDays: number;
   rowColorRules: RowColorRule[];
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;
-  virtualTopPadding: number;
-  virtualBottomPadding: number;
   setSelectedIndex: (i: number) => void;
   handleCheckboxChange: (index: number, checked: boolean, shiftKey: boolean) => void;
   onShiftRangeSelect: (index: number, anchorIndex?: number) => void;
   onCtrlToggleSelect: (index: number, focusedIndex: number) => void;
   onClearSelection: () => void;
 }) {
+  // The scroll position is tracked here, so scrolling re-renders only the rows
+  // and not the grid's header, status bar, or preview.
+  const {
+    width: paneWidth,
+    firstRow: firstVirtualRow,
+    lastRow,
+    topPadding: virtualTopPadding,
+    bottomPadding: virtualBottomPadding,
+    totalHeight,
+  } = useVirtualRowWindow(scroller, {
+    rowCount: displayed.length,
+    rowHeight: WI_GRID_ROW_HEIGHT,
+    overscan: WI_GRID_OVERSCAN,
+  });
+  const virtualRows = displayed.slice(firstVirtualRow, lastRow);
+
   // Rows read the focused index from this ref rather than as a prop: passing
   // `selectedIndex` to every row would invalidate the whole memoized window on
   // each arrow-key press, which is exactly what the memo is there to avoid.
@@ -76,10 +93,12 @@ export function WiGridBody({
   }
   if (!searched) {
     return inPane(
-      <PreviewEmptyState
-        message={emptyMessage ?? "Run a search to load work items."}
-        hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
-      />,
+      emptyContent ?? (
+        <PreviewEmptyState
+          message={emptyMessage ?? "Run a search to load work items."}
+          hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
+        />
+      ),
     );
   }
   if (sorted.length === 0) {
@@ -109,6 +128,7 @@ export function WiGridBody({
       aria-label="Work items"
       data-primary-grid="true"
       tabIndex={-1}
+      style={{ minHeight: totalHeight }}
     >
       {virtualTopPadding > 0 ? (
         <div style={{ height: virtualTopPadding }} />

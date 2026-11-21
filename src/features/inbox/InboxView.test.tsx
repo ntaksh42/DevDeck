@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { openExternalUrl } from "@/lib/openExternal";
 import { NAVIGATE_PULL_REQUEST_EVENT } from "@/lib/crossLinks";
-import { resetDemoInbox } from "@/lib/demo/actionInbox";
+import { demoListInboxItems, demoSetInboxItemState, resetDemoInbox } from "@/lib/demo/actionInbox";
 import { InboxView } from "./InboxView";
 import { openList, renderView, rowFor, storedRows } from "./inboxViewTestUtils";
 
@@ -34,13 +34,39 @@ describe("InboxView", () => {
     const list = await openList();
     const rows = storedRows(list);
     expect(rows[0].textContent).toContain("Mention");
-    expect(rows[0].textContent).toContain("!42 azdo-dashboard");
-    expect(rows[0].textContent).toContain("Add pull request search dashboard");
+    expect(rows[0].textContent).toContain("!42 Add pull request search dashboard");
+    // The repository is not in the row text; it moved to the subject's tooltip.
+    expect(rows[0].querySelector('[title^="azdo-dashboard"]')).toBeTruthy();
     expect(rows[1].textContent).toContain("WI mention");
-    expect(rows[1].textContent).toContain("#123 Platform");
+    expect(rows[1].textContent).toContain("#123 ");
     expect(rows[2].textContent).toContain("Reply");
-    expect(rows[2].textContent).toContain("!103 api-gateway");
-    expect(rows[3].textContent).toContain("!189 android-app");
+    expect(rows[2].textContent).toContain("!103 ");
+    expect(rows[3].textContent).toContain("!189 ");
+  });
+
+  it("keeps the selected conversation when a sync changes the rows above it", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <InboxView />
+      </QueryClientProvider>,
+    );
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!103"));
+    await waitFor(() => expect(rowFor(list, "!103").getAttribute("aria-selected")).toBe("true"));
+    // The top row is handled elsewhere (e.g. answered on the web) and the next sync drops it.
+    const top = demoListInboxItems().find((item) => item.subjectId === 42)!;
+    demoSetInboxItemState({ ids: [top.id], state: "done" });
+    await act(() => client.invalidateQueries({ queryKey: ["actionInbox"] }));
+    await waitFor(() => expect(storedRows(list)).toHaveLength(3));
+    expect(rowFor(list, "!103").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("shows how many comments wait in a conversation when there are several", async () => {
+    renderView();
+    const list = await openList();
+    expect(within(rowFor(list, "!42")).getByTitle("2 comments waiting in this conversation").textContent).toBe("2");
+    expect(within(rowFor(list, "!103")).queryByTitle(/comments waiting/)).toBeNull();
   });
 
   it("shows the item count and Done / Snoozed buttons in the status bar", async () => {
@@ -119,7 +145,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(within(done).getAllByRole("option")).toHaveLength(1);
     });
-    expect(within(done).getByRole("option").textContent).toContain("!42 azdo-dashboard");
+    expect(within(done).getByRole("option").textContent).toContain("!42 Add pull request search dashboard");
 
     // e on a Done item reopens it.
     fireEvent.keyDown(done, { key: "e" });
@@ -198,12 +224,21 @@ describe("InboxView", () => {
     expect(openExternalUrl).toHaveBeenCalledWith("https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42");
   });
 
-  it("replies in place with R and Ctrl+Enter, then finishes the item", async () => {
+  it("focuses the reply box with Ctrl+M like Focus comment elsewhere", async () => {
     renderView();
     const list = await openList();
     fireEvent.click(rowFor(list, "!42"));
     const input = await screen.findByPlaceholderText("Reply…");
-    fireEvent.keyDown(list, { key: "r" });
+    fireEvent.keyDown(list, { key: "m", ctrlKey: true });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
+  it("replies in place with M and Ctrl+Enter, then finishes the item", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    const input = await screen.findByPlaceholderText("Reply…");
+    fireEvent.keyDown(list, { key: "m" });
     await waitFor(() => expect(document.activeElement).toBe(input));
     fireEvent.change(input, { target: { value: "Confirmed the null handling." } });
     fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
@@ -315,7 +350,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(within(list).getAllByRole("option")).toHaveLength(1);
     });
-    expect(within(list).getByRole("option").textContent).toContain("!189 android-app");
+    expect(within(list).getByRole("option").textContent).toContain("!189 ");
   });
 });
 

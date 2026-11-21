@@ -62,6 +62,29 @@ impl AdoClient {
         Ok(identities)
     }
 
+    /// Looks up identities by their storage-key GUIDs (the ids inside
+    /// `@<guid>` mentions). Unknown ids are simply absent from the result.
+    pub async fn get_identities_by_ids(&self, ids: &[String]) -> Result<Vec<Identity>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let joined = ids.join(",");
+        let response: IdentitySearchResponse = self
+            .get_json_vssps(
+                "_apis/identities",
+                &[
+                    ("api-version", "7.1"),
+                    ("identityIds", joined.as_str()),
+                    ("queryMembership", "None"),
+                ],
+            )
+            .await?;
+        Ok(match response {
+            IdentitySearchResponse::Wrapped { value } => value,
+            IdentitySearchResponse::List(value) => value,
+        })
+    }
+
     pub async fn search_identity_picker(
         &self,
         query: &str,

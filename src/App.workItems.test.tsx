@@ -185,7 +185,7 @@ describe("App — Work Items", () => {
 
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });
-    expect(await screen.findByPlaceholderText("Search assignee...")).toBeTruthy();
+    expect(await screen.findByPlaceholderText("Search assignee…")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
 
     // Selection only stages the change; nothing is written yet.
@@ -421,6 +421,10 @@ describe("App — Work Items", () => {
       "Edit comment 5",
     )) as HTMLTextAreaElement;
 
+    // Escape that cancels an IME conversion keeps the editor open.
+    fireEvent.keyDown(editBox, { key: "Escape", isComposing: true });
+    expect(screen.getByLabelText("Edit comment 5")).toBe(editBox);
+
     // Typing @ opens the same autocomplete the composer uses; pick a candidate.
     fireEvent.change(editBox, { target: { value: "@" } });
     editBox.setSelectionRange(1, 1);
@@ -437,6 +441,53 @@ describe("App — Work Items", () => {
           input: expect.objectContaining({
             commentId: 5,
             markdown: "@<9ce68702-0694-6ef4-b9fa-0f3143502233> please review",
+          }),
+        }),
+      );
+    });
+  });
+
+  it("opens existing mentions and web UI comments as readable text when editing", async () => {
+    invokeMock.mockImplementation(workItemsSearchInvoke);
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Primary navigation" }),
+      ).getAllByRole("button", { name: "Search" })[1],
+    );
+    const projectFilter = await main.findByRole("button", { name: "Filter by project" });
+    await waitFor(() => expect(projectFilter.hasAttribute("disabled")).toBe(false));
+    fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
+      target: { value: "save" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    await screen.findByLabelText("Comment");
+
+    // An HTML comment from the web UI opens as markdown, not HTML source.
+    fireEvent.click(await screen.findByRole("button", { name: "Edit comment 8" }));
+    const htmlBox = (await screen.findByLabelText("Edit comment 8")) as HTMLTextAreaElement;
+    expect(htmlBox.value).toBe("@Creator Posted from Azure");
+    // Escape while the IME is converting must not close the editor.
+    fireEvent.keyDown(htmlBox, { key: "Escape", isComposing: true });
+    expect(screen.getByLabelText("Edit comment 8")).toBeTruthy();
+    fireEvent.keyDown(htmlBox, { key: "Escape" });
+
+    // A markdown @<guid> mention shows its name and survives a save.
+    fireEvent.click(await screen.findByRole("button", { name: "Edit comment 7" }));
+    const editBox = (await screen.findByLabelText("Edit comment 7")) as HTMLTextAreaElement;
+    expect(editBox.value).toBe("@Creator Earlier context");
+    fireEvent.change(editBox, { target: { value: "@Creator Earlier context\nmore" } });
+    fireEvent.keyDown(editBox, { key: "Enter", ctrlKey: true });
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        "update_work_item_comment",
+        expect.objectContaining({
+          input: expect.objectContaining({
+            commentId: 7,
+            markdown: "@<9ce68702-0694-6ef4-b9fa-0f3143502233> Earlier context  \nmore",
           }),
         }),
       );

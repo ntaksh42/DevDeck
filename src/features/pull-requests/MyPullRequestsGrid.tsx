@@ -1,32 +1,41 @@
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { commandErrorMessage, listMyCreatedPullRequests } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import {
   focusPrimaryPreview,
   isEditableTarget,
-  markdownLink,
   matchesAllSearchTerms,
   splitSearchTerms,
+  hasTextSelectionWithin,
 } from "@/lib/utils";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { FilterAutocomplete } from "@/components/FilterAutocomplete";
 import { DockFilterBar, useDockFilter } from "@/components/DockFilterBar";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
+import { useColumnDrag } from "@/lib/columnDrag";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
 import { useKeyedGridSelection } from "@/lib/useKeyedGridSelection";
-import { copyRowsAsTable } from "@/lib/clipboardTable";
+import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import { usePendingRowFocus } from "@/lib/usePendingRowFocus";
+import { parkGridFocus } from "@/lib/parkGridFocus";
+import { copyRowsAsLinks, copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
-import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
+import { SortHeaderButton } from "./MyPullRequestsRow";
+import { MemoCreatedPrRow } from "./MemoCreatedPrRow";
 import { DraftsCheckbox } from "./DraftsCheckbox";
 import { prAgentList, usePrReviewPanels } from "./usePrReviewPanels";
-import { createdCopyColumns } from "./prCopyColumns";
+import { createdCopyColumns, prLinkTarget } from "./prCopyColumns";
+import { copyPrMarkdownLink } from "./copyPrMarkdownLink";
+import { createdNextAction, nextActionableIndex } from "./nextAction";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
+  PR_GRID_OVERSCAN,
+  PR_GRID_ROW_HEIGHT,
   MAX_REVIEW_PREVIEW_WIDTH,
   MIN_REVIEW_PREVIEW_WIDTH,
 } from "./myReviewsTypes";
@@ -67,78 +76,26 @@ function toReviewSummary(pr: MyCreatedPullRequestSummary): ReviewPullRequestSumm
   };
 }
 
-// One grid row. Memoized so that moving the selection or filtering the list
-// only re-renders the rows whose own props actually changed. `onSelect` and
-// the row `ref` callback are built here (not in the parent's map) so they stay
-// stable per row instead of being recreated — and thus invalidating the memo —
-// on every render.
-const MemoCreatedPrRow = memo(function MemoCreatedPrRow({
-  index,
-  pr,
-  columnTemplate,
-  visibleColumns,
-  selected,
-  inMultiSelection,
-  rowRefs,
-  handleRowClick,
-  setSelectedIndex,
-}: {
-  index: number;
-  pr: MyCreatedPullRequestSummary;
-  columnTemplate: string;
-  visibleColumns: SortKey[];
-  selected: boolean;
-  inMultiSelection: boolean;
-  rowRefs: React.RefObject<Array<HTMLDivElement | null>>;
-  handleRowClick: (
-    index: number,
-    modifiers: { shiftKey: boolean; ctrlKey: boolean },
-    setSelectedIndex: (index: number) => void,
-  ) => void;
-  setSelectedIndex: (index: number) => void;
-}) {
-  const setRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      rowRefs.current[index] = el;
-    },
-    [rowRefs, index],
-  );
-
-  const onSelect = useCallback(
-    (modifiers: { shiftKey: boolean; ctrlKey: boolean }) =>
-      handleRowClick(index, modifiers, setSelectedIndex),
-    [handleRowClick, index, setSelectedIndex],
-  );
-
-  return (
-    <CreatedPrRow
-      ref={setRef}
-      pr={pr}
-      columnTemplate={columnTemplate}
-      visibleColumns={visibleColumns}
-      selected={selected}
-      inMultiSelection={inMultiSelection}
-      onSelect={onSelect}
-    />
-  );
-});
-
-// Active pull requests the authenticated user authored. Fetched live from Azure
-// DevOps (not from the local sync cache), so data refreshes on view re-entry
-// rather than via the sync:updated wiring the cached review grid uses. The grid
+// Active pull requests the authenticated user authored, read from the local sync
+// cache and refreshed on sync:updated like the review grid. The grid
 // layout, resizable/toggleable columns, sort headers, row styling, keyboard,
 // and status bar mirror MyReviewsGrid, including the PR review panels docked
 // to the right of the grid.
+function createdPrKey(pr: { repositoryId: string; pullRequestId: number }): string {
+  return `${pr.repositoryId}:${pr.pullRequestId}`;
+}
+
 export function MyPullRequestsGrid() {
   const organizationId = useActiveOrganizationId();
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
   const [showDrafts, setShowDrafts] = useState(true);
-  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+  const { visibleColumns, toggleColumn, moveColumn, reorderColumn, resetColumns } = useColumnVisibility({
     keys: GRID_KEYS,
     requiredColumns: REQUIRED_COLUMNS,
     storageKey: VISIBLE_COLUMNS_STORAGE_KEY,
   });
+  const columnDrag = useColumnDrag(reorderColumn);
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -147,13 +104,14 @@ export function MyPullRequestsGrid() {
   const {
     template,
     minWidth: gridMinWidth,
+    autoWidths,
     resetWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: GRID_KEYS,
     visibleColumns,
-    flexibleKey: "title",
+    flexibleKey: "title", autoHide: ["targetRefName", "creationDate"],
     defaults: DEFAULT_COLUMN_WIDTHS,
     min: COLUMN_MIN_WIDTHS,
     max: COLUMN_MAX_WIDTHS,
@@ -185,7 +143,7 @@ export function MyPullRequestsGrid() {
     const data = allPrs.filter((pr) =>
       (showDrafts || !pr.isDraft) &&
       matchesAllSearchTerms(terms, [
-        pr.pullRequestId,
+        `#${pr.pullRequestId}`, // as the row shows it; "77" still matches
         pr.repositoryName,
         pr.title,
         pr.targetRefName,
@@ -196,12 +154,29 @@ export function MyPullRequestsGrid() {
     return data;
   }, [allPrs, textFilter, showDrafts, sort]);
 
-  // Keyed, so a refetch that reorders or replaces rows keeps the same PR selected.
-  const { selectedIndex, setSelectedIndex } = useKeyedGridSelection(rows, (pr) => `${pr.repositoryId}:${pr.pullRequestId}`);
+  // Follows the selected PR by key, so a sync that adds or drops PRs above it
+  // does not move the selection (and the preview) to another PR.
+  const keyedSelection = useKeyedGridSelection(rows, createdPrKey);
+  const selectedIndex = Math.max(keyedSelection.selectedIndex, 0);
+  const setSelectedIndex = keyedSelection.setSelectedIndex;
+
+  const restoreFocusRef = useRef(false);
+  const {
+    scrollerRef,
+    firstRow,
+    lastRow,
+    topPadding,
+    bottomPadding,
+    totalHeight,
+    scrollRowIntoView,
+  } = useGridVirtualizer({ rowCount: rows.length, rowHeight: PR_GRID_ROW_HEIGHT, overscan: PR_GRID_OVERSCAN });
+  const virtualRows = rows.slice(firstRow, lastRow);
+  // Rows outside the virtual window unmount; refocus the selection once mounted.
+  usePendingRowFocus(restoreFocusRef, rowRefs, selectedIndex);
 
   const selection = useRangeSelection({
     rows,
-    keyOf: (pr) => `${pr.repositoryId}:${pr.pullRequestId}`,
+    keyOf: createdPrKey,
     selectedIndex,
   });
 
@@ -217,8 +192,10 @@ export function MyPullRequestsGrid() {
   // starts a fresh single-row selection.
   const moveSelection = (next: number, extend = false) => {
     const clamped = Math.max(0, Math.min(next, rows.length - 1));
+    parkGridFocus(rowRefs.current[clamped]);
+    restoreFocusRef.current = true;
+    scrollRowIntoView(clamped);
     setSelectedIndex(clamped);
-    rowRefs.current[clamped]?.focus();
     if (extend) selection.extendTo(clamped);
     else selection.clear();
   };
@@ -228,9 +205,10 @@ export function MyPullRequestsGrid() {
     const pr = rows[selectedIndex];
     // Ctrl+C copies the whole selection; other chords belong to the app.
     if (event.ctrlKey || event.metaKey) {
-      if ((event.key === "c" || event.key === "C") && !event.altKey) {
+      if ((event.key === "c" || event.key === "C") && !event.altKey && !hasTextSelectionWithin(event.target)) {
         event.preventDefault();
-        void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
+        if (event.shiftKey) void copyRowsAsLinks(selection.selectedRows, prLinkTarget, setCopyToast);
+        else void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
       } else if (event.key === "Enter" && pr?.webUrl) {
         event.preventDefault();
         openExternalUrl(pr.webUrl);
@@ -294,21 +272,15 @@ export function MyPullRequestsGrid() {
       case "l":
       case "L":
         event.preventDefault();
-        if (pr?.webUrl) {
-          void navigator.clipboard
-            ?.writeText(markdownLink(`!${pr.pullRequestId} ${pr.title}`, pr.webUrl))
-            .then(
-              () => {
-                setCopyToast("Markdown link copied");
-                window.setTimeout(() => setCopyToast(null), 1500);
-              },
-              () => {
-                setCopyToast("Copy failed");
-                window.setTimeout(() => setCopyToast(null), 1500);
-              },
-            );
-        }
+        if (pr) copyPrMarkdownLink(pr, setCopyToast);
         break;
+      case "n":
+      case "N": {
+        event.preventDefault();
+        const target = nextActionableIndex(rows.map(createdNextAction), selectedIndex, event.key === "N" ? -1 : 1);
+        if (target >= 0) moveSelection(target);
+        break;
+      }
       default:
         break;
     }
@@ -373,7 +345,7 @@ export function MyPullRequestsGrid() {
   const gridPane = (
     <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
       {query.data && query.data.warnings.length > 0 && (
-        <p role="status" className="shrink-0 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">
+        <p role="status" className="shrink-0 px-2 py-1 text-xs text-warning">
           Could not fetch {query.data.warnings.length} project(s): {query.data.warnings.join(", ")}.
         </p>
       )}
@@ -382,7 +354,7 @@ export function MyPullRequestsGrid() {
       ) : query.isError ? (
         <p className="px-2 py-3 text-sm text-destructive">{commandErrorMessage(query.error)}</p>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto" onKeyDown={onKeyDown}>
+        <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto [overflow-anchor:none]" onKeyDown={onKeyDown}>
           <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
             {/* Column headers */}
             <div
@@ -390,14 +362,15 @@ export function MyPullRequestsGrid() {
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: template }}
             >
-              {visibleColumns.map((col, i) => (
+              {shownColumns.map((col, i) => (
                 <SortHeaderButton
                   key={col}
                   column={col}
                   sort={sort}
                   onSort={applySort}
+                  dragProps={columnDrag(col)}
                   resizeHandle={
-                    i === visibleColumns.length - 1 ? undefined : (
+                    i === shownColumns.length - 1 ? undefined : (
                       <ColumnResizeHandle {...columnResizeProps(col)} />
                     )
                   }
@@ -410,14 +383,17 @@ export function MyPullRequestsGrid() {
                 You have no active pull requests in this organization.
               </div>
             ) : (
-              <div role="grid" aria-label="My pull requests" data-primary-grid="true" tabIndex={-1}>
-                {rows.map((pr, index) => (
+              <div role="grid" aria-label="My pull requests" data-primary-grid="true" tabIndex={-1} style={{ minHeight: totalHeight }}>
+                {topPadding > 0 ? <div style={{ height: topPadding }} /> : null}
+                {virtualRows.map((pr, offset) => {
+                  const index = firstRow + offset;
+                  return (
                   <MemoCreatedPrRow
                     key={`${pr.repositoryId}-${pr.pullRequestId}`}
                     index={index}
                     pr={pr}
                     columnTemplate={template}
-                    visibleColumns={visibleColumns}
+                    visibleColumns={shownColumns}
                     selected={index === selectedIndex}
                     inMultiSelection={selection.selectedKeys.has(
                       `${pr.repositoryId}:${pr.pullRequestId}`,
@@ -426,7 +402,9 @@ export function MyPullRequestsGrid() {
                     handleRowClick={selection.handleRowClick}
                     setSelectedIndex={setSelectedIndex}
                   />
-                ))}
+                  );
+                })}
+                {bottomPadding > 0 ? <div style={{ height: bottomPadding }} /> : null}
               </div>
             )}
           </div>
@@ -439,6 +417,7 @@ export function MyPullRequestsGrid() {
           selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null,
           query.isFetching ? "refreshing…" : null,
         ]}
+        fitWidths={{ auto: autoWidths, onFit: resetWidths }}
         onColumns={setColumnMenuRect}
         helpSection="reviews"
       />
@@ -485,11 +464,11 @@ export function MyPullRequestsGrid() {
           visibleColumns={visibleColumns}
           requiredColumns={REQUIRED_COLUMNS}
           onToggle={toggleColumn}
+          onMove={moveColumn}
           onReset={() => {
             resetColumns();
             resetWidths();
           }}
-          onAutoFitWidths={resetWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

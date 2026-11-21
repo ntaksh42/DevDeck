@@ -13,6 +13,21 @@ use super::types::*;
 const ORG_BATCH_LIMIT: usize = 200;
 
 impl AdoClient {
+    /// Looks up an exact work item id without requiring its project or a local cache.
+    pub async fn get_work_item_org(&self, id: i64, fields: &[&str]) -> Result<Option<WorkItem>> {
+        match self
+            .get_json(
+                &format!("_apis/wit/workitems/{id}"),
+                &[("api-version", "7.1"), ("fields", &fields.join(","))],
+            )
+            .await
+        {
+            Ok(item) => Ok(Some(item)),
+            Err(crate::error::AdoError::Api { status: 404, .. }) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Runs a WIQL query against the organization (`/_apis/wit/wiql`) and
     /// returns the matching ids.
     pub async fn query_work_item_ids_org(
@@ -48,6 +63,26 @@ impl AdoClient {
         ids: Vec<i64>,
         fields: Vec<String>,
     ) -> Result<Vec<WorkItem>> {
+        self.get_work_items_batch_org_with_policy(ids, fields, None)
+            .await
+    }
+
+    /// Fetches accessible work items and omits deleted or inaccessible IDs.
+    pub async fn get_visible_work_items_batch_org(
+        &self,
+        ids: Vec<i64>,
+        fields: Vec<String>,
+    ) -> Result<Vec<WorkItem>> {
+        self.get_work_items_batch_org_with_policy(ids, fields, Some("omit"))
+            .await
+    }
+
+    async fn get_work_items_batch_org_with_policy(
+        &self,
+        ids: Vec<i64>,
+        fields: Vec<String>,
+        error_policy: Option<&'static str>,
+    ) -> Result<Vec<WorkItem>> {
         let mut items = Vec::with_capacity(ids.len());
         for chunk in ids.chunks(ORG_BATCH_LIMIT) {
             let response: crate::git::ListResponse<WorkItem> = self
@@ -58,6 +93,7 @@ impl AdoClient {
                         ids: chunk.to_vec(),
                         fields: Some(fields.clone()),
                         expand: None,
+                        error_policy,
                     },
                 )
                 .await?;
@@ -83,6 +119,42 @@ mod tests {
         AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
             .unwrap()
             .with_base_url(base_url)
+    }
+
+    #[tokio::test]
+    async fn exact_work_item_lookup_is_org_wide_and_preserves_errors() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/wit/workitems/42"))
+            .and(query_param("fields", "System.Title,System.TeamProject"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id":42,"fields":{"System.Title":"Unsynced","System.TeamProject":"Other"}
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/wit/workitems/99"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/wit/workitems/77"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        let client = test_client(&server).await;
+        assert_eq!(
+            client
+                .get_work_item_org(42, &["System.Title", "System.TeamProject"])
+                .await
+                .unwrap()
+                .unwrap()
+                .id,
+            42
+        );
+        assert!(client.get_work_item_org(99, &[]).await.unwrap().is_none());
+        assert!(client.get_work_item_org(77, &[]).await.is_err());
     }
 
     #[tokio::test]

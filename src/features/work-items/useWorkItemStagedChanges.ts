@@ -207,6 +207,7 @@ export function useWorkItemStagedChanges({
         refetchType: "none",
       });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.updatesRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
   });

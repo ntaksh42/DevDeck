@@ -118,33 +118,6 @@ impl GitHubClient {
         self
     }
 
-    /// Every page of a list endpoint (`per_page=100`), stopping at the first
-    /// short page. GitHub returns one page by default, which silently cut
-    /// lists (files, reviews, comments) at 100 items.
-    pub(crate) async fn get_json_all_pages<T: DeserializeOwned>(
-        &self,
-        path: &str,
-    ) -> Result<Vec<T>> {
-        const PER_PAGE: usize = 100;
-        // GitHub stops listing PR files at 3000; the same bound keeps any
-        // other list from paging forever.
-        const MAX_PAGES: usize = 30;
-        let per_page = PER_PAGE.to_string();
-        let mut all = Vec::new();
-        for page in 1..=MAX_PAGES {
-            let page = page.to_string();
-            let batch: Vec<T> = self
-                .get_json(path, &[("per_page", &per_page), ("page", &page)])
-                .await?;
-            let last = batch.len() < PER_PAGE;
-            all.extend(batch);
-            if last {
-                break;
-            }
-        }
-        Ok(all)
-    }
-
     pub(crate) async fn get_json<T: DeserializeOwned>(
         &self,
         path: &str,

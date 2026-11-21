@@ -19,16 +19,48 @@ import { navigateToWorkItem } from "@/lib/crossLinks";
 import { openExternalUrl } from "@/lib/openExternal";
 import { clamp } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
-import { MultiSelectFilter } from "@/components/MultiSelectFilter";
+import { parkGridFocus } from "@/lib/parkGridFocus";
+import { SEGMENT_GROUP, segmentClass } from "@/components/segmentedFilter";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { NotificationRow, NOTIFICATION_ROW_HEIGHT } from "./NotificationRow";
-import { NOTIFICATION_KIND_OPTIONS } from "./notificationKinds";
+import {
+  NOTIFICATION_CATEGORIES,
+  notificationCategory,
+  notificationKindsIn,
+  type NotificationCategory,
+} from "./notificationKinds";
 import { notificationWebUrl, resolveNotificationAgentSubject, resolveNotificationJump } from "./notificationJump";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
 
 const PAGE_SIZE = 100;
 const OVERSCAN = 8;
+
+type ListEntry =
+  | { type: "header"; label: string; count: number }
+  | { type: "row"; record: NotificationRecord; index: number };
+
+// Splits the (newest-first) records into TODAY / EARLIER sections. Headers are
+// flat entries so the grid's fixed-height windowing still applies; selection
+// and keyboard navigation work on record indices, which skips the headers.
+function buildEntries(records: NotificationRecord[]): { entries: ListEntry[]; entryIndexOf: number[] } {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const todayCount = records.filter(
+    (record) => new Date(record.createdAt).getTime() >= startOfToday.getTime(),
+  ).length;
+  const entries: ListEntry[] = [];
+  const entryIndexOf: number[] = [];
+  records.forEach((record, index) => {
+    if (index === 0 && todayCount > 0) entries.push({ type: "header", label: "Today", count: todayCount });
+    if (index === todayCount) {
+      entries.push({ type: "header", label: "Earlier", count: records.length - todayCount });
+    }
+    entryIndexOf[index] = entries.length;
+    entries.push({ type: "row", record, index });
+  });
+  return { entries, entryIndexOf };
+}
 
 export function NotificationsView({
   onOpenPullRequest,
@@ -39,7 +71,7 @@ export function NotificationsView({
 }) {
   const queryClient = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const [kinds, setKinds] = useState<string[]>([]);
+  const [category, setCategory] = useState<NotificationCategory | "all">("all");
   const [organizationId, setOrganizationId] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -56,29 +88,54 @@ export function NotificationsView({
     [organizations],
   );
 
-  const listQuery = useInfiniteQuery({
-    queryKey: ["notifications", "list", organizationId, unreadOnly, kinds],
-    queryFn: ({ pageParam }: { pageParam: number | undefined }) =>
-      listNotifications({
-        limit: PAGE_SIZE,
-        beforeId: pageParam,
-        unreadOnly: unreadOnly || undefined,
-        kinds: kinds.length > 0 ? kinds : undefined,
-        organizationId: organizationId || undefined,
-      }),
+  const fetchPage = (kinds: string[] | undefined) => (pageParam: number | undefined) =>
+    listNotifications({
+      limit: PAGE_SIZE,
+      beforeId: pageParam,
+      unreadOnly: unreadOnly || undefined,
+      organizationId: organizationId || undefined,
+      kinds,
+    });
+  const pageOptions = {
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (lastPage) =>
+    getNextPageParam: (lastPage: Awaited<ReturnType<typeof listNotifications>>) =>
       lastPage.hasMore ? lastPage.items[lastPage.items.length - 1]?.id : undefined,
     staleTime: 30_000,
     // Keeps the previous page's rows on screen while a filter change refetches,
     // instead of flashing the grid to "No notifications" mid-request.
     placeholderData: keepPreviousData,
+  };
+  // The unfiltered list feeds the category counts; with "All" selected it is also the list shown.
+  const allQuery = useInfiniteQuery({
+    queryKey: ["notifications", "list", organizationId, unreadOnly, "all"],
+    queryFn: ({ pageParam }) => fetchPage(undefined)(pageParam),
+    ...pageOptions,
   });
+  // A category is filtered by the backend so "Load more" pages stay within it.
+  const categoryQuery = useInfiniteQuery({
+    queryKey: ["notifications", "list", organizationId, unreadOnly, category],
+    queryFn: ({ pageParam }) =>
+      fetchPage(category === "all" ? undefined : notificationKindsIn(category))(pageParam),
+    ...pageOptions,
+    enabled: category !== "all",
+  });
+  const listQuery = category === "all" ? allQuery : categoryQuery;
 
+  const allItems = useMemo(
+    () => allQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [allQuery.data],
+  );
+  // Counts reflect the loaded rows of the unfiltered list (after the Unread / organization filters).
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: allItems.length, pr: 0, workItem: 0, pipeline: 0, sync: 0 };
+    for (const record of allItems) counts[notificationCategory(record.kind)] += 1;
+    return counts;
+  }, [allItems]);
   const items = useMemo(
     () => listQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [listQuery.data],
   );
+  const { entries, entryIndexOf } = useMemo(() => buildEntries(items), [items]);
 
   const markReadMutation = useMutation({
     mutationFn: (ids: number[]) => markNotificationsRead({ ids }),
@@ -99,21 +156,32 @@ export function NotificationsView({
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight: virtualTotalHeight,
     scrollRowIntoView,
   } = useGridVirtualizer({
-    rowCount: items.length,
+    rowCount: entries.length,
     rowHeight: NOTIFICATION_ROW_HEIGHT,
     overscan: OVERSCAN,
   });
-  const virtualRows = items.slice(firstVirtualRow, lastVirtualRow);
+  const virtualEntries = entries.slice(firstVirtualRow, lastVirtualRow);
 
   // The Agent panel (the drawer; this view has no dock) follows the selected notification's PR / work item.
   const selectedRecord = items[selectedIndex];
   usePublishAgentSubject(selectedRecord ? resolveNotificationAgentSubject(selectedRecord) : null);
 
+  // New notifications arrive at the top; keep the same record selected rather
+  // than whatever row now sits at its old position.
+  // (The follow effect must run before the one recording the selected id.)
+  const selectedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(items.length - 1, 0)));
-  }, [items.length]);
+    const kept = selectedIdRef.current === null
+      ? -1
+      : items.findIndex((record) => record.id === selectedIdRef.current);
+    setSelectedIndex((index) => (kept >= 0 ? kept : Math.min(index, Math.max(items.length - 1, 0))));
+  }, [items]);
+  useEffect(() => {
+    selectedIdRef.current = selectedRecord?.id ?? null;
+  }, [selectedRecord?.id]);
 
   // Rows outside the virtual window unmount, so roving focus is restored once
   // the row for the new selection is mounted again. This effect runs on every
@@ -139,8 +207,10 @@ export function NotificationsView({
 
   function moveSelectionTo(index: number) {
     const next = clamp(index, 0, items.length - 1);
+    parkGridFocus(rowRefs.current[next]);
     restoreFocusRef.current = true;
-    scrollRowIntoView(next);
+    scrollRowIntoView(entryIndexOf[next] ?? next);
+    selectedIdRef.current = items[next]?.id ?? null;
     setSelectedIndex(next);
   }
 
@@ -173,6 +243,7 @@ export function NotificationsView({
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a")) return;
     if (event.ctrlKey || event.metaKey) {
       if (event.key === "Enter") {
         event.preventDefault();
@@ -216,61 +287,38 @@ export function NotificationsView({
     }
   }
 
-  const kindFilterOptions = NOTIFICATION_KIND_OPTIONS;
+  const categoryButtons = [{ value: "all" as const, label: "All" }, ...NOTIFICATION_CATEGORIES];
+  const categoryButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function focusList() {
+    const row = rowRefs.current[selectedIndex];
+    if (row) row.focus({ preventScroll: true });
+    else (document.querySelector('[data-grid-focus-fallback="true"]') as HTMLElement | null)?.focus();
+  }
+
+  function handleCategoryKeyDown(event: React.KeyboardEvent, position: number) {
+    const last = categoryButtons.length - 1;
+    let target: number | null = null;
+    if (event.key === "ArrowRight") target = position === last ? 0 : position + 1;
+    else if (event.key === "ArrowLeft") target = position === 0 ? last : position - 1;
+    else if (event.key === "Home") target = 0;
+    else if (event.key === "End") target = last;
+    else if (event.key === "ArrowDown" || event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusList();
+      return;
+    }
+    if (target === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    categoryButtonRefs.current[target]?.focus();
+  }
+
   const showOrgFilter = organizations.length > 1;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1.5 text-sm">
-          <input
-            type="checkbox"
-            checked={unreadOnly}
-            onChange={(event) => setUnreadOnly(event.target.checked)}
-            className="h-4 w-4"
-          />
-          Unread only
-        </label>
-
-        <div className="min-w-[220px]">
-          <MultiSelectFilter
-            options={kindFilterOptions}
-            selected={kinds}
-            onChange={setKinds}
-            placeholder="All kinds"
-            ariaLabel="Filter by notification kind"
-            className="h-7"
-          />
-        </div>
-
-        {showOrgFilter ? (
-          <label className="flex items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">Organization</span>
-            <select
-              value={organizationId}
-              onChange={(event) => setOrganizationId(event.target.value)}
-              aria-label="Filter by organization"
-              className="h-7 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">All organizations</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => markAllReadMutation.mutate()}
-          disabled={markAllReadMutation.isPending}
-          className="ml-auto inline-flex h-7 items-center rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          Mark all read
-        </button>
-      </div>
 
       {listQuery.isError ? (
         <ErrorState
@@ -280,6 +328,59 @@ export function NotificationsView({
       ) : null}
 
       <div data-grid-focus-fallback="true" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
+        {/* Tab band, as in the docked lists: category segments, unread, organization. */}
+        <div role="group" aria-label="Notification toolbar" className="flex h-7 shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-2">
+          <span className="text-xs font-semibold">Items</span>
+          <div role="group" aria-label="Filter by notification category" className={SEGMENT_GROUP}>
+            {categoryButtons.map((button, position) => {
+              const count = categoryCounts[button.value] ?? 0;
+              const active = category === button.value;
+              return (
+                <button
+                  key={button.value}
+                  ref={(el) => {
+                    categoryButtonRefs.current[position] = el;
+                  }}
+                  type="button"
+                  aria-pressed={active}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => {
+                    setCategory(button.value);
+                    setSelectedIndex(0);
+                  }}
+                  onKeyDown={(event) => handleCategoryKeyDown(event, position)}
+                  className={`${segmentClass(active)} ${!active && count === 0 ? "text-muted-foreground/60" : ""}`}
+                >
+                  {button.label} <span className="tabular-nums">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-1 whitespace-nowrap text-2xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={unreadOnly}
+              onChange={(event) => setUnreadOnly(event.target.checked)}
+              className="h-3 w-3"
+            />
+            Unread only
+          </label>
+          {showOrgFilter ? (
+            <select
+              value={organizationId}
+              onChange={(event) => setOrganizationId(event.target.value)}
+              aria-label="Filter by organization"
+              className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">All organizations</option>
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
         {listQuery.isLoading ? (
           <LoadingState />
         ) : items.length === 0 ? (
@@ -295,10 +396,25 @@ export function NotificationsView({
             className="flex min-h-0 flex-1 flex-col outline-none"
             onKeyDown={handleKeyDown}
           >
-            <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]">
+              <div style={{ minHeight: virtualTotalHeight }}>
               {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
-              {virtualRows.map((record, offset) => {
-                const index = firstVirtualRow + offset;
+              {virtualEntries.map((entry) => {
+                if (entry.type === "header") {
+                  return (
+                    <div
+                      key={`header-${entry.label}`}
+                      data-testid="notification-section-header"
+                      // Fixed row height (virtualizer); the band sits at the bottom so the gap reads as section spacing.
+                      className="flex h-[44px] items-end"
+                    >
+                      <div className="w-full border-b border-border bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {entry.label} · {entry.count}
+                      </div>
+                    </div>
+                  );
+                }
+                const { record, index } = entry;
                 return (
                   <NotificationRow
                     key={record.id}
@@ -317,6 +433,7 @@ export function NotificationsView({
                 );
               })}
               {virtualBottomPadding > 0 ? <div style={{ height: virtualBottomPadding }} /> : null}
+              </div>
             </div>
             {listQuery.hasNextPage ? (
               <div className="flex shrink-0 justify-center border-t border-border py-2">
@@ -337,7 +454,16 @@ export function NotificationsView({
         )}
         <ListStatusBar
           summary={[itemCount(items.length), `${items.filter((record) => !record.isRead).length} unread`]}
-        />
+        >
+          <button
+            type="button"
+            onClick={() => markAllReadMutation.mutate()}
+            disabled={markAllReadMutation.isPending}
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Mark all read
+          </button>
+        </ListStatusBar>
       </div>
     </div>
   );

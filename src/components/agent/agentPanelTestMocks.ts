@@ -46,7 +46,8 @@ export const runAgent = vi.fn(async (_input: unknown) => {});
 export const replyAgentNote = vi.fn(async (_input: unknown) => note("a.md", "x"));
 export const setAgentNoteStatus = vi.fn(async (_input: unknown) => note("a.md", "x"));
 // The asks the list command returns; deleting a note removes it from `state.asks`.
-export const state = { asks };
+export const prNotes: AgentNote[] = [note("pr.md", "Check the retry logic")];
+export const state = { asks, prNotes };
 export const deleteAgentNote = vi.fn(async (input: unknown) => {
   const { noteId } = input as { noteId: string };
   state.asks = state.asks.map((ask) => ({ ...ask, notes: ask.notes.filter((n) => n.id !== noteId) })).filter((ask) => ask.notes.length);

@@ -10,10 +10,11 @@ import {
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { focusPrimaryPreview } from "@/lib/utils";
+import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
@@ -82,7 +83,15 @@ export function ReviewTab({
     confirmDialogProps,
   } = usePrReviewActions(pr);
 
+  const imageTarget = pr.webUrl?.includes("/_git/") ? {
+    organizationId: pr.organizationId,
+    projectId: pr.projectId,
+    pr: { repositoryId: pr.repositoryId, pullRequestId: pr.pullRequestId },
+  } : undefined;
   const mentionSearch = usePrMentionSearch(pr.organizationId);
+  const descriptionMentionNames = useMentionIdentityNames(pr.organizationId, [
+    review?.description,
+  ]);
   const resolvePreviewImage = useCallback(
     (url: string) => fetchWorkItemImageCached({ organizationId: pr.organizationId, url }),
     [pr.organizationId],
@@ -149,7 +158,8 @@ export function ReviewTab({
           <select
             id="pr-vote-select"
             value={myVote}
-            disabled={voteMutation.isPending}
+            disabled={readOnly || voteMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : undefined}
             onChange={(event) =>
               voteMutation.mutate({
                 ...prLocator(pr),
@@ -190,7 +200,7 @@ export function ReviewTab({
             onClick={() =>
               runPrAction("complete", `Complete (merge) this pull request using ${mergeStrategy}?`)
             }
-            className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900"
+            className="rounded border border-success/30 bg-success/10 px-2 py-0.5 font-medium text-success hover:bg-success/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Complete
           </button>
@@ -214,7 +224,7 @@ export function ReviewTab({
       </div>
 
       {actionError ? (
-        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs text-destructive">
+        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
           {actionError}
         </div>
       ) : null}
@@ -247,7 +257,7 @@ export function ReviewTab({
           {editingDetails ? (
             <div className="grid gap-2 pb-2">
               <label className="grid gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Title
                 </span>
                 <input
@@ -255,6 +265,8 @@ export function ReviewTab({
                   value={draftTitle}
                   onChange={(event) => setDraftTitle(event.target.value)}
                   onKeyDown={(event) => {
+                    // Enter / Escape that confirm or cancel an IME conversion belong to the IME.
+                    if (isImeComposing(event)) return;
                     if (event.key === "Escape") {
                       event.stopPropagation();
                       setEditingDetails(false);
@@ -268,13 +280,15 @@ export function ReviewTab({
                 />
               </label>
               <label className="grid gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Description
                 </span>
                 <textarea
                   value={draftDescription}
                   onChange={(event) => setDraftDescription(event.target.value)}
                   onKeyDown={(event) => {
+                    // Enter / Escape that confirm or cancel an IME conversion belong to the IME.
+                    if (isImeComposing(event)) return;
                     if (event.key === "Escape") {
                       event.stopPropagation();
                       setEditingDetails(false);
@@ -306,7 +320,7 @@ export function ReviewTab({
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                   Cancel
                 </button>
-                <span className="text-[11px] text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
+                <span className="text-2xs text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
               </div>
             </div>
           ) : (
@@ -317,6 +331,7 @@ export function ReviewTab({
                   className="text-xs text-foreground"
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
+                  mentionDisplayNames={descriptionMentionNames}
                 />
               ) : (
                 <p className="text-xs italic text-muted-foreground">No description.</p>
@@ -340,7 +355,7 @@ export function ReviewTab({
                   onClick={() =>
                     navigateToWorkItem({ organizationId: pr.organizationId, workItemId: id })
                   }
-                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
                   title={`Open work item ${id} in Work Items`}
                 >
                   AB#{id}
@@ -366,8 +381,10 @@ export function ReviewTab({
                   thread={thread}
                   busy={commentMutation.isPending || statusMutation.isPending}
                   mentionSearch={mentionSearch}
+                  imageTarget={imageTarget}
                   resolveImageSource={resolvePreviewImage}
                   baseUrl={pr.webUrl}
+                  organizationId={pr.organizationId}
                   onReply={(content) =>
                     commentMutation.mutateAsync({
                       ...prLocator(pr),
@@ -412,6 +429,7 @@ export function ReviewTab({
           placeholder="Add a comment…"
           busy={commentMutation.isPending}
           mentionSearch={mentionSearch}
+          imageTarget={imageTarget}
           onSubmit={(content) =>
             commentMutation.mutateAsync({ ...prLocator(pr), content }).then(() => undefined)
           }

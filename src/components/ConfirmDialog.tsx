@@ -56,6 +56,7 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef, { restoreFocus: true });
 
@@ -87,10 +88,16 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-label={title}
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          (event.target === cancelRef.current ? confirmRef.current : cancelRef.current)?.focus();
+        }}
         className="w-full max-w-sm rounded-md border border-border bg-card p-4 shadow-lg"
       >
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{message}</p>
         <div className="mt-4 flex justify-end gap-2">
           <button
             ref={cancelRef}
@@ -101,6 +108,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </button>
           <button
+            ref={confirmRef}
             type="button"
             onClick={onConfirm}
             className={`rounded-md px-3 py-1.5 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-ring ${

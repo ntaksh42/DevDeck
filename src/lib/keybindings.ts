@@ -24,6 +24,9 @@ export type KeybindingId =
   | "focusComment"
   | "toggleSidebar"
   | "toggleAgent"
+  | "uiScaleUp"
+  | "uiScaleDown"
+  | "uiScaleReset"
   | "syncNow"
   | "openSettings"
   | "gotoLeader"
@@ -35,8 +38,9 @@ export type KeybindingId =
   | "gotoPipelines"
   | "gotoNotifications"
   | "gotoInbox"
+  | "gotoHome"
   | "gotoCrossOrgSummary"
-  | "gotoAnalyze"
+  | "gotoAutoQueue"
   | "gotoSettings";
 
 export type Keybinding = {
@@ -77,6 +81,9 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "focusFilter", label: "Focus filter", group: "Focus & navigation", defaultCombo: "Ctrl+F", scope: "global" },
   { id: "toggleSidebar", label: "Collapse / expand left navigation", group: "Focus & navigation", defaultCombo: "Ctrl+\\", scope: "global" },
   { id: "toggleAgent", label: "Open / close the Agent panel", group: "Focus & navigation", defaultCombo: "Ctrl+J", scope: "global" },
+  { id: "uiScaleUp", label: "Zoom the app in", group: "Focus & navigation", defaultCombo: "Ctrl+=", scope: "global" },
+  { id: "uiScaleDown", label: "Zoom the app out", group: "Focus & navigation", defaultCombo: "Ctrl+-", scope: "global" },
+  { id: "uiScaleReset", label: "Reset app zoom", group: "Focus & navigation", defaultCombo: "Ctrl+0", scope: "global" },
 
   { id: "gotoLeader", label: "Go to view (leader key, then a letter below)", group: "Go to view", defaultCombo: "G", scope: "global", reserved: true },
   { id: "gotoMyReviews", label: "My Reviews", group: "Go to view", defaultCombo: "R", scope: "goto" },
@@ -87,8 +94,9 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "gotoPipelines", label: "Pipelines", group: "Go to view", defaultCombo: "P", scope: "goto" },
   { id: "gotoNotifications", label: "Notifications", group: "Go to view", defaultCombo: "N", scope: "goto" },
   { id: "gotoInbox", label: "Inbox", group: "Go to view", defaultCombo: "I", scope: "goto" },
+  { id: "gotoHome", label: "Home", group: "Go to view", defaultCombo: "H", scope: "goto" },
   { id: "gotoCrossOrgSummary", label: "Cross-organization summary", group: "Go to view", defaultCombo: "O", scope: "goto" },
-  { id: "gotoAnalyze", label: "Analyze", group: "Go to view", defaultCombo: "A", scope: "goto" },
+  { id: "gotoAutoQueue", label: "Agent Work", group: "Go to view", defaultCombo: "A", scope: "goto" },
   { id: "gotoSettings", label: "Settings", group: "Go to view", defaultCombo: "S", scope: "goto" },
 ] as const;
 
@@ -182,6 +190,15 @@ function isModifierKey(key: string): boolean {
   return key === "Control" || key === "Alt" || key === "Shift" || key === "Meta";
 }
 
+// Whether Shift is part of a combo's identity for this (normalized) key. For a
+// symbol such as "?" the shifted character already sits in `key`, so Shift is
+// implied. Letters are normalized to upper case whether or not Shift was held,
+// so for them (and named keys like "Enter") Shift has to be compared
+// explicitly; otherwise "Ctrl+Shift+P" would also fire on Ctrl+P.
+function shiftIsSignificant(key: string): boolean {
+  return key.length > 1 || key.toLowerCase() !== key.toUpperCase();
+}
+
 export function parseCombo(combo: string): ParsedCombo | null {
   const parts = combo.split("+").map((part) => part.trim()).filter(Boolean);
   if (parts.length === 0) return null;
@@ -213,9 +230,10 @@ export function comboFromEvent(event: {
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
   if (event.metaKey) parts.push("Meta");
-  // For printable keys, Shift is usually implied by the produced character
-  // (e.g. "?"), so do not also require a literal Shift modifier.
-  if (key.length === 1 && parts.length === 1 && parts[0] === "Shift") parts.pop();
+  // For symbol keys, Shift is implied by the produced character (e.g. "?"), so
+  // do not also require a literal Shift modifier. Letters keep it, because
+  // their normalized key is the same with or without Shift.
+  if (!shiftIsSignificant(key) && parts.length === 1 && parts[0] === "Shift") parts.pop();
   parts.push(key);
   return parts.join("+");
 }
@@ -242,9 +260,9 @@ export function matchesCombo(
   } else if (event.ctrlKey || event.metaKey) {
     return false;
   }
-  // Shift is only enforced for non-printable keys; printable combos like "?"
+  // Shift is enforced for letters and named keys; symbol combos like "?"
   // already encode the shifted character in `key`.
-  if (parsed.key.length > 1 && parsed.shift !== event.shiftKey) return false;
+  if (shiftIsSignificant(parsed.key) && parsed.shift !== event.shiftKey) return false;
   return true;
 }
 

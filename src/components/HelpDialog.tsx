@@ -2,9 +2,12 @@ import { useEffect, useRef } from "react";
 import { Keyboard, X } from "lucide-react";
 import { resolveKeybindings, type KeybindingId } from "@/lib/keybindings";
 import type { HelpSection } from "@/lib/helpEvents";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 export function HelpDialog({ onClose, section: targetSection }: { onClose: () => void; section?: HelpSection }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
 
   // Focus the close button on open so the dialog is keyboard-operable from the
   // start; Escape closes (App returns focus to the opener). (#443)
@@ -54,16 +57,20 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
     combo("gotoWorkItemViews"),
     combo("gotoNotifications"),
     combo("gotoInbox"),
+    combo("gotoHome"),
     combo("gotoSettings"),
   ].join("/");
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       aria-hidden="false"
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="help-title"
@@ -106,6 +113,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Command palette</span><kbd className={kbd}>{combo("commandPalette")}</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>{combo("focusGrid")}</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>{combo("focusPreview")}</kbd></div>
+          <div className={row}><span>Next / previous visible pane (wraps around, includes Result)</span><kbd className={kbd}>Ctrl+Tab / Ctrl+Shift+Tab</kbd></div>
           <div className={row}><span>Adjacent grid / editable pane (from rows / preview body)</span><kbd className={kbd}>← →</kbd></div>
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>{combo("focusViewsPanel")}</kbd></div>
@@ -117,16 +125,20 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Vote: Approve / Suggestions / Wait / Reject / None</span><kbd className={kbd}>A / S / W / X / 0</kbd></div>
+          <div className={row}><span>Request agent review (selected rows)</span><kbd className={kbd}>I</kbd></div>
           <div className={row}><span>Collapse / expand section</span><kbd className={kbd}>Tab to header · Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
+          <div className={row}><span>Group by status / repository</span><kbd className={kbd}>B</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy as Grid: selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy as Link: one link per selected row</span><kbd className={kbd}>Ctrl+Shift+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Comment on the review result (Result tab, also PR Search)</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Focus PR comment</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
+          <div className={row}><span>Jump to next / previous PR needing action (My Pull Requests)</span><kbd className={kbd}>N / Shift+N</kbd></div>
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
 
         </div>
@@ -137,7 +149,8 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy selected rows as a table</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy as Grid: selected rows as a table</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy as Link: one link per selected row</span><kbd className={kbd}>Ctrl+Shift+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
@@ -146,11 +159,13 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
         </div>
         <div className={group}>
           <p {...sectionProps("work-items")}>Work Items</p>
+          <div className={row}><span>Investigate selected rows or the focused work item</span><kbd className={kbd}>I</kbd></div>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter / O</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy as Grid: selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy as Link: one link per selected row</span><kbd className={kbd}>Ctrl+Shift+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select row</span><kbd className={kbd}>Space · Shift+click · Ctrl+click</kbd></div>
@@ -197,6 +212,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
         </div>
         <div className={group}>
           <p {...sectionProps("inbox")}>Inbox</p>
+          <div className={row}><span>Priority (direct PR / WI mentions) / Other (team mentions and replies) / All: Tab to the filter in the tab strip, arrows switch, Enter returns to items</span><kbd className={kbd}>← → / ↑ ↓</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Focus the preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in DevDeck</span><kbd className={kbd}>Shift+Enter</kbd></div>
@@ -204,15 +220,37 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Done / Reopen (then the next row is selected)</span><kbd className={kbd}>E</kbd></div>
           <div className={row}><span>Resolve the thread + Done</span><kbd className={kbd}>Shift+E</kbd></div>
           <div className={row}><span>Snooze / Unsnooze (presets: 1-5 in the menu)</span><kbd className={kbd}>Z</kbd></div>
-          <div className={row}><span>Undo the last Done / Snooze / Reopen</span><kbd className={kbd}>U</kbd></div>
+          <div className={row}><span>Remind me if no one replies (menu: 1-5 presets, or cancel; it returns as a Waiting row)</span><kbd className={kbd}>W</kbd></div>
+          <div className={row}><span>Mark the row / extend the marked range (E and Z then apply to all marked; Esc clears)</span><kbd className={kbd}>X / Shift+↑↓</kbd></div>
+          <div className={row}><span>Undo the last Done / Snooze / Reopen (all items of a bulk change)</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Scroll the preview from the list</span><kbd className={kbd}>Space / Shift+Space</kbd></div>
           <div className={row}><span>Expand / collapse the description</span><kbd className={kbd}>D</kbd></div>
-          <div className={row}><span>Reply</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Focus comment (reply)</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Reply with Claude's draft (edit, then send)</span><kbd className={kbd}>Shift+R</kbd></div>
           <div className={row}><span>Post the reply / post and resolve the thread (in the reply box)</span><kbd className={kbd}>Ctrl+Enter · Ctrl+Shift+Enter</kbd></div>
           <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>
-          <div className={row}><span>Open the nth link</span><kbd className={kbd}>1-9</kbd></div>
+          <div className={row}><span>Open the nth related link</span><kbd className={kbd}>1-9</kbd></div>
           <div className={row}><span>Filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
+
+          <p {...sectionProps("agent-work")}>Agent Work</p>
+          <div className={row}><span>Candidates / Runs (or Tab to the segments in the tab strip and use the arrows; Enter returns to items)</span><kbd className={kbd}>1-2</kbd></div>
+          <div className={row}><span>Move row · show Result</span><kbd className={kbd}>↑ ↓ · Enter</kbd></div>
+          <div className={row}><span>Open in DevDeck / in Azure DevOps</span><kbd className={kbd}>O / Shift+O</kbd></div>
+          <div className={row}><span>Retry a failed item now</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Exclude from / include in automatic runs (toggle)</span><kbd className={kbd}>X</kbd></div>
+          <div className={row}><span>Runs: show finished (Done) runs · back to open runs</span><kbd className={kbd}>D · Esc</kbd></div>
+          <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>
+          <div className={row}><span>Candidates: select / select range / select all shown / exclude / run selected</span><kbd className={kbd}>Space / Shift+↑↓ / A / X / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Candidates: filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
+
+          <p {...sectionProps("home")}>Home</p>
+          <div className={row}><span>Move suggestion</span><kbd className={kbd}>↑ ↓</kbd></div>
+          <div className={row}><span>Ask Orchestrator (puts the ask in the chat input; Enter sends) / dismiss</span><kbd className={kbd}>Q / E</kbd></div>
+          <div className={row}><span>Look now</span><kbd className={kbd}>L</kbd></div>
+          <div className={row}><span>Chat input / Workers / new chat</span><kbd className={kbd}>M / W / N</kbd></div>
+          <div className={row}><span>Open the target in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Workers: open / stop (Enter confirms)</span><kbd className={kbd}>Enter / X</kbd></div>
+          <div className={row}><span>Back to the suggestions</span><kbd className={kbd}>Esc</kbd></div>
 
           <p className={section}>Notifications</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>

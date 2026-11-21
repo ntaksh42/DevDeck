@@ -5,6 +5,7 @@ import {
   CandidateAvatar,
   HighlightedText,
 } from "./PreviewEditorsBase";
+import { isImeComposing } from "@/lib/utils";
 
 export function AssigneePicker({
   current,
@@ -54,13 +55,13 @@ export function AssigneePicker({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full truncate rounded px-1 text-left text-xs font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "Unassigned"}
       >
         {pending ? "Updating..." : current ?? "Unassigned"}
       </button>
       {mutationError && (
-        <p className="mt-0.5 text-[11px] text-destructive">{mutationError}</p>
+        <p className="mt-0.5 text-2xs text-destructive">{mutationError}</p>
       )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">
@@ -70,6 +71,7 @@ export function AssigneePicker({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Escape") {
                 event.preventDefault();
                 onOpenChange(false);
@@ -78,17 +80,17 @@ export function AssigneePicker({
                 listRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
               }
             }}
-            placeholder="Search assignee..."
+            placeholder="Search assignee…"
             className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
           <div ref={listRef} className="max-h-44 overflow-auto">
             {error ? (
-              <div className="mb-1 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+              <div className="mb-1 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-2xs text-destructive">
                 Search failed: {error}
               </div>
             ) : null}
             {loading ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching...</div>
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching…</div>
             ) : options.length > 0 ? (
               options.map((candidate) => (
                 <button
@@ -107,7 +109,7 @@ export function AssigneePicker({
                       else inputRef.current?.focus();
                     }
                   }}
-                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus-visible:outline-offset-[-2px]"
                 >
                   <CandidateAvatar displayName={candidate.displayName} />
                   <span className="flex min-w-0 flex-col">
@@ -115,7 +117,7 @@ export function AssigneePicker({
                       <HighlightedText text={candidate.displayName} query={query} />
                     </span>
                     {candidate.uniqueName ? (
-                      <span className="truncate text-[11px] text-muted-foreground">
+                      <span className="truncate text-2xs text-muted-foreground">
                         <HighlightedText text={candidate.uniqueName} query={query} />
                       </span>
                     ) : null}

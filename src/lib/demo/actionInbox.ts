@@ -2,8 +2,12 @@ import type {
   InboxCounts,
   InboxItem,
   ListInboxItemsInput,
+  ReplyReminder,
   SetInboxItemStateInput,
+  SetReplyReminderInput,
 } from "@/lib/azdoCommands";
+
+import { applyInboxScenario } from "@/lib/azdoDemoHarness";
 
 const DEMO_ORG = "contoso";
 
@@ -25,6 +29,7 @@ function buildSeed(): InboxItem[] {
     doneAt: null,
     filePath: null,
     line: null,
+    hitCount: 1,
     insight: null,
   };
   const seed: InboxItem[] = [
@@ -39,9 +44,11 @@ function buildSeed(): InboxItem[] {
       filePath: "/src/app/dashboard.ts",
       line: 7,
       commentId: 5011,
+      hitCount: 2,
       title: "Add pull request search dashboard",
       author: "Frank Lee",
-      snippet: "@you ここの null 扱いを確認してください",
+      // A mention followed by a general reply stays Priority for this conversation.
+      snippet: "null 扱いの補足です。未指定の場合も確認してください",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
       detectedAt: minsAgo(12),
       // Matches the demo thread 1 shown for this PR (a request for a test).
@@ -150,7 +157,7 @@ function buildSeed(): InboxItem[] {
 }
 
 function all(): InboxItem[] {
-  if (!items) items = buildSeed();
+  if (!items) items = applyInboxScenario(buildSeed());
   return items;
 }
 
@@ -205,7 +212,43 @@ export function demoSetInboxItemState(input: SetInboxItemStateInput): number {
   return changed;
 }
 
+let reminders: ReplyReminder[] = [];
+let nextReminderId = 1;
+
+export function demoSetReplyReminder(input: SetReplyReminderInput): ReplyReminder {
+  if (Date.parse(input.dueAt) <= Date.now()) throw new Error("dueAt must be in the future");
+  const same = (r: ReplyReminder) =>
+    r.organizationId === input.organizationId &&
+    r.kind === input.kind &&
+    r.repositoryId === input.repositoryId &&
+    r.subjectId === input.subjectId &&
+    r.threadId === input.threadId;
+  const existing = reminders.find(same);
+  const reminder: ReplyReminder = {
+    id: existing?.id ?? nextReminderId++,
+    organizationId: input.organizationId,
+    kind: input.kind,
+    subjectId: input.subjectId,
+    repositoryId: input.repositoryId,
+    threadId: input.threadId,
+    dueAt: input.dueAt,
+    createdAt: new Date().toISOString(),
+  };
+  reminders = [...reminders.filter((r) => !same(r)), reminder];
+  return reminder;
+}
+
+export function demoListReplyReminders(): ReplyReminder[] {
+  return reminders;
+}
+
+export function demoClearReplyReminder(id: number): void {
+  reminders = reminders.filter((r) => r.id !== id);
+}
+
 /** Test helper: restores the seed data. */
 export function resetDemoInbox(): void {
   items = null;
+  reminders = [];
+  nextReminderId = 1;
 }

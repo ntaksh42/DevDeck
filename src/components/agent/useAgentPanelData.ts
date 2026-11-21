@@ -43,7 +43,7 @@ const urgency = (note: AgentNote) => (noteNeedsYou(note) ? 0 : note.status === "
 const activityTime = (note: AgentNote) => Date.parse(note.replies[note.replies.length - 1]?.createdAt ?? note.createdAt) || 0;
 
 /** A new request's id: its local timestamp, `yyyyMMddHHmmss`. */
-function newAskId(): number {
+export function newAskId(): number {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return Number(
@@ -83,7 +83,8 @@ export function useAgentPanelData(
     queryKey: AGENT_ASKS_KEY,
     queryFn: listAgentAsks,
     enabled,
-    refetchInterval: 5_000,
+    // Asks only show while no PR / work item is the subject.
+    refetchInterval: item ? false : 5_000,
   });
 
   const conversations: Conversation[] = [
@@ -210,6 +211,7 @@ export function useAgentPanelData(
       itemNotesQuery.error ?? asksQuery.error ?? setStatus.error ?? remove.error ?? undoDelete.error ?? submitDrafts.error ?? null,
     send,
     readOnly,
+    autoPost: settingsQuery.data?.agentAutoPostEnabled ?? false,
     defaultAgent,
     agent: runWith,
     model,

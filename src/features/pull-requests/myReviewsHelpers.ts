@@ -108,10 +108,19 @@ export function compareReviewPrs(
   }
 }
 
+function readGroupOrder(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((key): key is string => typeof key === 'string'))]
+    : [];
+}
+
 export function defaultMyReviewsGridViewState(): MyReviewsGridViewState {
   return {
+    groupOrder: { status: [], repository: [] },
     collapsedSections: new Set(DEFAULT_COLLAPSED_SECTIONS),
+    collapsedRepos: new Set(),
     columnFilters: {},
+    groupBy: 'status',
     organizationId: '',
     showDrafts: false,
     sort: { key: 'creationDate', direction: 'desc' },
@@ -161,8 +170,20 @@ export function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       }
     }
     return {
+      groupOrder: {
+        status: readGroupOrder(parsed.groupOrder?.status),
+        repository: readGroupOrder(parsed.groupOrder?.repository),
+      },
       collapsedSections,
+      collapsedRepos: Array.isArray(parsed.collapsedRepos)
+        ? new Set(
+            (parsed.collapsedRepos as unknown[]).filter(
+              (value): value is string => typeof value === 'string',
+            ),
+          )
+        : fallback.collapsedRepos,
       columnFilters,
+      groupBy: parsed.groupBy === 'repository' ? 'repository' : 'status',
       organizationId:
         typeof parsed.organizationId === 'string' ? parsed.organizationId : '',
       showDrafts:
@@ -191,8 +212,32 @@ export function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
       ...state,
       columnFilters,
       collapsedSections: [...state.collapsedSections],
+      collapsedRepos: [...state.collapsedRepos],
     }),
   );
 }
 
 export { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS };
+
+const SECTION_PREVIEW_LIMIT = 3;
+
+/** "#87 Fix retry · #90 Bump axios" — shown after a collapsed group's label. */
+export function sectionPreview(prs: readonly ReviewPullRequestSummary[]): string {
+  return prs
+    .slice(0, SECTION_PREVIEW_LIMIT)
+    .map((pr) => `#${pr.pullRequestId} ${pr.title}`)
+    .join(' · ');
+}
+
+/**
+ * Dock panels render through portals, so keys typed in the preview, the linked
+ * work items or the Agent panel bubble up to the grid too. They are not the
+ * grid's: ↓ in a reply box, Esc in a select or `a` on a button there must not
+ * move the row, clear the filters or vote.
+ */
+export function isFromSidePanel(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    !!target.closest("[data-review-preview], [data-linked-work-items], [data-agent-panel]")
+  );
+}

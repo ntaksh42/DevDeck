@@ -33,7 +33,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { ToastHost } from "@/components/ToastHost";
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
 import {
-  loadWorkItemQueryViews,
+  loadWorkItemQueryViews, saveWorkItemQueryViews,
   type WorkItemQueryView,
 } from "@/features/work-items/workItemViewsStorage";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
@@ -56,6 +56,7 @@ import {
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { AppSidebar, type AppSidebarHandle } from "./app/AppSidebar";
 import { AppHeader } from "./app/AppHeader";
+import { HeaderToolbarSlotProvider } from "./components/HeaderToolbarSlot";
 import { AppContent } from "./app/AppContent";
 import { useKeybindings } from "./app/useKeybindings";
 import { usePaletteSearch } from "./app/usePaletteSearch";
@@ -91,9 +92,8 @@ function AppShell() {
   const paletteReturnRef = useRef<HTMLElement | null>(null);
   const helpReturnRef = useRef<HTMLElement | null>(null);
   const sidebarRef = useRef<AppSidebarHandle | null>(null);
-  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
-    loadWorkItemQueryViews(),
-  );
+  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(loadWorkItemQueryViews);
+  useEffect(() => saveWorkItemQueryViews(workItemNavViews), [workItemNavViews]);
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
@@ -174,8 +174,7 @@ function AppShell() {
     setPaletteSearchText,
     paletteSearchItems,
     paletteRecentItems,
-    paletteSearchEnabled,
-    searchAllQueryIsFetching,
+    searchAllQueryIsFetching, paletteSearchStatus, paletteSearchError,
   } = usePaletteSearch(commandPaletteOpen, organizations, {
     setWorkItemSearchRequest,
     setPullRequestSearchRequest,
@@ -404,19 +403,18 @@ function AppShell() {
     setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
     setView("pullRequestSearch");
   }
-
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <AppSidebar
         ref={sidebarRef}
         activeView={activeView}
         organizationsLength={organizations.length}
-        activeOrganizationId={badgeOrganizationId}
+        organizationId={badgeOrganizationId}
         capabilities={capabilities}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
         setSidebarWidth={setSidebarWidth}
-        workItemNavViews={workItemNavViews}
+        workItemNavViews={workItemNavViews} setWorkItemNavViews={setWorkItemNavViews}
         activeWorkItemViewId={activeWorkItemViewId}
         myReviewsBadge={myReviewsBadge}
         myWorkItemsBadge={myWorkItemsBadge}
@@ -432,6 +430,7 @@ function AppShell() {
         className="flex h-screen flex-col lg:pl-[var(--sidebar-width)]"
         style={{ "--sidebar-width": `${sidebarCollapsed ? 0 : sidebarWidth}px` } as CSSProperties}
       >
+        <HeaderToolbarSlotProvider>
         <AppHeader
           activeView={activeView}
           sidebarCollapsed={sidebarCollapsed}
@@ -445,7 +444,8 @@ function AppShell() {
           onSync={() => syncMutation.mutate({ scope: "all", force: true })}
         />
         <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Settings scrolls the view pane itself, so the focus frame is painted here. */}
+        <div data-focus-frame className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppContent
           activeView={activeView}
           organizations={organizations}
@@ -459,7 +459,7 @@ function AppShell() {
           onMyReviewsSelectHandled={() => setMyReviewsSelectRequest(null)}
           onSelectedViewChange={setActiveWorkItemViewId}
           onSelectedViewRequestHandled={() => setSelectedWorkItemViewRequestId(null)}
-          onWorkItemNavViewsChange={setWorkItemNavViews}
+          workItemNavViews={workItemNavViews} setWorkItemNavViews={setWorkItemNavViews}
           onOpenSettings={() => setView("settings")}
           onOpenPullRequest={openPullRequestSearch}
           onOpenView={setView}
@@ -467,6 +467,7 @@ function AppShell() {
         </div>
         <AgentPanelHost />
         </div>
+        </HeaderToolbarSlotProvider>
       </main>
       <ToastHost />
       <WikiPreviewHost />
@@ -479,8 +480,9 @@ function AppShell() {
             organizations.length > 0
               ? {
                   items: [...paletteSearchItems, ...paletteRecentItems],
-                  pending: paletteSearchEnabled && searchAllQueryIsFetching,
+                  pending: searchAllQueryIsFetching,
                   onQueryChange: setPaletteSearchText,
+                  status: paletteSearchStatus, error: paletteSearchError,
                 }
               : undefined
           }

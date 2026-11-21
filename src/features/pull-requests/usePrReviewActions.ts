@@ -17,6 +17,8 @@ import {
 import { useConfirm } from "@/components/ConfirmDialog";
 import { recordUsage } from "@/lib/usageStats";
 import { useExperimentalFlags } from "@/features/settings/useExperimentalFlags";
+import { reviewTriageKey } from "./myReviewsHelpers";
+import { recordOwnVote } from "./reviewReturnTracking";
 
 export function usePrReviewActions(pr: ReviewPullRequestSummary) {
   const queryClient = useQueryClient();
@@ -54,7 +56,11 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
 
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
-    onSuccess: (_data, variables) => { setActionError(null); invalidateReview(variables); },
+    onSuccess: (_data, variables) => {
+      recordOwnVote(reviewTriageKey(pr), variables.vote);
+      setActionError(null);
+      invalidateReview(variables);
+    },
     onError: showError,
   });
 

@@ -17,6 +17,9 @@ use super::helpers::{
 use super::throttle::{parse_rate_limit_delay, Gate};
 use super::{AdoClient, BinaryResponse};
 
+mod once;
+mod upload;
+
 impl AdoClient {
     pub(crate) async fn get_json<T: DeserializeOwned>(
         &self,
@@ -184,10 +187,7 @@ impl AdoClient {
             match response {
                 Ok(resp) => {
                     let status = resp.status();
-                    // The shared gate honours the server's full wait (it caps
-                    // the cooldown itself), so retries and other callers do not
-                    // land inside the throttle window; only this request's own
-                    // retry delay is capped.
+                    // The gate honours the full wait (it caps it itself); only this request's retry delay is capped.
                     if let Some(delay) = parse_rate_limit_delay(resp.headers()) {
                         gate.pause_for(delay);
                     }
@@ -402,21 +402,7 @@ impl AdoClient {
             .await
     }
 
-    /// PATCH whose body is not safe to apply twice (a JSON Patch that appends
-    /// to or removes from a list by index), so an ambiguous 5xx or timeout is
-    /// not retried: the first attempt may already have been applied.
-    pub(crate) async fn patch_json_once<B: Serialize + ?Sized, T: DeserializeOwned>(
-        &self,
-        path: &str,
-        query: &[(&str, &str)],
-        content_type: &str,
-        body: &B,
-    ) -> Result<T> {
-        self.patch_json_with(path, query, content_type, body, false)
-            .await
-    }
-
-    async fn patch_json_with<B: Serialize + ?Sized, T: DeserializeOwned>(
+    pub(super) async fn patch_json_with<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
         path: &str,
         query: &[(&str, &str)],
@@ -472,8 +458,10 @@ impl AdoClient {
         error.is_connect() || (idempotent && error.is_timeout())
     }
 
-    fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
+    pub(crate) fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
+        // A zero or past-dated Retry-After carries no usable wait; use backoff.
         retry_after
+            .filter(|delay| !delay.is_zero())
             .map(|delay| self.retry_policy.capped_retry_after(delay))
             .unwrap_or_else(|| self.retry_policy.backoff_delay(attempt))
     }

@@ -8,19 +8,20 @@ import type { InboxEntry, InboxTab } from "./inboxPresentation";
 export const INBOX_UNDO_WINDOW_MS = 10_000;
 
 export type InboxUndo = {
-  id: number;
-  /** The state the item had before the change, restored by undo. */
+  /** Every item the change touched, each with the wake time it had before. */
+  items: { id: number; previousSnoozedUntil: string | null }[];
+  /** The state the items had before the change, restored by undo. */
   previous: InboxTab;
-  previousSnoozedUntil: string | null;
   /** What the change did, shown in the status bar (e.g. "Marked done"). */
   label: string;
 };
 
-function changeLabel(state: InboxTab, resolved: boolean): string {
+function changeLabel(state: InboxTab, resolved: boolean, count: number): string {
+  const suffix = count > 1 ? ` (${count})` : "";
   if (resolved) return "Resolved + done";
-  if (state === "done") return "Marked done";
-  if (state === "snoozed") return "Snoozed";
-  return "Moved to Open";
+  if (state === "done") return `Marked done${suffix}`;
+  if (state === "snoozed") return `Snoozed${suffix}`;
+  return `Moved to Open${suffix}`;
 }
 
 /**
@@ -46,10 +47,7 @@ export function useInboxStateChanges({
   const [undo, setUndo] = useState<InboxUndo | null>(null);
   const [reselectId, setReselectId] = useState<number | null>(null);
   const undoTimer = useRef<number | null>(null);
-  // The last write queued per item. Writes for one item run one after another:
-  // an undo pressed while the change it undoes is still being saved must not
-  // race it, or the older write (and its refetch) could land last.
-  const pendingWrites = useRef(new Map<number, Promise<unknown>>());
+  const pendingChange = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => () => {
     if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
@@ -76,21 +74,15 @@ export function useInboxStateChanges({
   // Called directly rather than through useMutation: mutate-level callbacks only
   // fire for the latest call, and E pressed on several rows in a row must
   // unhide each one once its own refetch lands.
-  function send(id: number, state: InboxTab, snoozedUntil: string | undefined, onFailure: () => void) {
-    const previous = pendingWrites.current.get(id) ?? Promise.resolve();
-    const write = previous
-      .then(() => setActionInboxItemState({ ids: [id], state, snoozedUntil }))
+  function send(ids: number[], state: InboxTab, snoozedUntil: string | undefined, onFailure: () => void) {
+    return setActionInboxItemState({ ids, state, snoozedUntil })
       .catch((error: unknown) => {
         onFailure();
         pushToast(`Could not update the Inbox item: ${commandErrorMessage(error)}`);
       })
       .then(() => queryClient.invalidateQueries({ queryKey: ["actionInbox"] }))
-      // The refetched list no longer has it (or has it back); stop hiding.
-      .finally(() => {
-        hide(id, false);
-        if (pendingWrites.current.get(id) === write) pendingWrites.current.delete(id);
-      });
-    pendingWrites.current.set(id, write);
+      // The refetched list no longer has them (or has them back); stop hiding.
+      .finally(() => ids.forEach((id) => hide(id, false)));
   }
 
   /** Moves an item to `state`. */
@@ -100,16 +92,27 @@ export function useInboxStateChanges({
     snoozedUntil?: string,
     options: { resolved?: boolean } = {},
   ) {
+    changeStates([entry], state, snoozedUntil, options);
+  }
+
+  /** Moves several items to `state` in one request; undo restores them together. */
+  function changeStates(
+    targets: InboxEntry[],
+    state: InboxTab,
+    snoozedUntil?: string,
+    options: { resolved?: boolean } = {},
+  ) {
+    if (targets.length === 0) return;
+    const ids = targets.map((entry) => entry.id);
     const record: InboxUndo = {
-      id: entry.id,
+      items: targets.map((entry) => ({ id: entry.id, previousSnoozedUntil: entry.snoozedUntil })),
       previous: tab,
-      previousSnoozedUntil: entry.snoozedUntil,
-      label: changeLabel(state, options.resolved ?? false),
+      label: changeLabel(state, options.resolved ?? false, targets.length),
     };
-    if (state !== tab) hide(entry.id, true);
-    send(entry.id, state, snoozedUntil, () => {
-      hide(entry.id, false);
-      setUndo((current) => (current?.id === entry.id ? null : current));
+    if (state !== tab) ids.forEach((id) => hide(id, true));
+    pendingChange.current = send(ids, state, snoozedUntil, () => {
+      ids.forEach((id) => hide(id, false));
+      setUndo((current) => (current === record ? null : current));
     });
     if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
     setUndo(record);
@@ -124,12 +127,18 @@ export function useInboxStateChanges({
     const record = undo;
     if (!record) return false;
     clearUndo();
-    // Stays hidden until the restoring write's refetch brings it back; showing
-    // it from the current list would let a refetch for the change being undone
-    // remove it again (and move the selection) a moment later.
-    hide(record.id, true);
-    setReselectId(record.id);
-    send(record.id, record.previous, record.previousSnoozedUntil ?? undefined, () => setReselectId(null));
+    setReselectId(record.items[0].id);
+    // Items that had different wake times go back in one request per wake time.
+    const byWakeTime = new Map<string | null, number[]>();
+    for (const { id, previousSnoozedUntil } of record.items) {
+      byWakeTime.set(previousSnoozedUntil, [...(byWakeTime.get(previousSnoozedUntil) ?? []), id]);
+    }
+    // The original write must settle before its inverse can reach the backend.
+    void pendingChange.current.then(() => {
+      for (const [wakeTime, ids] of byWakeTime) {
+        void send(ids, record.previous, wakeTime ?? undefined, () => setReselectId(null));
+      }
+    });
     return true;
   }
 
@@ -146,5 +155,5 @@ export function useInboxStateChanges({
     onReselect(target);
   }, [visibleEntries, reselectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { visibleEntries, changeState, undo, undoLast };
+  return { visibleEntries, changeState, changeStates, undo, undoLast };
 }

@@ -2,10 +2,15 @@ import type { RefObject } from "react";
 import { DockFilterBar, DockFilterInput, type useDockFilter } from "@/components/DockFilterBar";
 import { ListStateChip } from "@/components/ListStatusBar";
 import type { Organization } from "@/lib/azdoCommands";
-import type { InboxTab } from "./inboxPresentation";
+import { InboxPriorityFilter } from "./InboxPriorityFilter";
+import type { InboxPriority, InboxTab } from "./inboxPresentation";
 
-/** Tab-band controls of the Inbox list pane: Done / Snoozed chip, organization, folded filter. */
+/** Tab-band controls of the Inbox list pane: Done / Snoozed chip, organization, folded filter, priority. */
 export function InboxListHeader({
+  priority,
+  priorityCounts,
+  onPriorityChange,
+  onFocusList,
   tab,
   onLeaveTab,
   organizations,
@@ -16,6 +21,10 @@ export function InboxListHeader({
   filterBar,
   filterInputRef,
 }: {
+  priority: InboxPriority;
+  priorityCounts: Record<InboxPriority, number>;
+  onPriorityChange: (priority: InboxPriority) => void;
+  onFocusList: () => void;
   tab: InboxTab;
   /** Returns the list to the open items. */
   onLeaveTab: () => void;
@@ -37,7 +46,7 @@ export function InboxListHeader({
           value={organizationId}
           onChange={(event) => onOrganizationChange(event.target.value)}
           aria-label="Filter by organization"
-          className="h-4 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+          className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">All organizations</option>
           {organizations.map((org) => (
@@ -68,6 +77,13 @@ export function InboxListHeader({
           ariaLabel="Filter inbox items"
         />
       </DockFilterBar>
+      {/* Last in the band so Shift+Tab from the list reaches it first. */}
+      <InboxPriorityFilter
+        value={priority}
+        counts={priorityCounts}
+        onChange={onPriorityChange}
+        onFocusList={onFocusList}
+      />
     </div>
   );
 }

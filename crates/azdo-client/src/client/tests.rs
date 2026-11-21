@@ -224,8 +224,6 @@ async fn rate_limited_429() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/_apis/connectionData"))
-        // Short: the shared gate (per host, and wiremock reuses servers) now
-        // holds every request for the server's full Retry-After.
         .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "2"))
         .mount(&server)
         .await;
@@ -356,7 +354,6 @@ async fn retries_post_after_rate_limit() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/project-1/_apis/wit/wiql"))
-        // Short: the shared gate now waits the server's full Retry-After.
         .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "1"))
         .up_to_n_times(1)
         .with_priority(1)
@@ -510,4 +507,24 @@ async fn api_path_does_not_double_encode_pre_encoded_segments() {
         .list_work_item_type_states("proj", "Bug & Feature")
         .await
         .unwrap();
+}
+
+#[test]
+fn zero_retry_after_falls_back_to_backoff() {
+    let client = AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
+        .unwrap()
+        .with_retry_policy(RetryPolicy {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(250),
+            max_delay: Duration::from_secs(2),
+            retry_after_cap: Duration::from_secs(5),
+        });
+    assert_eq!(
+        client.retry_delay(1, Some(Duration::ZERO)),
+        Duration::from_millis(250)
+    );
+    assert_eq!(
+        client.retry_delay(1, Some(Duration::from_secs(1))),
+        Duration::from_secs(1)
+    );
 }

@@ -1,4 +1,6 @@
 import type {
+  InboxItem,
+  NotificationRecord,
   PullRequestSummary,
   ReviewPullRequestSummary,
   WorkItemPreview,
@@ -68,7 +70,29 @@ export function applyWorkItemScenario(
   const scenario = currentDemoScenario();
   if (scenario === "empty") return [];
   if (scenario !== "large-data") return workItems;
-  return repeatWorkItems(workItems, 420);
+  return repeatWorkItems(workItems, largeWorkItemCount());
+}
+
+/** `?wiCount=3000` lengthens the large-data work item lists (default 420). */
+function largeWorkItemCount(): number {
+  const requested = Number(new URLSearchParams(window.location.search).get("wiCount"));
+  return Number.isInteger(requested) && requested > 0 ? requested : 420;
+}
+
+export function applyNotificationScenario(
+  notifications: NotificationRecord[],
+): NotificationRecord[] {
+  const scenario = currentDemoScenario();
+  if (scenario === "empty") return [];
+  if (scenario !== "large-data") return notifications;
+  return [...notifications, ...repeatNotifications(notifications, 300)];
+}
+
+export function applyInboxScenario(items: InboxItem[]): InboxItem[] {
+  const scenario = currentDemoScenario();
+  if (scenario === "empty") return [];
+  if (scenario !== "large-data") return items;
+  return [...items, ...repeatInboxItems(items, 300)];
 }
 
 export function applyWorkItemPreviewScenario(
@@ -147,6 +171,14 @@ function repeatReviewPullRequests(
   });
 }
 
+// Assignee only: views filter on state and type, so those must stay put.
+const LONG_ASSIGNEES = [
+  "Alexandra Montgomery-Watanabe",
+  "Christopher Nakamura",
+  "Maximilian Okonkwo-Fernandes",
+  "Bo Li",
+];
+
 function repeatWorkItems(
   base: WorkItemSummary[],
   count: number,
@@ -154,14 +186,50 @@ function repeatWorkItems(
   return Array.from({ length: count }, (_, index) => {
     const source = base[index % base.length];
     const id = 30_000 + index;
+    // Real result sets mix short and long values, and the long ones often
+    // only appear further down, so auto-fitted columns keep growing while
+    // scrolling, as they do against a real organization.
+    const assignedTo =
+      index >= 40 && index % 4 === 0 ? LONG_ASSIGNEES[(index / 4) % LONG_ASSIGNEES.length] : source.assignedTo;
     return {
       ...source,
+      assignedTo,
       id,
       title: `${source.title} #${index + 1}`,
       changedDate: source.changedDate
         ? shiftedIso(source.changedDate, index)
         : source.changedDate,
       webUrl: source.webUrl?.replace(/edit\/\d+$/, `edit/${id}`) ?? null,
+    };
+  });
+}
+
+// Negative ids sort the extra rows after the seed rows (the list is ordered by
+// id, newest first) and never collide with ids recorded during the session.
+function repeatNotifications(
+  base: NotificationRecord[],
+  count: number,
+): NotificationRecord[] {
+  return Array.from({ length: count }, (_, index) => {
+    const source = base[index % base.length];
+    return {
+      ...source,
+      id: -(index + 1),
+      title: `${source.title} #${index + 1}`,
+      createdAt: shiftedIso(source.createdAt, index + 60),
+      isRead: index % 3 !== 0,
+    };
+  });
+}
+
+function repeatInboxItems(base: InboxItem[], count: number): InboxItem[] {
+  return Array.from({ length: count }, (_, index) => {
+    const source = base[index % base.length];
+    return {
+      ...source,
+      id: 50_000 + index,
+      title: `${source.title} #${index + 1}`,
+      detectedAt: shiftedIso(source.detectedAt, index + 60),
     };
   });
 }

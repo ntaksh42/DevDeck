@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { useCloseOnOutsidePointer } from './PreviewEditors';
 import { MAX_FIELD_PRESETS, type WorkItemFieldPreset } from './fieldPresetsStorage';
+import { isImeComposing } from '@/lib/utils';
 
 // Popover half of the "Field presets…" View options item: no trigger of its
 // own, the toolbar's menu opens it and gets focus back on `onClose`.
@@ -38,6 +39,7 @@ export function PresetMenu({
       ref={menuRef}
       className="relative"
       onKeyDown={(event) => {
+        if (isImeComposing(event)) return;
         if (event.key === "Escape" && open) {
           event.preventDefault();
           event.stopPropagation();
@@ -50,7 +52,7 @@ export function PresetMenu({
           ref={popoverRef}
           className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg"
         >
-          <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+          <div className="px-2 py-1 text-2xs font-semibold text-muted-foreground">
             Field presets
           </div>
           {presets.length > 0 ? (
@@ -84,7 +86,7 @@ export function PresetMenu({
               </div>
             ))
           ) : (
-            <p className="px-2 py-1 text-[11px] text-muted-foreground">No presets yet.</p>
+            <p className="px-2 py-1 text-2xs text-muted-foreground">No presets yet.</p>
           )}
           <div className="mt-1 border-t border-border px-2 py-1.5">
             {canSave ? (
@@ -114,12 +116,12 @@ export function PresetMenu({
                 </button>
               </form>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 Stage changes (state, reason, …), then save them here as a preset.
               </p>
             )}
             {presets.length >= MAX_FIELD_PRESETS ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-2xs text-muted-foreground">
                 Up to {MAX_FIELD_PRESETS} presets.
               </p>
             ) : null}

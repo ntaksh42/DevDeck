@@ -27,6 +27,7 @@ import {
 } from "./workItemMentions";
 import { useWorkItemMentionPicker } from "./useWorkItemMentionPicker";
 import { MentionPickerDropdown } from "./MentionPickerDropdown";
+import { isImeComposing } from "@/lib/utils";
 
 // Owns the comment draft and drives the shared mention picker so typing
 // re-renders only this subtree, not the whole preview panel with its comment
@@ -97,10 +98,11 @@ export function CommentComposer({
     },
   });
 
-  // Switching work items clears the unsent draft.
+  // Switching work items clears the unsent draft and the last post's status.
   useEffect(() => {
     setCommentText("");
     mentionPicker.resetMentions();
+    commentMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem?.id]);
 
@@ -122,7 +124,7 @@ export function CommentComposer({
       textareaRef.current?.focus();
     }
     function submitCurrentComment() {
-      postComment();
+      if (!textareaRef.current?.readOnly) postComment();
     }
     window.addEventListener("azdodeck:work-items:focus-comment", focusComment);
     window.addEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
@@ -159,6 +161,7 @@ export function CommentComposer({
   }
 
   function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (isImeComposing(event)) return;
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       const posted = postComment();
@@ -190,10 +193,19 @@ export function CommentComposer({
       }}
     >
       <CommentField
+        key={selectedItem ? JSON.stringify([selectedItem.organizationId, selectedItem.projectId, selectedItem.id]) : undefined}
         textareaRef={textareaRef}
         containerRef={mentionPicker.containerRef}
         data-work-item-comment-input="true"
         value={commentText}
+        imageTarget={commentMutation.isPending || !selectedItem ? undefined : {
+          organizationId: selectedItem.organizationId,
+          projectId: selectedItem.projectId,
+        }}
+        onImagePaste={(value, caret) => {
+          setCommentText(value);
+          mentionPicker.handleTextChange(value, caret);
+        }}
         onChange={(event) => {
           setCommentText(event.target.value);
           mentionPicker.handleTextChange(event.target.value, event.target.selectionStart);
@@ -204,9 +216,9 @@ export function CommentComposer({
         onKeyDown={handleCommentKeyDown}
         aria-label="Comment"
         aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
-        placeholder="Add a comment... (m)"
-        rows={active ? 2 : 1}
-        className={active ? "min-h-[36px] focus:min-h-[64px]" : "!h-7 !min-h-0 !resize-none"}
+        placeholder="Add a comment… (m)"
+        rows={active ? 4 : 1}
+        className={active ? "min-h-24" : "!h-7 !min-h-0 !resize-none"}
         overlay={
           <MentionPickerDropdown
             options={mentionPicker.dropdown.options}
@@ -220,7 +232,7 @@ export function CommentComposer({
         showActions={active}
         status={
           commentMutation.isSuccess ? (
-            <span className="text-[11px] text-muted-foreground">Comment posted</span>
+            <span className="text-2xs text-muted-foreground">Comment posted</span>
           ) : null
         }
         submitLabel="Comment"

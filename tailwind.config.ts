@@ -13,7 +13,18 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['"Hanken Grotesk Variable"', ...defaultTheme.fontFamily.sans],
+        // --font-ui is set in index.css and switched by Settings > Appearance.
+        sans: ["var(--font-ui)"],
+        mono: ['"Atkinson Hyperlegible Mono Variable"', '"BIZ UDPGothic"', ...defaultTheme.fontFamily.mono],
+      },
+      // Compact text sizes. rem-based (12.5px / 12px / 12px at the 15px root)
+      // so they follow the root font-size tiers in index.css, unlike
+      // `text-[11px]`. `xs` is a notch above Tailwind's 0.75rem so the bulk of
+      // list and preview text stays at 12px or more.
+      fontSize: {
+        xs: ["0.8333rem", { lineHeight: "1rem" }],
+        "2xs": "0.8rem",
+        "3xs": "0.8rem",
       },
       colors: {
         border: "hsl(var(--border))",
@@ -46,6 +57,9 @@ export default {
           foreground: "hsl(var(--popover-foreground))",
         },
         link: "hsl(var(--link))",
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        info: "hsl(var(--info))",
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",

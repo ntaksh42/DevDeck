@@ -83,8 +83,24 @@ impl AdoClient {
             name = format!("*{filter}*");
             query.push(("name", name.as_str()));
         }
-        let response: ListResponse<BuildDefinitionRef> = self.get_json(&path, &query).await?;
-        Ok(response.value)
+        // `top` is the page size; a project with more definitions signals the
+        // rest with `x-ms-continuationtoken`, so follow it instead of stopping.
+        let mut definitions = Vec::new();
+        let mut continuation: Option<String> = None;
+        for _ in 0..100 {
+            let mut page_query = query.clone();
+            if let Some(token) = continuation.as_deref() {
+                page_query.push(("continuationToken", token));
+            }
+            let (response, next): (ListResponse<BuildDefinitionRef>, _) =
+                self.get_json_with_continuation(&path, &page_query).await?;
+            definitions.extend(response.value);
+            match next {
+                Some(token) => continuation = Some(token),
+                None => break,
+            }
+        }
+        Ok(definitions)
     }
 
     pub async fn get_build_definition(

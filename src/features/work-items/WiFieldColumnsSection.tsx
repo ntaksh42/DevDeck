@@ -1,10 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { commandErrorMessage, listWorkItemFields } from "@/lib/azdoCommands";
-import { workItemQueryKeys } from "./queryKeys";
+import { commandErrorMessage } from "@/lib/azdoCommands";
+import { useExtraColumnLabel, useWorkItemFields } from "./useWorkItemFields";
 import { filterCustomFieldOptions } from "./workItemPreviewHelpers";
-import { extraColumnLabel } from "./workItemsGridHelpers";
 import { normalizeViewExtraColumns } from "./workItemViewsStorage";
+import { isImeComposing } from "@/lib/utils";
 
 /**
  * "Field columns" section of the work-item Columns menu: lists the Azure
@@ -14,23 +13,17 @@ import { normalizeViewExtraColumns } from "./workItemViewsStorage";
  */
 export function WiFieldColumnsSection({
   organizationId,
-  projectId,
   extraColumns,
   onExtraColumnsChange,
 }: {
   organizationId: string;
-  projectId: string;
   extraColumns: string[];
   onExtraColumnsChange: (columns: string[]) => void;
 }) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
-  const fieldsQuery = useQuery({
-    queryKey: workItemQueryKeys.fields(organizationId, projectId || null),
-    queryFn: () => listWorkItemFields({ organizationId, projectId }),
-    enabled: !!organizationId && !!projectId,
-    staleTime: 5 * 60_000,
-  });
+  const fieldsQuery = useWorkItemFields(organizationId);
+  const fieldName = useExtraColumnLabel(organizationId);
   const fields = useMemo(() => fieldsQuery.data ?? [], [fieldsQuery.data]);
   const matches = useMemo(
     () =>
@@ -38,17 +31,10 @@ export function WiFieldColumnsSection({
         fields,
         extraColumns.map((referenceName) => ({ referenceName, label: referenceName })),
         search,
+        false,
       ),
     [fields, extraColumns, search],
   );
-
-  function fieldName(referenceName: string) {
-    const lower = referenceName.toLowerCase();
-    return (
-      fields.find((field) => field.referenceName.toLowerCase() === lower)?.name ??
-      extraColumnLabel(referenceName)
-    );
-  }
 
   function add(referenceName: string) {
     onExtraColumnsChange(normalizeViewExtraColumns([...extraColumns, referenceName]));
@@ -89,6 +75,7 @@ export function WiFieldColumnsSection({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
+            if (isImeComposing(event)) return;
             if (event.key === "Enter" && matches[0]) {
               event.preventDefault();
               add(matches[0].referenceName);
@@ -121,7 +108,7 @@ export function WiFieldColumnsSection({
               title={field.referenceName}
             >
               <span className="min-w-0 truncate">{field.name}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">{field.fieldType}</span>
+              <span className="shrink-0 text-3xs text-muted-foreground">{field.fieldType}</span>
             </button>
           ))}
         </div>

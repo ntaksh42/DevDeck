@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Loader2 } from 'lucide-react';
 import {
@@ -8,15 +8,20 @@ import {
   type AgentKind,
 } from '@/lib/azdoCommands';
 import { settingsInput } from './settingsHelpers';
+import {
+  AUTO_AGENT_MAX_PER_SYNC_MAX,
+  AUTO_AGENT_MAX_PER_SYNC_MIN,
+  DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
+} from '@/lib/reviewSettings';
 
 // The shell command behind "Run agent" on a result's agent notes.
 
 // Mirror `DEFAULT_CLAUDE_COMMAND` / `DEFAULT_CODEX_COMMAND` in
 // src-tauri/src/agent_notes/launch.rs, used when a command is empty.
 const DEFAULT_CLAUDE_COMMAND =
-  'claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --dangerously-skip-permissions';
+  'claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" "{results}" --dangerously-skip-permissions';
 const DEFAULT_CODEX_COMMAND =
-  'codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" "Read {guide} and handle the open notes in {notes}"';
+  'codex exec --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true --add-dir "{notes}" --add-dir "{results}" "Read {guide} and handle the open notes in {notes}"';
 const INPUT_CLASS =
   "h-9 rounded-md border border-input bg-background px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring";
 const MODEL_FIELDS = [
@@ -26,6 +31,22 @@ const MODEL_FIELDS = [
   { key: "codexModelChoices", label: "More Codex models", placeholder: "gpt-5.1, gpt-5.1-mini, …" },
 ] as const;
 type ModelKey = (typeof MODEL_FIELDS)[number]["key"];
+import { SettingsRow } from './SettingsRow';
+
+/** One line of help; the rest stays folded behind "Details". */
+function Help({ summary, children }: { summary: ReactNode; children: ReactNode }) {
+  return (
+    <div className="text-xs text-muted-foreground">
+      <p>{summary}</p>
+      <details>
+        <summary className="w-fit cursor-pointer rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Details
+        </summary>
+        <p className="mt-1">{children}</p>
+      </details>
+    </div>
+  );
+}
 
 export function AgentCommandSettings() {
   const queryClient = useQueryClient();
@@ -38,8 +59,14 @@ export function AgentCommandSettings() {
   const [codexCommand, setCodexCommand] = useState("");
   const [defaultAgent, setDefaultAgent] = useState<AgentKind>("claude");
   const [workspace, setWorkspace] = useState("");
+  const [autoPost, setAutoPost] = useState(false);
   const [insightEnabled, setInsightEnabled] = useState(false);
   const [insightModel, setInsightModel] = useState("");
+  const [insightMax, setInsightMax] = useState(3);
+  const [autoAgent, setAutoAgent] = useState(false);
+  const [autoAgentMax, setAutoAgentMax] = useState(DEFAULT_AUTO_AGENT_MAX_PER_SYNC);
+  const [autoAgentInterval, setAutoAgentInterval] = useState(15);
+  const [autoPipelines, setAutoPipelines] = useState(false);
   const [models, setModels] = useState<Record<ModelKey, string>>({
     claudeModel: "",
     claudeModelChoices: "",
@@ -57,12 +84,32 @@ export function AgentCommandSettings() {
     setDefaultAgent(settingsQuery.data?.defaultAgent === "codex" ? "codex" : "claude");
   }, [settingsQuery.data?.defaultAgent]);
   useEffect(() => {
+    setAutoPost(settingsQuery.data?.agentAutoPostEnabled ?? false);
+  }, [settingsQuery.data?.agentAutoPostEnabled]);
+  useEffect(() => {
     setWorkspace(settingsQuery.data?.agentWorkspacePath ?? "");
   }, [settingsQuery.data?.agentWorkspacePath]);
   useEffect(() => {
     setInsightEnabled(settingsQuery.data?.inboxInsightEnabled ?? false);
     setInsightModel(settingsQuery.data?.inboxInsightModel ?? "");
-  }, [settingsQuery.data?.inboxInsightEnabled, settingsQuery.data?.inboxInsightModel]);
+    setInsightMax(settingsQuery.data?.inboxInsightMaxPerSync ?? 3);
+  }, [
+    settingsQuery.data?.inboxInsightEnabled,
+    settingsQuery.data?.inboxInsightModel,
+    settingsQuery.data?.inboxInsightMaxPerSync,
+  ]);
+  useEffect(() => {
+    setAutoAgent(settingsQuery.data?.autoAgentEnabled ?? false);
+    setAutoAgentMax(settingsQuery.data?.autoAgentMaxPerSync ?? DEFAULT_AUTO_AGENT_MAX_PER_SYNC);
+    setAutoAgentInterval(settingsQuery.data?.autoAgentIntervalMinutes ?? 15);
+  }, [
+    settingsQuery.data?.autoAgentEnabled,
+    settingsQuery.data?.autoAgentMaxPerSync,
+    settingsQuery.data?.autoAgentIntervalMinutes,
+  ]);
+  useEffect(() => {
+    setAutoPipelines(settingsQuery.data?.autoAgentPipelinesEnabled ?? false);
+  }, [settingsQuery.data?.autoAgentPipelinesEnabled]);
   useEffect(() => {
     const data = settingsQuery.data;
     setModels({
@@ -90,33 +137,26 @@ export function AgentCommandSettings() {
         agentCommand: command,
         codexCommand,
         defaultAgent: defaultAgent === "codex" ? "codex" : null,
+        agentAutoPostEnabled: autoPost,
         agentWorkspacePath: workspace,
         inboxInsightEnabled: insightEnabled,
         inboxInsightModel: insightModel,
+        inboxInsightMaxPerSync: insightMax,
+        autoAgentEnabled: autoAgent,
+        autoAgentMaxPerSync: autoAgentMax,
+        autoAgentIntervalMinutes: autoAgentInterval,
+        autoAgentPipelinesEnabled: autoPipelines,
         ...models,
       }),
     );
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Bot className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Agent command</h2>
-            <p className="text-sm text-muted-foreground">
-              Started by a request in the Agent panel (Ctrl+J), in the repository's clone inside
-              the workspace folder (else the result folder). The panel can switch the agent for
-              each request.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
+    <SettingsRow
+      title="Agent command"
+      description={<>Runs requests from the Agent panel (Ctrl+J). The panel can switch the agent for each request.</>}
+    >
+      <form className="grid max-w-xl gap-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Default agent</span>
           <select
@@ -147,17 +187,17 @@ export function AgentCommandSettings() {
             placeholder={DEFAULT_CODEX_COMMAND}
             className={INPUT_CLASS}
           />
-          <span className="text-xs text-muted-foreground">
-            Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
-            <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
-            <code>{"{repo}"}</code> (the pull request's repository), <code>{"{guide}"}</code> (the
-            agent guide). Notes are kept in the app data folder, outside the folder the agent
-            starts in, so allow the agent to use it (e.g. <code>--add-dir {"{notes}"}</code>).
-            Leave a command empty to use the default shown in it: Claude Code runs in the
-            background without permission prompts; Codex runs sandboxed to the folder it starts
-            in and the notes folder.
-          </span>
         </label>
+
+        <Help summary="Leave a command empty to use the default shown in it.">
+          Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
+          <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
+          <code>{"{repo}"}</code> (the pull request's repository), <code>{"{results}"}</code> (the result folder),{" "}
+          <code>{"{guide}"}</code> (the agent guide). Notes are kept in the app data folder, outside the folder the
+          agent starts in, so allow the agent to use it (e.g. <code>--add-dir {"{notes}"}</code>). By default
+          Claude Code runs in the background without permission prompts; Codex runs sandboxed to the folder it
+          starts in and the notes folder.
+        </Help>
 
         <div className="grid gap-2">
           <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -173,29 +213,47 @@ export function AgentCommandSettings() {
               </label>
             ))}
           </div>
-          <span className="text-xs text-muted-foreground">
-            The model each agent starts with, passed as <code>--model</code> (Claude Code) or{" "}
-            <code>-m</code> (Codex) after the command; empty leaves it to the agent's own setting.
-            The Agent panel can pick another model for each request from these, the more models
-            (comma-separated) and, for Claude Code, opus / sonnet / haiku.
-          </span>
+          <Help summary="Empty uses the agent's own model. More models are comma-separated choices for the Agent panel.">
+            The model is passed as <code>--model</code> (Claude Code) or <code>-m</code> (Codex) after the
+            command. The Agent panel can pick another model for each request from these and, for Claude Code,
+            opus / sonnet / haiku.
+          </Help>
         </div>
 
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Workspace folder</span>
-          <input
-            value={workspace}
-            onChange={(event) => setWorkspace(event.target.value)}
-            placeholder="D:\src\workspace"
-            className={INPUT_CLASS}
-          />
-          <span className="text-xs text-muted-foreground">
-            One folder that holds your repository clones, one subfolder per repository name. The
-            agent starts in the clone of the pull request's repository, or here when there is
-            none. DevDeck never clones or checks anything out. Leave empty to start in the result
-            folder.
-          </span>
-        </label>
+        <div className="grid gap-2">
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">Workspace folder</span>
+            <input
+              value={workspace}
+              onChange={(event) => setWorkspace(event.target.value)}
+              placeholder="D:\src\workspace"
+              className={INPUT_CLASS}
+            />
+          </label>
+          <Help summary="Holds your repository clones, one subfolder per repository name. Empty starts in the result folder.">
+            The agent starts in the clone of the pull request's repository, or here when there is none.
+            DevDeck only clones for automatic reviews: a missing clone is made shallow, and moved to the PR's
+            latest commit before each run. A folder you cloned yourself is never touched.
+          </Help>
+        </div>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoPost}
+              onChange={(event) => setAutoPost(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Post the comments agents propose without asking each time
+          </label>
+          <Help summary="Off: you post each one with C in the Agent panel. A comment with a link or @mention always waits for you.">
+            An agent has no Azure DevOps access; it writes a proposed comment into the note and DevDeck posts
+            it with your account. On: comments are posted as they appear for the work item / pull request the
+            panel is showing, at most 3 per item and 10 per hour, never the same text twice. Read-only
+            validation mode never posts.
+          </Help>
+        </div>
 
         <div className="grid gap-2">
           <label className="flex items-center gap-2 text-sm font-medium">
@@ -216,14 +274,91 @@ export function AgentCommandSettings() {
               className={`${INPUT_CLASS} w-60`}
             />
           </label>
-          <span className="text-xs text-muted-foreground">
-            After each sync, <code>claude -p</code> reads up to 3 new mentions / replies and writes
-            notes at the top of the Inbox preview: a verdict (reply / fix first / no action) with
-            its reason, the evidence, and a reply draft (Shift+R puts it in the reply box). With a
-            clone of the PR's repository in the workspace folder, it checks the code read-only and
-            cites file:line. The comment thread is sent to the model. Nothing is replied or
-            resolved for you.
-          </span>
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Notes per sync</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={insightMax}
+              onChange={(event) => setInsightMax(Number(event.target.value) || 3)}
+              className={`${INPUT_CLASS} w-24`}
+            />
+          </label>
+          <Help summary="After each sync, a verdict and a reply draft appear at the top of the Inbox preview. Nothing is replied or resolved for you.">
+            <code>claude -p</code> reads up to {insightMax} new mentions / replies and writes a verdict (reply /
+            fix first / no action) with its reason, the evidence, and a reply draft (Shift+R puts it in the
+            reply box). With a clone of the PR's repository in the workspace folder, it checks the code
+            read-only and cites file:line. The comment thread is sent to the model.
+          </Help>
+        </div>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoAgent}
+              onChange={(event) => setAutoAgent(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Review pull requests and investigate work items automatically
+          </label>
+          {autoAgent && !workspace.trim() && (
+            <span role="alert" className="text-xs text-amber-700 dark:text-amber-400">
+              The workspace folder is empty: reviews see only the diff, and work item investigations cannot read any code.
+              Set it so DevDeck can shallow-clone each pull request's repository there.
+            </span>
+          )}
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Items per check</span>
+            <input
+              type="number"
+              min={AUTO_AGENT_MAX_PER_SYNC_MIN}
+              max={AUTO_AGENT_MAX_PER_SYNC_MAX}
+              value={autoAgentMax}
+              onChange={(event) => setAutoAgentMax(Number(event.target.value) || DEFAULT_AUTO_AGENT_MAX_PER_SYNC)}
+              className={`${INPUT_CLASS} w-24`}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Check every (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={autoAgentInterval}
+              onChange={(event) => setAutoAgentInterval(Number(event.target.value) || 15)}
+              className={`${INPUT_CLASS} w-24`}
+            />
+          </label>
+          <Help summary={<>New assignments are queued on sync. Regular checks run every {autoAgentInterval} minutes, with up to {autoAgentMax} items per check, one at a time.</>}>
+            Regular checks run on the next sync after the interval. Each type requires a result folder.
+            The agent leaves code and comments untouched. First reviews cover the full PR, skipping
+            drafts, voted PRs and PRs over 30 days old. Tracked PRs continue reviewing later pushes, except
+            while in draft, using only changes since the last fully completed review, including force pushes.
+            Failed runs retry after a delay; partial coverage keeps the previous reviewed commit. Open human
+            requests pause automatic work. Assigned work items (New or Active, changed within 30 days) are
+            investigated if they have no prior result. Fields, comments and code changes are sent to the
+            default agent.
+          </Help>
+        </div>
+
+        <div className="grid gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoPipelines}
+              onChange={(event) => setAutoPipelines(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Investigate failed watched pipelines automatically
+          </label>
+          <Help summary="When the latest run of a pipeline you watch fails, the default agent investigates it in the Agent panel.">
+            It reports why the run failed, and whether a retry is enough (flaky tests), the code needs a fix,
+            or the environment broke. Each run is investigated once, at most 5 per hour. The run's timeline,
+            the tail of its failed logs and its failed tests are sent to the agent. Not started in read-only
+            validation mode.
+          </Help>
         </div>
 
         {settingsQuery.isError ? (
@@ -237,7 +372,7 @@ export function AgentCommandSettings() {
           </p>
         ) : null}
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Agent command saved.</p>
+          <p className="text-sm text-success">Agent command saved.</p>
         ) : null}
 
         <div>
@@ -255,6 +390,6 @@ export function AgentCommandSettings() {
           </button>
         </div>
       </form>
-    </div>
+    </SettingsRow>
   );
 }

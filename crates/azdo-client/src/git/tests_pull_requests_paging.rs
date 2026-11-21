@@ -14,6 +14,23 @@ async fn test_client(server: &MockServer) -> AdoClient {
         .with_base_url(base_url)
 }
 
+/// The empty page that ends paging (a short page alone is not the end, since the
+/// server may cap `$top` itself).
+async fn mount_empty_page(server: &MockServer, key: &str, value: &str, top: &str, skip: &str) {
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/pullrequests"))
+        .and(query_param(key, value))
+        .and(query_param("$top", top))
+        .and(query_param("$skip", skip))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({ "count": 0, "value": [] })),
+        )
+        .expect(1)
+        .mount(server)
+        .await;
+}
+
 #[tokio::test]
 async fn list_pull_requests_by_reviewer_filters_by_reviewer_id() {
     let server = MockServer::start().await;
@@ -48,6 +65,7 @@ async fn list_pull_requests_by_reviewer_filters_by_reviewer_id() {
         .mount(&server)
         .await;
 
+    mount_empty_page(&server, "searchCriteria.reviewerId", "user-42", "200", "1").await;
     let prs = test_client(&server)
         .await
         .list_pull_requests_by_reviewer("project-1", "user-42", 200)
@@ -99,7 +117,7 @@ async fn list_pull_requests_by_reviewer_pages_through_all_results() {
         .mount(&server)
         .await;
 
-    // Page 2: a short page (1 < page_size) ends the pagination loop.
+    // Page 2: a short page; paging only ends at the following empty page.
     Mock::given(method("GET"))
         .and(path("/project-1/_apis/git/pullrequests"))
         .and(query_param("searchCriteria.reviewerId", "user-42"))
@@ -113,6 +131,7 @@ async fn list_pull_requests_by_reviewer_pages_through_all_results() {
         .mount(&server)
         .await;
 
+    mount_empty_page(&server, "searchCriteria.reviewerId", "user-42", "2", "3").await;
     let prs = test_client(&server)
         .await
         .list_pull_requests_by_reviewer("project-1", "user-42", 2)
@@ -157,6 +176,7 @@ async fn list_pull_requests_by_creator_filters_by_creator_id() {
         .mount(&server)
         .await;
 
+    mount_empty_page(&server, "searchCriteria.creatorId", "user-42", "200", "1").await;
     let prs = test_client(&server)
         .await
         .list_pull_requests_by_creator("project-1", "user-42", 200)
@@ -206,7 +226,7 @@ async fn list_pull_requests_by_creator_pages_through_all_results() {
         .mount(&server)
         .await;
 
-    // Page 2: a short page (1 < page_size) ends the pagination loop.
+    // Page 2: a short page; paging only ends at the following empty page.
     Mock::given(method("GET"))
         .and(path("/project-1/_apis/git/pullrequests"))
         .and(query_param("searchCriteria.creatorId", "user-42"))
@@ -220,6 +240,7 @@ async fn list_pull_requests_by_creator_pages_through_all_results() {
         .mount(&server)
         .await;
 
+    mount_empty_page(&server, "searchCriteria.creatorId", "user-42", "2", "3").await;
     let prs = test_client(&server)
         .await
         .list_pull_requests_by_creator("project-1", "user-42", 2)
@@ -283,4 +304,46 @@ async fn list_commit_pull_requests_empty_when_commit_absent() {
         .await
         .unwrap();
     assert!(prs.is_empty());
+}
+
+#[tokio::test]
+async fn list_pull_requests_by_reviewer_keeps_paging_when_server_caps_page_size() {
+    fn pr(id: i64) -> serde_json::Value {
+        serde_json::json!({
+            "pullRequestId": id,
+            "title": format!("PR {id}"),
+            "status": "active",
+            "creationDate": "2026-05-20T00:00:00Z",
+            "repository": { "id": "repo-1", "name": "dashboard" },
+            "sourceRefName": "refs/heads/a",
+            "targetRefName": "refs/heads/main"
+        })
+    }
+
+    let server = MockServer::start().await;
+    // The client asks for 200 but the server only ever returns 2 per page; `$skip`
+    // must advance by what came back, and the repeated PR 2 must be de-duplicated.
+    for (skip, ids) in [("0", vec![1, 2]), ("2", vec![2, 3]), ("4", vec![4])] {
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.reviewerId", "user-42"))
+            .and(query_param("$top", "200"))
+            .and(query_param("$skip", skip))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": ids.len(),
+                "value": ids.iter().map(|id| pr(*id)).collect::<Vec<_>>()
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+    }
+    mount_empty_page(&server, "searchCriteria.reviewerId", "user-42", "200", "5").await;
+
+    let prs = test_client(&server)
+        .await
+        .list_pull_requests_by_reviewer("project-1", "user-42", 200)
+        .await
+        .unwrap();
+    let ids: Vec<i64> = prs.iter().map(|pr| pr.pull_request_id).collect();
+    assert_eq!(ids, vec![1, 2, 3, 4]);
 }

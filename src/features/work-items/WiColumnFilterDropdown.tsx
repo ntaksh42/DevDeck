@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isImeComposing } from '@/lib/utils';
 
 export function WiColumnFilterDropdown({
   anchorRect,
@@ -32,6 +33,7 @@ export function WiColumnFilterDropdown({
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (isImeComposing(e)) return;
       if (e.key === "Escape") { e.stopPropagation(); onClose(); }
     }
     document.addEventListener("keydown", onKeyDown, true);
@@ -71,6 +73,7 @@ export function WiColumnFilterDropdown({
   // grid behind it (its key handler moves the row selection) while the popup is
   // open.
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       e.stopPropagation();

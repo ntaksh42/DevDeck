@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInboxMeta } from "./useInboxMeta";
 import {
   commandErrorMessage,
-  getActionInboxCounts,
-  getAppSettings,
-  listOrganizations,
+  generateActionInboxInsight,
   searchPullRequestMentions,
   type MentionCandidate,
 } from "@/lib/azdoCommands";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
-import { clamp, focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
+import { pushToast } from "@/lib/toast";
+import { clamp, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import { parkGridFocus } from "@/lib/parkGridFocus";
 import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 import { useDockFilter } from "@/components/DockFilterBar";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { ColumnFilterDropdown } from "@/components/ColumnFilterDropdown";
 import { SnoozeMenu } from "@/components/SnoozeMenu";
+import { toggleColumnFilterValue } from "@/lib/columnFilters";
+import type { InboxFilterColumn } from "./inboxColumnFilters";
 import { usePublishAgentListScope } from "@/components/agent/agentListScope";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
+import { inboxListKeyHandler } from "./inboxListKeyHandler";
 import { inboxAgentList } from "./inboxAgentList";
 import { InboxListHeader } from "./InboxListHeader";
 import { InboxListPane } from "./InboxListPane";
@@ -27,24 +31,33 @@ import type { ReplySeed } from "./InboxPreviewPanels";
 import {
   agentRequestOf,
   inboxAgentSubject,
-  isThreadItem,
   type InboxEntry,
   type InboxLink,
+  type InboxPriority,
   type InboxTab,
 } from "./inboxPresentation";
 import { openInboxEntryInApp, openInboxEntryInBrowser, openInboxLink } from "./inboxNavigation";
 import { useInboxDetail } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
 import { useInboxListFocus } from "./useInboxListFocus";
+import { useInboxChecked } from "./useInboxChecked";
 import { useInboxStateChanges } from "./useInboxStateChanges";
+import { useInboxReminder } from "./useInboxReminder";
 
 const OVERSCAN = 8;
+/** Comment kinds Claude can write notes for (matches the backend). */
+const INSIGHT_KINDS: string[] = ["pr_mention", "pr_group_mention", "pr_reply", "wi_mention", "wi_reply"];
 const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
 
 export function InboxView() {
   const [tab, setTab] = useState<InboxTab>("open");
+  const [priority, setPriority] = useState<InboxPriority>("all");
   const [organizationId, setOrganizationId] = useState("");
   const [filterText, setFilterText] = useState("");
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<InboxFilterColumn, Set<string>>>>({});
+  const [openFilterCol, setOpenFilterCol] = useState<InboxFilterColumn | null>(null);
+  const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const filterButtonRef = useRef<HTMLElement | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [snoozeAnchor, setSnoozeAnchor] = useState<DOMRect | null>(null);
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number }>();
@@ -60,22 +73,14 @@ export function InboxView() {
   const { zoom, canZoomIn, canZoomOut, zoomIn, zoomOut, resetZoom } = usePreviewZoom();
   const filterBar = useDockFilter(filterInputRef, () => listRef.current?.focus());
 
-  const organizationsQuery = useQuery({
-    queryKey: ["organizations"],
-    queryFn: listOrganizations,
-    staleTime: 5 * 60_000,
-  });
-  const settingsQuery = useQuery({
-    queryKey: ["appSettings"],
-    queryFn: getAppSettings,
-    staleTime: 5 * 60_000,
-  });
-  const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+  const { organizations, readOnly, insightEnabled, tabCounts } = useInboxMeta(organizationId);
 
-  const { entries: fetchedEntries, isLoading, error, refetch } = useInboxEntries({
+  const { entries: fetchedEntries, priorityCounts, columnUniqueValues, isLoading, error, refetch } = useInboxEntries({
     tab,
+    priority,
     organizationId,
     filterText,
+    columnFilters,
   });
   const stateChanges = useInboxStateChanges({
     entries: fetchedEntries,
@@ -83,25 +88,28 @@ export function InboxView() {
     onReselect: (target) => moveSelectionTo(target),
   });
   const entries = stateChanges.visibleEntries;
-  const countsQuery = useQuery({
-    queryKey: ["actionInbox", "counts", organizationId],
-    queryFn: () => getActionInboxCounts(organizationId || undefined),
-    staleTime: 15_000,
-  });
-  const counts = countsQuery.data ?? { open: 0, snoozed: 0, done: 0 };
-  const tabCounts: Record<InboxTab, number> = {
-    open: counts.open,
-    snoozed: counts.snoozed,
-    done: counts.done,
-  };
+  const checked = useInboxChecked(entries);
 
   const index = clamp(selectedIndex, 0, Math.max(entries.length - 1, 0));
   const selected: InboxEntry | null = entries[index] ?? null;
+  // A sync can add rows above the selected one; keep the same conversation
+  // selected rather than whatever row now sits at its old position. When it
+  // left the list (Done / Snooze), the row that took its place is selected.
+  // moveSelectionTo records its target here too, so an explicit pick in the
+  // same update (undo's reselect) is the one followed.
+  const selectedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    setSelectedIndex((value) => clamp(value, 0, Math.max(entries.length - 1, 0)));
-  }, [entries.length]);
+    const kept = selectedIdRef.current === null
+      ? -1
+      : entries.findIndex((entry) => entry.id === selectedIdRef.current);
+    setSelectedIndex((value) => (kept >= 0 ? kept : clamp(value, 0, Math.max(entries.length - 1, 0))));
+  }, [entries]);
+  useEffect(() => {
+    selectedIdRef.current = selected?.id ?? null;
+  }, [selected?.id]);
 
   const detail = useInboxDetail(selected);
+  const reminder = useInboxReminder(selected);
   // The Agent panel follows the selected entry's pull request / work item.
   usePublishAgentSubject(selected ? inboxAgentSubject(selected) : null);
   usePublishAgentListScope(inboxAgentList(entries, tab, filterText));
@@ -136,16 +144,35 @@ export function InboxView() {
   const listFocus = useInboxListFocus({ listRef, rowRefs, index, entries, scrollRowIntoView: virtual.scrollRowIntoView });
   const { focusList, focusRow } = listFocus;
 
+  const parkingFocusRef = useRef(false);
   function moveSelectionTo(next: number) {
     const target = clamp(next, 0, entries.length - 1);
+    selectedIdRef.current = entries[target]?.id ?? null;
+    // Parking focus on the list must not bounce it straight back to the old row.
+    parkingFocusRef.current = true;
+    parkGridFocus(rowRefs.current[target]);
+    parkingFocusRef.current = false;
     virtual.scrollRowIntoView(target);
     setSelectedIndex(target);
-    window.setTimeout(() => focusRow(target), 0);
+    // The target row may not have mounted yet (it scrolls into the virtual
+    // window first). Park focus on the list then; useInboxListFocus moves it
+    // onto the row once it mounts, instead of losing it to <body>.
+    window.setTimeout(() => {
+      if (!focusRow(target)) listRef.current?.focus({ preventScroll: true });
+    }, 0);
   }
 
   /** The item leaves the list at once, so the next row is selected and the list keeps focus. */
   function changeState(entry: InboxEntry, state: InboxTab, snoozedUntil?: string, resolved = false) {
     stateChanges.changeState(entry, state, snoozedUntil, { resolved });
+    focusList();
+  }
+
+  /** E / Z on marked items applies to all of them; with none marked it is the selected row. */
+  function changeMarkedOrSelected(entry: InboxEntry, state: InboxTab, snoozedUntil?: string) {
+    if (checked.checkedEntries.length === 0) return changeState(entry, state, snoozedUntil);
+    stateChanges.changeStates(checked.checkedEntries, state, snoozedUntil);
+    checked.clear();
     focusList();
   }
 
@@ -157,6 +184,24 @@ export function InboxView() {
   }
 
   const openInApp = openInboxEntryInApp;
+
+  // Notes can be asked for on any open comment item (beyond the few each sync
+  // writes, or again after a failure) while summaries are on and none is running.
+  function canGenerateInsight(entry: InboxEntry | null): entry is InboxEntry {
+    return (
+      insightEnabled &&
+      tab === "open" &&
+      entry !== null &&
+      INSIGHT_KINDS.includes(entry.kind) &&
+      entry.insight?.status !== "pending"
+    );
+  }
+
+  function generateInsight(entry: InboxEntry) {
+    generateActionInboxInsight(entry.id).catch((error: unknown) => {
+      pushToast(`Could not start the notes: ${commandErrorMessage(error)}`);
+    });
+  }
 
   function applyReplyDraft(text: string) {
     if (readOnly || !text) return;
@@ -192,12 +237,7 @@ export function InboxView() {
     if (!selected || !detail.thread) return;
     const entry = selected;
     const resolving = !detail.thread.isResolved;
-    try {
-      await detail.setResolved(resolving);
-    } catch {
-      // The preview shows why; the item stays where it is.
-      return;
-    }
+    if (!(await detail.setResolved(resolving).then(() => true, () => false))) return; // the preview shows why
     // Resolving handles the item; reactivating a thread leaves it where it is.
     if (resolving) changeState(entry, "done", undefined, true);
   }
@@ -209,11 +249,40 @@ export function InboxView() {
     changeState(entry, "done");
   }
 
-  function openSnoozeMenu() {
-    if (!selected || tab !== "open") return;
+  /** Where the Z / W menus open: under the selected row (or the list when it is not drawn). */
+  function selectedRowRect(): DOMRect | null {
     const row = rowRefs.current[index];
     const anchor = row?.isConnected ? row : listRef.current;
-    if (anchor) setSnoozeAnchor(anchor.getBoundingClientRect());
+    return anchor ? anchor.getBoundingClientRect() : null;
+  }
+
+  function openSnoozeMenu() {
+    if (!selected || tab !== "open") return;
+    const rect = selectedRowRect();
+    if (rect) setSnoozeAnchor(rect);
+  }
+
+  function openReminderMenu() {
+    if (!selected) return;
+    const rect = selectedRowRect();
+    if (rect) reminder.open(rect);
+  }
+
+  function openColumnFilter(column: InboxFilterColumn, anchorEl: HTMLButtonElement) {
+    filterButtonRef.current = anchorEl;
+    setFilterAnchorRect(anchorEl.getBoundingClientRect());
+    setOpenFilterCol(column);
+  }
+
+  function closeColumnFilter() {
+    setOpenFilterCol(null);
+    setFilterAnchorRect(null);
+  }
+
+  /** Every column-filter change narrows the list, so the selection restarts at the top. */
+  function updateColumnFilters(update: (prev: typeof columnFilters) => typeof columnFilters) {
+    setColumnFilters(update);
+    setSelectedIndex(0);
   }
 
   function switchTab(next: InboxTab) {
@@ -221,110 +290,12 @@ export function InboxView() {
     setSelectedIndex(0);
   }
 
-  function handleListKeyDown(event: React.KeyboardEvent) {
-    if (isEditableTarget(event.target)) return;
-    if (event.altKey || event.metaKey) return;
-    if (event.ctrlKey) {
-      if (event.key === "Enter" && selected) {
-        event.preventDefault();
-        openInBrowser(selected);
-      }
-      return;
-    }
-    const key = event.key;
-    if (key === "/") {
-      event.preventDefault();
-      filterBar.onOpen();
-      return;
-    }
-    if (key.toLowerCase() === "u" && !event.shiftKey) {
-      // Works on an emptied list too: undoing the last item brings it back.
-      if (stateChanges.undoLast()) event.preventDefault();
-      return;
-    }
-    if (entries.length === 0) return;
-    if (event.shiftKey && key === "Enter") {
-      event.preventDefault();
-      if (selected) openInApp(selected);
-      return;
-    }
-    const lower = key.toLowerCase();
-    if (key === "ArrowDown" || lower === "j") {
-      event.preventDefault();
-      moveSelectionTo(index + 1);
-    } else if (key === "ArrowUp" || lower === "k") {
-      event.preventDefault();
-      moveSelectionTo(index - 1);
-    } else if (key === "Home") {
-      event.preventDefault();
-      moveSelectionTo(0);
-    } else if (key === "End") {
-      event.preventDefault();
-      moveSelectionTo(entries.length - 1);
-    } else if (key === "PageDown") {
-      event.preventDefault();
-      moveSelectionTo(index + 10);
-    } else if (key === "PageUp") {
-      event.preventDefault();
-      moveSelectionTo(index - 10);
-    } else if (key === "Enter" || key === "ArrowRight") {
-      event.preventDefault();
-      focusPrimaryPreview();
-    } else if (!selected) {
-      return;
-    } else if (lower === "o") {
-      event.preventDefault();
-      openInBrowser(selected);
-    } else if (lower === "e" && event.shiftKey) {
-      // Resolve + Done, the same as the preview's button.
-      if (tab === "open" && isThreadItem(selected) && detail.thread && !detail.thread.isResolved && !readOnly) {
-        event.preventDefault();
-        void toggleThreadStatus();
-      }
-    } else if (lower === "e") {
-      event.preventDefault();
-      changeState(selected, tab === "done" ? "open" : "done");
-    } else if (lower === "d") {
-      event.preventDefault();
-      setContextExpanded((value) => !value);
-    } else if (key === " ") {
-      event.preventDefault();
-      scrollPreview(event.shiftKey ? -1 : 1);
-    } else if (lower === "z") {
-      event.preventDefault();
-      if (tab === "snoozed") changeState(selected, "open");
-      else openSnoozeMenu();
-    } else if (lower === "r" && event.shiftKey) {
-      if (selected.insight?.replyDraft) {
-        event.preventDefault();
-        applyReplyDraft(selected.insight.replyDraft);
-      }
-    } else if (lower === "r") {
-      event.preventDefault();
-      activatePanel("conversation");
-      // Wait for the panel to mount if it was stacked behind the agent's tab.
-      window.setTimeout(() => {
-        const preview = previewRef.current;
-        const target =
-          preview?.querySelector<HTMLElement>('[data-inbox-mention-reply="true"], [data-thread-reply="true"]') ??
-          preview?.querySelector<HTMLElement>('[data-inbox-composer="true"] textarea');
-        if (target instanceof HTMLTextAreaElement) target.focus();
-        else target?.click();
-      }, 0);
-    } else if (lower === "q") {
-      event.preventDefault();
-      openAgentPanel(agentRequestOf(selected));
-    } else if (lower === "c") {
-      event.preventDefault();
-      if (selected.webUrl) void navigator.clipboard?.writeText(selected.webUrl);
-    } else if (/^[1-9]$/.test(key)) {
-      const link = detail.links[Number(key) - 1];
-      if (link) {
-        event.preventDefault();
-        openLink(link);
-      }
-    }
-  }
+  const handleListKeyDown = inboxListKeyHandler({
+    selected, entries, index, tab, checked, stateChanges, detail, readOnly,
+    filterBar, moveSelectionTo, openInBrowser, openInApp, toggleThreadStatus,
+    changeMarkedOrSelected, setContextExpanded, scrollPreview, openSnoozeMenu, openReminderMenu,
+    canGenerateInsight, generateInsight, applyReplyDraft, activatePanel, previewRef, openLink,
+  });
 
   const returnToList = (event: React.KeyboardEvent) => {
     if (handlePreviewZoomKey(event, { zoomIn, zoomOut, resetZoom })) return;
@@ -341,12 +312,19 @@ export function InboxView() {
       minWidth: 340,
       headerActions: (
         <InboxListHeader
+          priority={priority}
+          priorityCounts={priorityCounts}
+          onPriorityChange={(value) => {
+            setPriority(value);
+            setSelectedIndex(0);
+          }}
+          onFocusList={() => listRef.current?.focus()}
           tab={tab}
           onLeaveTab={() => {
             switchTab("open");
             focusList();
           }}
-          organizations={organizationsQuery.data ?? []}
+          organizations={organizations}
           organizationId={organizationId}
           onOrganizationChange={(id) => {
             setOrganizationId(id);
@@ -364,16 +342,23 @@ export function InboxView() {
       content: (
         <InboxListPane
           tab={tab}
+          priority={priority}
           tabCounts={tabCounts}
           onTabChange={switchTab}
           filterText={filterText}
+          columnFilters={columnFilters}
+          onOpenColumnFilter={openColumnFilter}
+          onClearColumnFilters={() => updateColumnFilters(() => ({}))}
           listRef={listRef}
           focusHandlers={listFocus}
-          onFocusList={() => focusRow(index)}
+          onFocusList={() => {
+            if (!parkingFocusRef.current) focusRow(index);
+          }}
           rowRefs={rowRefs}
           virtual={virtual}
           entries={entries}
           selectedIndex={index}
+          checkedIds={checked.ids}
           isLoading={isLoading}
           error={error ? commandErrorMessage(error) : null}
           onRetry={refetch}
@@ -408,6 +393,8 @@ export function InboxView() {
           onOpenInBrowser={() => selected && openInBrowser(selected)}
           onCopyLink={() => selected?.webUrl && void navigator.clipboard?.writeText(selected.webUrl)}
           onAskAgent={() => selected && openAgentPanel(agentRequestOf(selected))}
+          canRemind={!!selected}
+          onRemind={openReminderMenu}
         />
       ),
       content: (
@@ -435,6 +422,9 @@ export function InboxView() {
               onToggleContext={() => setContextExpanded((value) => !value)}
               draft={draft}
               onUseDraft={applyReplyDraft}
+              onGenerateInsight={
+                canGenerateInsight(selected) ? () => generateInsight(selected) : undefined
+              }
             />
         </div>
       ),
@@ -457,11 +447,49 @@ export function InboxView() {
     >
       <DockableWorkspace storageKey={LAYOUT_STORAGE_KEY} panels={panels} activatePanel={activateRequest} />
 
+      {openFilterCol && filterAnchorRect ? (
+        <ColumnFilterDropdown
+          anchorRect={filterAnchorRect}
+          allValues={columnUniqueValues[openFilterCol] ?? []}
+          activeValues={columnFilters[openFilterCol]}
+          onToggle={(value) =>
+            updateColumnFilters((prev) =>
+              toggleColumnFilterValue(prev, openFilterCol, value, columnUniqueValues[openFilterCol] ?? []),
+            )
+          }
+          onClearAll={() =>
+            updateColumnFilters((prev) => {
+              const { [openFilterCol]: _, ...rest } = prev;
+              return rest;
+            })
+          }
+          onUncheckAll={() => updateColumnFilters((prev) => ({ ...prev, [openFilterCol]: new Set<string>() }))}
+          restoreFocusRef={filterButtonRef}
+          onClose={closeColumnFilter}
+        />
+      ) : null}
+
+      {reminder.anchor && selected ? (
+        <SnoozeMenu
+          anchorRect={reminder.anchor}
+          title="Remind if no reply by"
+          note="Cleared when someone comments on this conversation (seen at the next sync). Nothing is posted."
+          confirmLabel="Remind at selected time"
+          extraAction={
+            reminder.existing
+              ? { label: "Cancel the reminder", onSelect: () => reminder.cancel(reminder.existing!) }
+              : undefined
+          }
+          onSnooze={(dueAt) => reminder.set(selected, dueAt)}
+          onClose={reminder.close}
+        />
+      ) : null}
+
       {snoozeAnchor && selected ? (
         <SnoozeMenu
           anchorRect={snoozeAnchor}
           onSnooze={(until) => {
-            changeState(selected, "snoozed", until);
+            changeMarkedOrSelected(selected, "snoozed", until);
             setSnoozeAnchor(null);
           }}
           onClose={() => setSnoozeAnchor(null)}

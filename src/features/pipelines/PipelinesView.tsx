@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { HeaderToolbarPortal } from "@/components/HeaderToolbarSlot";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Plus } from "lucide-react";
 import {
@@ -52,6 +53,9 @@ export function PipelinesView() {
     definitionId: number;
     buildId: number;
   } | null>(null);
+  // Run previewed while nothing is selected (reported by the board), so the
+  // preview is never blank when the list has runs.
+  const [defaultTarget, setDefaultTarget] = useState<NonNullable<typeof detailTarget> | null>(null);
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
     loadPipelineSubscriptions(),
   );
@@ -137,6 +141,8 @@ export function PipelinesView() {
     [definitionOptions],
   );
 
+  const previewTarget = detailTarget ?? defaultTarget;
+
   const canSubscribe = definitionId != null && !!selectedProject && !!selectedDefinition;
   const selectedIsSubscribed =
     definitionId != null &&
@@ -214,10 +220,12 @@ export function PipelinesView() {
   }, [selectedOrganizationId]);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="relative shrink-0">
-        {/* One borderless row, same height as the PR / WI Search rows. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-64">
+      {/* The project / pipeline pickers live in the header next to the
+          breadcrumb, so the list starts at the same height as other views. */}
+      <HeaderToolbarPortal>
+      <div className="relative flex min-w-0 flex-1 items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="w-64 shrink">
             <FilterableSelect
               ariaLabel="Project"
               value={projectId}
@@ -231,7 +239,7 @@ export function PipelinesView() {
             />
           </div>
 
-          <div className="w-64">
+          <div className="w-64 shrink">
             <FilterableSelect
               ariaLabel="Pipeline"
               value={definitionId == null ? "" : String(definitionId)}
@@ -242,7 +250,7 @@ export function PipelinesView() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={handleSubscribe}
@@ -257,7 +265,7 @@ export function PipelinesView() {
               aria-pressed={selectedIsSubscribed}
               className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedIsSubscribed
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                  ? "border-success bg-card text-success"
                   : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >
@@ -282,6 +290,28 @@ export function PipelinesView() {
               Queue run
             </button>
           </div>
+
+          <div className="min-w-0 flex-1">
+          {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (
+            <PipelineApprovalsPanel
+              approvals={approvalsQuery.data ?? []}
+              pendingApprovalId={pendingApprovalId}
+              error={
+                approvalMutation.isError ? commandErrorMessage(approvalMutation.error) : null
+              }
+              expanded={approvalsOpen}
+              onExpandedChange={setApprovalsOpen}
+              onAct={(approvalId, status) =>
+                approvalMutation.mutate({
+                  organizationId: selectedOrganizationId,
+                  projectId,
+                  approvalId,
+                  status,
+                })
+              }
+            />
+          ) : null}
+          </div>
         </div>
 
         {queueOpen && canQueue ? (
@@ -291,29 +321,10 @@ export function PipelinesView() {
             onClose={() => setQueueOpen(false)}
           />
         ) : null}
-        {queueNotice ? (
-          <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{queueNotice}</p>
-        ) : null}
       </div>
-
-      {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (
-        <PipelineApprovalsPanel
-          approvals={approvalsQuery.data ?? []}
-          pendingApprovalId={pendingApprovalId}
-          error={
-            approvalMutation.isError ? commandErrorMessage(approvalMutation.error) : null
-          }
-          expanded={approvalsOpen}
-          onExpandedChange={setApprovalsOpen}
-          onAct={(approvalId, status) =>
-            approvalMutation.mutate({
-              organizationId: selectedOrganizationId,
-              projectId,
-              approvalId,
-              status,
-            })
-          }
-        />
+      </HeaderToolbarPortal>
+      {queueNotice ? (
+        <p role="status" className="shrink-0 text-xs text-success">{queueNotice}</p>
       ) : null}
 
       <DockableWorkspace
@@ -351,6 +362,7 @@ export function PipelinesView() {
                   />
                 }
                 onSelectRun={(selection) => setDetailTarget(selection)}
+                onDefaultRunChange={setDefaultTarget}
                 onRemove={(removeProjectId, removeDefinitionId) => {
                   persistSubscriptions(
                     removeSubscription(
@@ -392,9 +404,9 @@ export function PipelinesView() {
                   />
                 ) : (
                   <PipelineRunDetailPanel
-                    organizationId={detailTarget?.organizationId ?? selectedOrganizationId}
-                    projectId={detailTarget?.projectId ?? projectId}
-                    buildId={detailTarget?.buildId ?? null}
+                    organizationId={previewTarget?.organizationId ?? selectedOrganizationId}
+                    projectId={previewTarget?.projectId ?? projectId}
+                    buildId={previewTarget?.buildId ?? null}
                   />
                 )}
               </PreviewToolbarSlotProvider>

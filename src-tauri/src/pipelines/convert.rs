@@ -25,11 +25,7 @@ pub(super) fn summarize_test_results(
     let mut failed_tests = Vec::new();
     for (run, results) in runs.iter().zip(failed_by_run) {
         for result in results {
-            let name = result
-                .test_case_title
-                .filter(|title| !title.trim().is_empty())
-                .or(result.automated_test_name)
-                .unwrap_or_else(|| "(unnamed test)".to_string());
+            let name = failed_test_name(&result);
             failed_tests.push(PipelineFailedTest {
                 name,
                 run_name: run.name.clone(),
@@ -49,6 +45,17 @@ pub(super) fn summarize_test_results(
         truncated: (failed_tests.len() as i64) < failed,
         failed_tests,
     }
+}
+
+/// The name a failed test is listed (and compared across runs) under.
+pub(super) fn failed_test_name(result: &TestCaseResult) -> String {
+    result
+        .test_case_title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+        .or(result.automated_test_name.as_deref())
+        .unwrap_or("(unnamed test)")
+        .to_string()
 }
 
 /// Stage identifiers are plain names; anything else could alter the request path.

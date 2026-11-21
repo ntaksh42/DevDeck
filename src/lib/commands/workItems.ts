@@ -85,6 +85,8 @@ export const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
   renderedText: z.string().nullable(),
+  /** "markdown" or "html"; html comments carry HTML in `text`. */
+  format: z.string().nullable().optional(),
   createdBy: z.string().nullable(),
   createdById: z.string().nullable().optional(),
   createdByUniqueName: z.string().nullable().optional(),
@@ -241,25 +243,6 @@ export type RunWorkItemQueryInput = {
   extraFields?: string[];
 };
 
-export type CountWorkItemQueryHistoryInput = {
-  organizationId?: string;
-  projectId: string;
-  wiql: string;
-  /** Instants to sample, as `2026-08-05T00:00:00Z`. One point is returned each. */
-  timestamps: string[];
-};
-
-const workItemQueryCountPointSchema = z.object({
-  timestamp: z.string(),
-  /** Null when that instant could not be sampled; drawn as a gap, not a zero. */
-  count: z.number().nullable(),
-  error: z.string().nullable(),
-});
-
-export type WorkItemQueryCountPoint = z.infer<typeof workItemQueryCountPointSchema>;
-
-const workItemQueryCountPointsSchema = z.array(workItemQueryCountPointSchema);
-
 export type ListWorkItemProjectsInput = {
   organizationId?: string;
 };
@@ -383,13 +366,6 @@ export async function countWorkItemQuery(
   return z.number().parse(result);
 }
 
-export async function countWorkItemQueryHistory(
-  input: CountWorkItemQueryHistoryInput,
-): Promise<WorkItemQueryCountPoint[]> {
-  const result = await invokeCommand("count_work_item_query_history", { input });
-  return workItemQueryCountPointsSchema.parse(result);
-}
-
 export async function getWorkItemPreview(
   input: GetWorkItemPreviewInput,
 ): Promise<WorkItemPreview> {
@@ -401,6 +377,18 @@ export async function searchWorkItemMentions(
   input: SearchWorkItemMentionsInput,
 ): Promise<MentionCandidate[]> {
   const result = await invokeCommand("search_work_item_mentions", { input });
+  return mentionCandidatesSchema.parse(result);
+}
+
+export type ResolveMentionIdentitiesInput = {
+  organizationId?: string;
+  ids: string[];
+};
+
+export async function resolveMentionIdentities(
+  input: ResolveMentionIdentitiesInput,
+): Promise<MentionCandidate[]> {
+  const result = await invokeCommand("resolve_mention_identities", { input });
   return mentionCandidatesSchema.parse(result);
 }
 

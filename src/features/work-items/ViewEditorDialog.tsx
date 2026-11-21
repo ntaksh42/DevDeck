@@ -1,14 +1,25 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { CheckCircle2, Loader2, Play, Plus, TriangleAlert, X } from 'lucide-react';
 import { type WorkItemProjectOption } from '@/lib/azdoCommands';
-import {
-  MAX_VIEW_REFRESH_INTERVAL_SEC,
-  MIN_VIEW_REFRESH_INTERVAL_SEC,
-  normalizeViewExtraColumns,
-} from './workItemViewsStorage';
 import type { ViewEditorDraftReturn } from './useViewEditorDraft';
 import { ProjectQueryPicker } from './ProjectQueryPicker';
+import { ViewAdvancedSettings } from './ViewAdvancedSettings';
+import { CONDITION_GRID_FOCUS_ID, ViewConditionGrid } from './ViewConditionGrid';
 import { WiqlEditor } from './WiqlEditor';
+import { isImeComposing } from '@/lib/utils';
+import { useFocusTrap } from '@/lib/useFocusTrap';
+
+type SourceTab = "url" | "query" | "conditions";
+const SOURCE_TABS: { id: SourceTab; label: string }[] = [
+  { id: "url", label: "Paste URL" },
+  { id: "query", label: "From existing query" },
+  { id: "conditions", label: "Build conditions" },
+];
+const SOURCE_TAB_FOCUS_ID: Record<SourceTab, string> = {
+  url: "view-url-input",
+  query: "view-project-query-filter",
+  conditions: CONDITION_GRID_FOCUS_ID,
+};
 
 export type ViewEditorDialogProps = {
   draft: ViewEditorDraftReturn;
@@ -32,12 +43,6 @@ export function ViewEditorDialog({
     onNameChange,
     draftProjectId,
     onProjectChange,
-    draftLimit,
-    onLimitChange,
-    draftRefreshInterval,
-    onRefreshIntervalChange,
-    draftAlertThreshold,
-    onAlertThresholdChange,
     draftWiql,
     updateDraftWiql,
     draftWiqlTextareaRef,
@@ -53,10 +58,6 @@ export function ViewEditorDialog({
     applyWiqlCompletion: onApplyCompletion,
     insertWiqlText: onInsertWiqlText,
     wiqlValidation,
-    draftExtraColumns,
-    onExtraColumnsChange,
-    fields,
-    fieldsLoading,
     projectQueries,
     projectQueriesLoading,
     projectQueriesError,
@@ -66,6 +67,29 @@ export function ViewEditorDialog({
   } = draft;
   const onTestRun = () => void draft.runTestQuery();
   const viewFormRef = useRef<HTMLFormElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
+  const [sourceTab, setSourceTab] = useState<SourceTab>("url");
+  function selectSourceTab(tab: SourceTab) {
+    setSourceTab(tab);
+    window.setTimeout(() => document.getElementById(SOURCE_TAB_FOCUS_ID[tab])?.focus(), 0);
+  }
+
+  function onSourceTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    const index = SOURCE_TABS.findIndex((tab) => tab.id === sourceTab);
+    const next =
+      event.key === "ArrowRight" ? index + 1
+      : event.key === "ArrowLeft" ? index - 1
+      : event.key === "Home" ? 0
+      : event.key === "End" ? SOURCE_TABS.length - 1
+      : null;
+    if (next === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const tab = SOURCE_TABS[(next + SOURCE_TABS.length) % SOURCE_TABS.length];
+    setSourceTab(tab.id);
+    window.setTimeout(() => document.getElementById(`view-source-tab-${tab.id}`)?.focus(), 0);
+  }
   // Focus returns to whatever opened the dialog (button, preview pane, grid),
   // mirroring CreateWorkItemDialog, so keyboard navigation is not stranded on
   // <body> after the dialog closes.
@@ -82,9 +106,12 @@ export function ViewEditorDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={close}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="view-dialog-title"
@@ -96,6 +123,7 @@ export function ViewEditorDialog({
         onKeyDown={(event) => {
           // On the outer dialog rather than the form so Escape also works from
           // the header close button, and never reaches the grid behind it.
+          if (isImeComposing(event)) return;
           if (event.key === "Escape") {
             event.stopPropagation();
             close();
@@ -121,6 +149,7 @@ export function ViewEditorDialog({
           className="grid gap-3 p-4"
           onSubmit={onSave}
           onKeyDown={(event) => {
+            if (isImeComposing(event)) return;
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
               viewFormRef.current?.requestSubmit();
@@ -128,36 +157,98 @@ export function ViewEditorDialog({
           }}
         >
           <div className="grid gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="view-url-input">
-              Azure DevOps URL
-              <span className="ml-1 font-normal text-muted-foreground">
-                (paste to auto-fill Org / Project / WIQL)
-              </span>
-            </label>
-            <input
-              id="view-url-input"
-              value={draftUrl}
-              onChange={(e) => onUrlChange(e.target.value)}
-              placeholder="https://dev.azure.com/{org}/{project}/_queries/query/{id}"
-              autoFocus
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-            {urlStatus ? (
-              <p
-                className={`text-xs ${
-                  urlStatus.severity === "success"
-                    ? "text-green-700 dark:text-green-400"
-                    : urlStatus.severity === "error"
-                      ? "text-destructive"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {urlStatus.text}
-              </p>
-            ) : null}
+            <div role="tablist" aria-label="How to set up this view" className="flex gap-1 border-b border-border">
+              {SOURCE_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  id={`view-source-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={sourceTab === tab.id}
+                  aria-controls={`view-source-panel-${tab.id}`}
+                  tabIndex={sourceTab === tab.id ? 0 : -1}
+                  onClick={() => selectSourceTab(tab.id)}
+                  onKeyDown={onSourceTabKeyDown}
+                  className={`-mb-px border-b-2 px-3 py-1.5 text-xs font-medium ${
+                    sourceTab === tab.id
+                      ? "border-primary text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div
+              id="view-source-panel-url"
+              role="tabpanel"
+              aria-labelledby="view-source-tab-url"
+              hidden={sourceTab !== "url"}
+              className={sourceTab === "url" ? "grid gap-1.5" : "hidden"}
+            >
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="view-url-input">
+                Azure DevOps URL
+                <span className="ml-1 font-normal text-muted-foreground">
+                  (paste to auto-fill Org / Project / WIQL)
+                </span>
+              </label>
+              <input
+                id="view-url-input"
+                value={draftUrl}
+                onChange={(e) => onUrlChange(e.target.value)}
+                placeholder="https://dev.azure.com/{org}/{project}/_queries/query/{id}"
+                autoFocus
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              {urlStatus ? (
+                <p
+                  className={`text-xs ${
+                    urlStatus.severity === "success"
+                      ? "text-success"
+                      : urlStatus.severity === "error"
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {urlStatus.text}
+                </p>
+              ) : null}
+            </div>
+
+            <div
+              id="view-source-panel-query"
+              role="tabpanel"
+              aria-labelledby="view-source-tab-query"
+              hidden={sourceTab !== "query"}
+            >
+              <ProjectQueryPicker
+                queries={projectQueries}
+                hasProject={Boolean(draftProjectId)}
+                loading={projectQueriesLoading}
+                error={projectQueriesError}
+                onSelect={onProjectQuerySelect}
+              />
+            </div>
+
+            <div
+              id="view-source-panel-conditions"
+              role="tabpanel"
+              aria-labelledby="view-source-tab-conditions"
+              hidden={sourceTab !== "conditions"}
+            >
+              {sourceTab === "conditions" ? (
+                <ViewConditionGrid
+                  wiql={draftWiql}
+                  onWiqlChange={updateDraftWiql}
+                  fields={draft.fields}
+                  hasProject={Boolean(draftProjectId)}
+                />
+              ) : null}
+            </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_90px]">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">Name</span>
               <input
@@ -184,78 +275,32 @@ export function ViewEditorDialog({
                 ))}
               </select>
             </label>
-
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Limit
-                <span className="ml-1 font-normal text-muted-foreground">(empty = none)</span>
-              </span>
-              <input
-                type="number"
-                min={1}
-                placeholder="no limit"
-                value={draftLimit}
-                onChange={(event) => onLimitChange(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </label>
-          </div>
-
-          <ProjectQueryPicker
-            queries={projectQueries}
-            hasProject={Boolean(draftProjectId)}
-            loading={projectQueriesLoading}
-            error={projectQueriesError}
-            onSelect={onProjectQuerySelect}
-          />
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Auto refresh (sec)
-                <span className="ml-1 font-normal text-muted-foreground">(empty = off)</span>
-              </span>
-              <input
-                type="number"
-                min={MIN_VIEW_REFRESH_INTERVAL_SEC}
-                max={MAX_VIEW_REFRESH_INTERVAL_SEC}
-                placeholder="off"
-                value={draftRefreshInterval}
-                onChange={(event) => onRefreshIntervalChange(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </label>
-
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Alert when count ≥
-                <span className="ml-1 font-normal text-muted-foreground">(empty = off)</span>
-              </span>
-              <input
-                type="number"
-                min={0}
-                placeholder="off"
-                value={draftAlertThreshold}
-                onChange={(event) => onAlertThresholdChange(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </label>
           </div>
 
           <div className="grid gap-1.5">
-            <div className="flex items-center justify-end">
-              <span className="flex flex-wrap justify-end gap-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex flex-wrap gap-1">
                 {["@Me", "@Today", "@CurrentIteration", "@Follows"].map((macro) => (
                   <button
                     key={macro}
                     type="button"
                     onClick={() => onInsertWiqlText(macro)}
-                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] hover:bg-secondary"
+                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-2xs hover:bg-secondary"
                   >
                     {macro}
                   </button>
                 ))}
               </span>
+              <button
+                type="button"
+                onClick={onTestRun}
+                disabled={testResult?.status === "running"}
+                title="Run the query and show how many work items match"
+                className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Play className="h-3 w-3" aria-hidden="true" />
+                Test
+              </button>
             </div>
             <WiqlEditor
               value={draftWiql}
@@ -277,7 +322,7 @@ export function ViewEditorDialog({
                   <p key={error} className="text-destructive">{error}</p>
                 ))}
                 {wiqlValidation.warnings.map((warning) => (
-                  <p key={warning} className="text-amber-700 dark:text-amber-400">{warning}</p>
+                  <p key={warning} className="text-warning">{warning}</p>
                 ))}
               </div>
             ) : null}
@@ -288,7 +333,7 @@ export function ViewEditorDialog({
                   testResult.status === "error"
                     ? "border-destructive/40 bg-destructive/10 text-destructive"
                     : testResult.status === "ok"
-                      ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
+                      ? "border-success/40 bg-success/10 text-success"
                       : "border-border bg-muted text-muted-foreground"
                 }`}
               >
@@ -312,60 +357,7 @@ export function ViewEditorDialog({
             ) : null}
           </div>
 
-          <div className="grid gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              Extra columns
-              <span className="ml-1 font-normal text-muted-foreground">
-                (shown after the standard columns)
-              </span>
-            </span>
-            {draftExtraColumns.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {draftExtraColumns.map((referenceName) => (
-                  <span
-                    key={referenceName}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px]"
-                    title={referenceName}
-                  >
-                    {referenceName}
-                    <button
-                      type="button"
-                      aria-label={`Remove column ${referenceName}`}
-                      onClick={() => onExtraColumnsChange(draftExtraColumns.filter((c) => c !== referenceName))}
-                      className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <select
-              value=""
-              aria-label="Add extra column"
-              disabled={fieldsLoading}
-              onChange={(event) => {
-                const referenceName = event.target.value;
-                if (!referenceName) return;
-                onExtraColumnsChange(normalizeViewExtraColumns([...draftExtraColumns, referenceName]));
-              }}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-            >
-              <option value="">Add column…</option>
-              {fields
-                .filter(
-                  (field) =>
-                    !draftExtraColumns.some(
-                      (existing) => existing.toLowerCase() === field.referenceName.toLowerCase(),
-                    ),
-                )
-                .map((field) => (
-                  <option key={field.referenceName} value={field.referenceName}>
-                    {field.name} ({field.referenceName})
-                  </option>
-                ))}
-            </select>
-          </div>
+          <ViewAdvancedSettings draft={draft} />
 
           {formError ? (
             <p role="alert" className="text-xs text-destructive">
@@ -382,16 +374,6 @@ export function ViewEditorDialog({
               Cancel
             </button>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onTestRun}
-                disabled={testResult?.status === "running"}
-                title="Run the query and show how many work items match"
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                Test
-              </button>
               <button
                 type="submit"
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"

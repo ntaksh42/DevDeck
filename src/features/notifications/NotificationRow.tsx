@@ -3,10 +3,26 @@ import { ExternalLink } from "lucide-react";
 import type { NotificationRecord } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
-import { notificationKindLabel } from "./notificationKinds";
+import { notificationCategory, notificationKindLabel } from "./notificationKinds";
 import { notificationWebUrl } from "./notificationJump";
 
 export const NOTIFICATION_ROW_HEIGHT = 44;
+
+function categoryColor(record: NotificationRecord): string {
+  switch (notificationCategory(record.kind)) {
+    case "pr":
+      return "bg-blue-500";
+    case "workItem":
+      return "bg-purple-500";
+    case "pipeline":
+      return record.kind === "pipelineWatchFinished" &&
+        /fail|失敗/i.test(`${record.title} ${record.body ?? ""}`)
+        ? "bg-red-500"
+        : "bg-green-500";
+    default:
+      return "bg-amber-500";
+  }
+}
 
 export const NotificationRow = forwardRef<
   HTMLDivElement,
@@ -37,6 +53,11 @@ export const NotificationRow = forwardRef<
           record.isRead ? "bg-transparent" : "bg-primary"
         }`}
       />
+      <span
+        aria-hidden="true"
+        data-testid="notification-category-icon"
+        className={`mt-1.5 h-3.5 w-3.5 shrink-0 rounded-[3px] ${categoryColor(record)}`}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span
@@ -46,7 +67,7 @@ export const NotificationRow = forwardRef<
             {record.title}
           </span>
           <span
-            className="ml-auto shrink-0 text-[11px] text-muted-foreground"
+            className="ml-auto shrink-0 text-2xs text-muted-foreground"
             title={formatDate(record.createdAt)}
           >
             {formatRelativeDate(record.createdAt)}

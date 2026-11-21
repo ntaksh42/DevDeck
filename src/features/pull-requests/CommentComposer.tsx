@@ -1,5 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
+import type { CommentImageTarget } from "@/lib/commands/commentImages";
 import { CommentField } from "@/components/CommentField";
+import { FloatingOverlay } from "@/components/FloatingOverlay";
 import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
@@ -7,6 +9,7 @@ import {
   addSelectedMention,
   mentionTokenDeletionStart,
   renderAzureMentionMarkdown,
+  scrollMentionOptionIntoView,
   type SelectedMention,
 } from "@/features/work-items/workItemMentions";
 import {
@@ -36,8 +39,10 @@ export function CommentComposer({
   mentionSearch,
   collapsible = false,
   onCollapse,
+  imageTarget,
 }: {
   placeholder: string;
+  imageTarget?: CommentImageTarget;
   submitLabel?: string;
   initialValue?: string;
   /** Mentions already present in `initialValue` (e.g. a reply addressed to someone). */
@@ -96,7 +101,13 @@ export function CommentComposer({
   // the picker.
   function refreshMention(value: string, caret: number) {
     if (!mentionSearch) return;
-    setMention(activeMentionAt(value, caret));
+    setMention(
+      activeMentionAt(
+        value,
+        caret,
+        selectedMentions.map((selected) => selected.displayName),
+      ),
+    );
   }
 
   const mentionQuery = mention?.query;
@@ -238,6 +249,11 @@ export function CommentComposer({
         textareaRef={textareaRef}
         autoFocus={autoFocus || (collapsible && expanded)}
         value={text}
+        imageTarget={busy || submitting ? undefined : imageTarget}
+        onImagePaste={(value) => {
+          setText(value);
+          setMention(null);
+        }}
         onChange={(event) => {
           setText(event.target.value);
           refreshMention(event.target.value, event.target.selectionStart ?? event.target.value.length);
@@ -247,33 +263,43 @@ export function CommentComposer({
           refreshMention(target.value, target.selectionStart ?? target.value.length);
         }}
         onKeyDown={handleKeyDown}
-        rows={3}
+        rows={4}
+        className="min-h-24"
         placeholder={placeholder}
         aria-label={placeholder}
         hint={`Ctrl+Enter to ${submitLabel === "Save" ? "save" : "post"}${altSubmitHint ? ` · ${altSubmitHint}` : ""} · Esc to cancel`}
         overlay={
           showMentions ? (
-            <ul className="absolute left-2 top-full z-20 max-h-40 w-64 overflow-auto rounded-md border border-border bg-popover shadow-lg">
-              {candidates.map((candidate, index) => (
-                <li key={candidate.id}>
-                  <button
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      insertMention(candidate);
-                    }}
-                    className={`flex w-full flex-col px-2 py-1 text-left text-xs ${
-                      index === activeIndex ? "bg-secondary" : "hover:bg-muted/50"
-                    }`}
-                  >
-                    <span className="font-medium">{candidate.displayName}</span>
-                    {candidate.uniqueName ? (
-                      <span className="text-[11px] text-muted-foreground">{candidate.uniqueName}</span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <FloatingOverlay
+              preferred="below"
+              maxHeight={160}
+              inset={8}
+              width={256}
+              className="rounded-md border border-border bg-popover shadow-lg"
+            >
+              <ul>
+                {candidates.map((candidate, index) => (
+                  <li key={candidate.id}>
+                    <button
+                      type="button"
+                      ref={index === activeIndex ? scrollMentionOptionIntoView : undefined}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        insertMention(candidate);
+                      }}
+                      className={`flex w-full flex-col px-2 py-1 text-left text-xs ${
+                        index === activeIndex ? "bg-secondary" : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <span className="font-medium">{candidate.displayName}</span>
+                      {candidate.uniqueName ? (
+                        <span className="text-2xs text-muted-foreground">{candidate.uniqueName}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </FloatingOverlay>
           ) : null
         }
         submitLabel={submitLabel}

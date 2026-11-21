@@ -143,7 +143,11 @@ export function stagedChangesFromPresetFields(
     } else if (referenceName === "system.reason") {
       if (field.value !== preview?.reason) staged.reason = field.value;
     } else if (referenceName === "system.assignedto") {
-      if (field.value !== preview?.assignedTo) {
+      // Presets store "Display <unique>"; the preview has the parts apart.
+      const current = preview?.assignedToUniqueName
+        ? `${preview.assignedTo ?? ""} <${preview.assignedToUniqueName}>`
+        : preview?.assignedTo;
+      if (field.value !== preview?.assignedTo && field.value !== current) {
         staged.assignee = { assignValue: field.value, displayName: field.value };
       }
     } else if (referenceName === "microsoft.vsts.common.priority") {
@@ -197,7 +201,11 @@ export function buildDuplicateDraft(preview: WorkItemPreview): WorkItemDuplicate
     areaPath: preview.areaPath,
     iterationPath: preview.iterationPath,
     tags: splitWorkItemTags(preview.tags),
-    assignedTo: preview.assignedTo,
+    // "Display <unique>" so a namesake does not fail to resolve or get the copy.
+    assignedTo:
+      preview.assignedTo && preview.assignedToUniqueName
+        ? `${preview.assignedTo} <${preview.assignedToUniqueName}>`
+        : preview.assignedTo,
   };
 }
 

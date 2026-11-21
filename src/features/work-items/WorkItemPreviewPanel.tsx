@@ -39,6 +39,7 @@ import { useWorkItemStagedChanges } from './useWorkItemStagedChanges';
 import { useWorkItemPickerState } from './useWorkItemPickerState';
 import { usePreviewZoom } from '@/lib/usePreviewZoom';
 import { useMentionDisplayNames } from './useMentionDisplayNames';
+import { useMentionIdentityNames } from '@/lib/useMentionIdentityNames';
 
 // Re-exported so existing importers (and the unit tests) keep a single entry
 // point; the implementations live in the sibling modules linked below.
@@ -182,6 +183,11 @@ export function WorkItemPreviewPanel({
 
   const { mentionDisplayNames: commentMentionDisplayNames, rememberMention: handleMentionApplied } =
     useMentionDisplayNames(recentMentionOptions);
+  const resolvedMentionNames = useMentionIdentityNames(
+    selectedItem?.organizationId,
+    preview?.comments.flatMap((comment) => [comment.text, comment.renderedText]) ?? [],
+    commentMentionDisplayNames,
+  );
 
   const resolvePreviewImage = useMemo(
     () => async (url: string) => {
@@ -244,7 +250,7 @@ export function WorkItemPreviewPanel({
       ) : (
         <>
           {previewError ? (
-            <div className="m-3 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-destructive">
+            <div className="m-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {previewError}
             </div>
           ) : preview ? (
@@ -314,7 +320,7 @@ export function WorkItemPreviewPanel({
                 editCommentError={editCommentError}
                 editingCommentId={editingCommentId}
                 editPending={editPending}
-                mentionDisplayNames={commentMentionDisplayNames}
+                mentionDisplayNames={resolvedMentionNames}
                 recentMentionOptions={recentMentionOptions}
                 mentionPriorityNames={mentionPriorityNames}
                 selfOrg={selfOrg}

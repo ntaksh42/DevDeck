@@ -5,14 +5,12 @@ import { readStoredJson, writeStoredJson } from "@/lib/storage";
 export type NavEntryId =
   | "pullRequests"
   | "workItems"
-  | "pipelines"
-  | "analyze";
+  | "pipelines";
 
 export const DEFAULT_NAV_ORDER: NavEntryId[] = [
   "pullRequests",
   "workItems",
   "pipelines",
-  "analyze",
 ];
 
 const NAV_ORDER_STORAGE_KEY = "azdodeck:layout:navOrder";

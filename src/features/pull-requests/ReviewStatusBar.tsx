@@ -26,6 +26,7 @@ type ReviewStatusBarProps = {
   onToggleShowDone: () => void;
   onToggleShowSnoozed: () => void;
   onClearAllFilters: () => void;
+  fitWidths: { auto: boolean; onFit: () => void };
   onOpenColumnMenu: (rect: DOMRect) => void;
   onSnoozeSelected: (rect: DOMRect) => void;
 };
@@ -51,6 +52,7 @@ export function ReviewStatusBar({
   onToggleShowDone,
   onToggleShowSnoozed,
   onClearAllFilters,
+  fitWidths,
   onOpenColumnMenu,
   onSnoozeSelected,
 }: ReviewStatusBarProps) {
@@ -80,6 +82,7 @@ export function ReviewStatusBar({
       }
       done={{ count: archivedKeys.size, active: showDone, onToggle: onToggleShowDone }}
       snoozed={{ count: snoozedCount, active: showSnoozed, onToggle: onToggleShowSnoozed }}
+      fitWidths={fitWidths}
       onColumns={onOpenColumnMenu}
       helpSection="reviews"
     >
@@ -93,7 +96,7 @@ export function ReviewStatusBar({
               type="button"
               onClick={onToggleOverlapPopup}
               aria-expanded={overlapPopupOpen}
-              className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-ring dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+              className="inline-flex items-center gap-1 rounded border border-warning/30 bg-warning/10 px-2 py-0.5 font-medium text-warning hover:bg-warning/20 focus:outline-none focus:ring-2 focus:ring-ring"
               title="These selected PRs change the same files — merging them may conflict"
             >
               <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />

@@ -1,15 +1,19 @@
 import { useState, useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, Star } from 'lucide-react';
-import { listMyWorkItems, listFollowedWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
+import { listMyWorkItems, listFollowedWorkItems, runAssignedWorkItemInvestigations, commandErrorMessage } from '@/lib/azdoCommands';
+import { pushToast } from '@/lib/toast';
+import { ConfirmDialog, useConfirm } from '@/components/ConfirmDialog';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemFilterBar } from './WorkItemFilterBar';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { toMatchTarget } from './workItemMatchTarget';
+import { InvestigateSplitButton, type InvestigateAgentChoice } from './InvestigateSplitButton';
 import { workItemQueryKeys } from './queryKeys';
 
 type WorkItemScope = 'assigned' | 'followed';
@@ -36,6 +40,20 @@ export function MyWorkItemsPanel() {
     staleTime: 60_000,
   });
   const query = scope === 'assigned' ? assignedQuery : followedQuery;
+  const { confirm, dialogProps } = useConfirm();
+  const [investigateAgent, setInvestigateAgent] = useState<InvestigateAgentChoice>('');
+  const investigateAll = useMutation({
+    mutationFn: () => runAssignedWorkItemInvestigations(investigateAgent || undefined),
+    onSuccess: (count) =>
+      pushToast(
+        count === 0
+          ? 'No assigned work item is waiting for an investigation.'
+          : `Investigating ${count} work items, three at a time. Results appear in the result folder.`,
+        undefined,
+        5000,
+      ),
+    onError: (error) => pushToast(commandErrorMessage(error)),
+  });
 
   const allResults = query.data ?? [];
   const results = useMemo(() => {
@@ -52,7 +70,8 @@ export function MyWorkItemsPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <HeaderToolbarPortal>
+        <div className="flex shrink-0 items-center gap-2">
         <div
           role="group"
           aria-label="Work item scope"
@@ -87,6 +106,21 @@ export function MyWorkItemsPanel() {
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           New item
         </button>
+        <InvestigateSplitButton
+          agent={investigateAgent}
+          onAgentChange={setInvestigateAgent}
+          pending={investigateAll.isPending}
+          title="Investigate every unhandled work item assigned to you, three at a time"
+          onRun={() =>
+            confirm({
+              title: 'Investigate all assigned work items?',
+              message:
+                'The agent investigates every New or Active work item assigned to you that was changed in the last 30 days and has no result yet, three at a time. This uses the agent and its model for each one.',
+              confirmLabel: 'Start',
+              onConfirm: () => investigateAll.mutate(),
+            })
+          }
+        />
         <WorkItemTemplatesPanel
           onApplyTemplate={(fields) =>
             setCreateDraft({
@@ -99,12 +133,13 @@ export function MyWorkItemsPanel() {
             })
           }
         />
-        {createdStatus ? (
-          <span role="status" className="truncate text-[11px] text-muted-foreground">
-            {createdStatus}
-          </span>
-        ) : null}
-      </div>
+        </div>
+      </HeaderToolbarPortal>
+      {createdStatus ? (
+        <span role="status" className="shrink-0 truncate text-2xs text-muted-foreground">
+          {createdStatus}
+        </span>
+      ) : null}
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : null}
@@ -133,6 +168,7 @@ export function MyWorkItemsPanel() {
         }}
       />
 
+      {dialogProps ? <ConfirmDialog {...dialogProps} /> : null}
       {createDraft ? (
         <CreateWorkItemDialog
           initialDraft={createDraft}

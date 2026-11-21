@@ -13,6 +13,8 @@ function Harness(props: Partial<Parameters<typeof ReviewFilterBar>[0]>) {
       filterInputRef={inputRef}
       showDrafts={false}
       onShowDraftsChange={() => undefined}
+      groupBy="status"
+      onGroupByChange={() => undefined}
       filterSuggestionPool={[]}
       open={false}
       onOpen={() => undefined}
@@ -88,5 +90,14 @@ describe("ReviewFilterBar", () => {
       relatedTarget: screen.getByRole("button", { name: "elsewhere" }),
     });
     expect(onClose).toHaveBeenCalledWith(false);
+  });
+
+  it("switches grouping from the Group select", () => {
+    const onGroupByChange = vi.fn();
+    render(<Harness onGroupByChange={onGroupByChange} />);
+    fireEvent.change(screen.getByLabelText("Group reviews by"), {
+      target: { value: "repository" },
+    });
+    expect(onGroupByChange).toHaveBeenCalledWith("repository");
   });
 });

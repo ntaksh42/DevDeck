@@ -42,7 +42,35 @@ struct ContentResponse {
     encoding: Option<String>,
 }
 
+/// Items per page of a list endpoint (GitHub's maximum).
+const PAGE_SIZE: usize = 100;
+/// Upper bound of pages read from one list endpoint.
+const MAX_PAGES: usize = 30;
+
 impl GitHubClient {
+    /// Reads every page of a list endpoint. A single `per_page=100` request
+    /// returns only the oldest 100 comments / reviews, so the newest ones of a
+    /// busy pull request would be missing.
+    pub(crate) async fn get_all_pages<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<Vec<T>> {
+        let per_page = PAGE_SIZE.to_string();
+        let mut all = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let page = page.to_string();
+            let items: Vec<T> = self
+                .get_json(path, &[("per_page", &per_page), ("page", &page)])
+                .await?;
+            let len = items.len();
+            all.extend(items);
+            if len < PAGE_SIZE {
+                break;
+            }
+        }
+        Ok(all)
+    }
+
     pub async fn get_pull_request(
         &self,
         owner: &str,
@@ -59,7 +87,7 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<ReviewItem>> {
-        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/reviews"))
+        self.get_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/reviews"))
             .await
     }
 
@@ -69,7 +97,7 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<IssueComment>> {
-        self.get_json_all_pages(&format!("repos/{owner}/{repo}/issues/{number}/comments"))
+        self.get_all_pages(&format!("repos/{owner}/{repo}/issues/{number}/comments"))
             .await
     }
 
@@ -79,7 +107,7 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<ReviewComment>> {
-        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/comments"))
+        self.get_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/comments"))
             .await
     }
 
@@ -89,7 +117,7 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<PrFileItem>> {
-        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/files"))
+        self.get_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/files"))
             .await
     }
 
@@ -99,7 +127,7 @@ impl GitHubClient {
         repo: &str,
         number: i64,
     ) -> Result<Vec<PrCommitItem>> {
-        self.get_json_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/commits"))
+        self.get_all_pages(&format!("repos/{owner}/{repo}/pulls/{number}/commits"))
             .await
     }
 
@@ -316,5 +344,45 @@ impl GitHubClient {
             &json!({ "reviewers": reviewers }),
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::client::{GitHubClient, RetryPolicy};
+
+    #[tokio::test]
+    async fn list_endpoints_read_every_page() {
+        let server = MockServer::start().await;
+        let comments = |from: u64, to: u64| {
+            let items: Vec<_> = (from..=to)
+                .map(|id| {
+                    serde_json::json!({
+                        "id": id, "body": "x", "created_at": "2026-01-01T00:00:00Z"
+                    })
+                })
+                .collect();
+            ResponseTemplate::new(200).set_body_json(items)
+        };
+        for (page, response) in [("1", comments(1, 100)), ("2", comments(101, 130))] {
+            Mock::given(method("GET"))
+                .and(path("/repos/o/r/issues/7/comments"))
+                .and(query_param("page", page))
+                .respond_with(response)
+                .expect(1)
+                .mount(&server)
+                .await;
+        }
+        let client = GitHubClient::with_base_url("token", &format!("{}/", server.uri()))
+            .unwrap()
+            .with_retry_policy(RetryPolicy::no_retries());
+
+        let all = client.list_issue_comments("o", "r", 7).await.unwrap();
+
+        assert_eq!(all.len(), 130);
+        assert_eq!(all.last().unwrap().id, 130);
     }
 }

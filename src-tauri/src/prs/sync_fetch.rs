@@ -1,18 +1,20 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
-use azdo_client::{AdoClient, PullRequestStatus, TeamProject};
+use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus, TeamProject};
 
 use super::*;
 use crate::db::{CachedPr, CachedReviewPr, Organization};
 use crate::error::Result;
 use crate::repos::encode_path_segment;
-use crate::shared_cache::{self, SharedPullRequest, SharedReviewer};
+use crate::shared_cache::{
+    self, ActivePrScope, ActivePrSnapshot, SharedPullRequest, SharedReviewer,
+};
 
 /// How stale the shared cache (`shared_cache` module) may be before this app
 /// falls back to fetching from Azure DevOps itself. Chosen well under
 /// DevDeck's own ~5 minute sync interval so this app's own cadence is
-/// essentially unaffected; it only skips a fetch on the rare occasion the
-/// other app (waypoint) refreshed this scope moments earlier.
+/// essentially unaffected. The reader also requires a compatible scope.
 const SHARED_CACHE_FRESHNESS: Duration = Duration::from_secs(120);
 
 // One project-level query replaces a request per repository; repositories
@@ -31,13 +33,14 @@ pub(crate) async fn fetch_active_prs_for_project(
     let label = project.name.clone();
 
     if !force_refresh {
-        if let Some(cached) = read_active_prs_from_shared_cache(&org, &project) {
+        if let Some((cached, reviewers, capped)) = read_active_prs_from_shared_cache(&org, &project)
+        {
             return PrProjectFetch {
                 project_id,
                 label,
                 result: Ok(cached),
-                capped: false,
-                reviewers: Vec::new(),
+                capped,
+                reviewers,
             };
         }
     }
@@ -77,6 +80,66 @@ pub(crate) async fn fetch_active_prs_for_project(
 
     let capped = prs.len() >= PROJECT_PR_SYNC_TOP as usize;
 
+    let (cached, shared_reviewers) = map_active_prs(&org, &project, prs);
+
+    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers, capped);
+
+    PrProjectFetch {
+        project_id,
+        label,
+        result: Ok(cached),
+        capped,
+        reviewers: shared_reviewers,
+    }
+}
+
+pub(super) async fn fetch_active_with_authored(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    force_refresh: bool,
+) -> (PrProjectFetch, Result<bool>) {
+    let mut fetch =
+        fetch_active_prs_for_project(client.clone(), org.clone(), project.clone(), force_refresh)
+            .await;
+    let (Some(user), true, Ok(prs)) = (
+        org.authenticated_user_id.as_deref(),
+        fetch.capped,
+        &mut fetch.result,
+    ) else {
+        return (fetch, Ok(false));
+    };
+    let authored = match client
+        .list_pull_requests_by_creator(&project.id, user, 200)
+        .await
+    {
+        Ok(authored) => authored,
+        Err(error) => return (fetch, Err(error.into())),
+    };
+    let authored_keys: HashSet<_> = prs
+        .iter()
+        .filter(|pr| {
+            pr.created_by_id
+                .as_deref()
+                .is_some_and(|id| id.eq_ignore_ascii_case(user))
+        })
+        .map(|pr| (pr.repository_id.clone(), pr.pull_request_id))
+        .collect();
+    prs.retain(|pr| !authored_keys.contains(&(pr.repository_id.clone(), pr.pull_request_id)));
+    fetch
+        .reviewers
+        .retain(|row| !authored_keys.contains(&(row.repository_id.clone(), row.pull_request_id)));
+    let (authored, reviewers) = map_active_prs(&org, &project, authored);
+    prs.extend(authored);
+    fetch.reviewers.extend(reviewers);
+    (fetch, Ok(true))
+}
+
+fn map_active_prs(
+    org: &Organization,
+    project: &TeamProject,
+    prs: Vec<GitPullRequest>,
+) -> (Vec<CachedPr>, Vec<SharedReviewer>) {
     // Reviewers are read from `prs` by reference before the by-value pass
     // below consumes each `pr` to build `CachedPr`; both passes read the same
     // API response, just for different destinations (DevDeck's own cache vs
@@ -143,14 +206,17 @@ pub(crate) async fn fetch_active_prs_for_project(
         })
         .collect();
 
-    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers);
+    (cached, shared_reviewers)
+}
 
-    PrProjectFetch {
-        project_id,
-        label,
-        result: Ok(cached),
-        capped,
-        reviewers: shared_reviewers,
+fn active_pr_scope<'a>(org: &'a Organization, project: &'a TeamProject) -> ActivePrScope<'a> {
+    ActivePrScope {
+        organization: &org.name,
+        project: &project.name,
+        base_url: &org.base_url,
+        project_id: &project.id,
+        principal_id: org.authenticated_user_id.as_deref(),
+        limit: PROJECT_PR_SYNC_TOP,
     }
 }
 
@@ -160,21 +226,29 @@ pub(crate) async fn fetch_active_prs_for_project(
 fn read_active_prs_from_shared_cache(
     org: &Organization,
     project: &TeamProject,
-) -> Option<Vec<CachedPr>> {
-    let conn = shared_cache::open().ok()?;
-    if !shared_cache::is_fresh(
-        &conn,
-        &org.name,
-        &project.name,
-        shared_cache::KIND_PULL_REQUESTS,
+) -> Option<(Vec<CachedPr>, Vec<SharedReviewer>, bool)> {
+    let mut conn = shared_cache::open().ok()?;
+    let ActivePrSnapshot {
+        rows,
+        reviewers,
+        capped,
+    } = shared_cache::read_active_pr_snapshot(
+        &mut conn,
+        &active_pr_scope(org, project),
         SHARED_CACHE_FRESHNESS,
-    ) {
-        return None;
-    }
-    let rows = shared_cache::read_pull_requests(&conn, &org.name, &project.name).ok()?;
-    Some(
-        rows.into_iter()
-            .map(|row| CachedPr {
+    )
+    .ok()??;
+    let cached = rows
+        .into_iter()
+        .map(|row| {
+            let web_url = format!(
+                "{}/{}/_git/{}/pullrequest/{}",
+                org.base_url,
+                encode_path_segment(&project.name),
+                encode_path_segment(&row.repository_name),
+                row.pull_request_id
+            );
+            CachedPr {
                 org_id: org.id.clone(),
                 project_id: project.id.clone(),
                 project_name: project.name.clone(),
@@ -186,13 +260,14 @@ fn read_active_prs_from_shared_cache(
                 created_by: row.created_by,
                 created_by_id: row.created_by_id,
                 creation_date: row.creation_date,
-                source_ref_name: row.source_ref_name,
-                target_ref_name: row.target_ref_name,
-                web_url: row.web_url,
+                source_ref_name: short_ref(&row.source_ref_name),
+                target_ref_name: short_ref(&row.target_ref_name),
+                web_url: Some(web_url),
                 is_draft: row.is_draft,
-            })
-            .collect(),
-    )
+            }
+        })
+        .collect();
+    Some((cached, reviewers, capped))
 }
 
 /// Best-effort: a failure to reach the shared cache never fails DevDeck's own
@@ -203,6 +278,7 @@ fn write_active_prs_to_shared_cache(
     project: &TeamProject,
     cached: &[CachedPr],
     reviewers: &[SharedReviewer],
+    capped: bool,
 ) {
     let rows: Vec<SharedPullRequest> = cached
         .iter()
@@ -223,13 +299,12 @@ fn write_active_prs_to_shared_cache(
         .collect();
     let outcome = (|| -> Result<()> {
         let mut conn = shared_cache::open()?;
-        shared_cache::write_pull_requests(&mut conn, &org.name, &project.name, &rows, reviewers)?;
-        shared_cache::mark_synced(
-            &conn,
-            &org.name,
-            &project.name,
-            shared_cache::KIND_PULL_REQUESTS,
-            shared_cache::SYNCED_BY,
+        shared_cache::write_active_pr_snapshot(
+            &mut conn,
+            &active_pr_scope(org, project),
+            &rows,
+            reviewers,
+            capped,
         )
     })();
     if let Err(e) = outcome {
@@ -249,11 +324,29 @@ pub(crate) async fn fetch_review_prs_for_project(
     user_id: String,
 ) -> (String, Result<Vec<CachedReviewPr>>) {
     let project_name = project.name.clone();
-    let prs = match client
-        .list_pull_requests_by_reviewer(&project.id, &user_id, 200)
+    match list_reviews_of(&client, &org, &project, &user_id, 200).await {
+        Ok(prs) => (
+            project_name,
+            Ok(review_prs_to_cached(prs, &org, &project, &user_id, None)),
+        ),
+        Err(e) => (project_name, Err(e)),
+    }
+}
+
+/// Active PRs of `project` that name `reviewer_id` as a reviewer. A 404 means the
+/// project is gone and counts as an empty result.
+pub(crate) async fn list_reviews_of(
+    client: &AdoClient,
+    org: &Organization,
+    project: &TeamProject,
+    reviewer_id: &str,
+    page_size: u32,
+) -> Result<Vec<GitPullRequest>> {
+    match client
+        .list_pull_requests_by_reviewer(&project.id, reviewer_id, page_size)
         .await
     {
-        Ok(prs) => prs,
+        Ok(prs) => Ok(prs),
         Err(e) if is_ado_not_found(&e) => {
             tracing::warn!(
                 org = %org.name,
@@ -261,16 +354,32 @@ pub(crate) async fn fetch_review_prs_for_project(
                 error = %e,
                 "review pull request list returned 404, skipping project"
             );
-            return (project_name, Ok(Vec::new()));
+            Ok(Vec::new())
         }
-        Err(e) => return (project_name, Err(e.into())),
-    };
+        Err(e) => Err(e.into()),
+    }
+}
 
+/// Maps reviewer-filtered PRs to My Reviews rows. With `group_ids` the PRs were
+/// found through a group the user belongs to: the user's own PRs are dropped and
+/// `my_is_required` also follows the matching group reviewers.
+pub(crate) fn review_prs_to_cached(
+    prs: Vec<GitPullRequest>,
+    org: &Organization,
+    project: &TeamProject,
+    user_id: &str,
+    group_ids: Option<&HashSet<String>>,
+) -> Vec<CachedReviewPr> {
     let mut cached_reviews = Vec::new();
     for pr in prs {
         let Some(repo) = &pr.repository else {
             continue;
         };
+        if group_ids.is_some()
+            && pr.created_by.as_ref().and_then(|u| u.id.as_deref()) == Some(user_id)
+        {
+            continue;
+        }
         let repo_id = repo.id.clone();
         let repo_name = repo.name.clone();
         let (proj_id, proj_name) = repo
@@ -279,8 +388,13 @@ pub(crate) async fn fetch_review_prs_for_project(
             .map(|p| (p.id.clone(), p.name.clone()))
             .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
 
-        let (my_vote, my_is_required) =
-            resolve_reviewer_vote(pr.reviewers.as_deref().unwrap_or(&[]), &user_id);
+        let reviewers = pr.reviewers.as_deref().unwrap_or(&[]);
+        let (my_vote, mut my_is_required) = resolve_reviewer_vote(reviewers, user_id);
+        if let Some(group_ids) = group_ids {
+            my_is_required |= reviewers
+                .iter()
+                .any(|r| r.is_required && r.id.as_ref().is_some_and(|id| group_ids.contains(id)));
+        }
 
         let web_url = format!(
             "{}/{}/_git/{}/pullrequest/{}",
@@ -314,57 +428,5 @@ pub(crate) async fn fetch_review_prs_for_project(
             ci_check_count: 0,
         });
     }
-    (project_name, Ok(cached_reviews))
-}
-
-pub(crate) async fn fetch_created_prs_for_project(
-    client: &AdoClient,
-    org: &Organization,
-    project_id: &str,
-    user_id: &str,
-) -> Result<Vec<MyCreatedPullRequestSummary>> {
-    let prs = client
-        .list_pull_requests_by_creator(project_id, user_id, 200)
-        .await?;
-
-    let mut summaries = Vec::new();
-    for pr in prs {
-        let Some(repo) = &pr.repository else {
-            continue;
-        };
-        let repo_name = repo.name.clone();
-        let (proj_id, proj_name) = repo
-            .project
-            .as_ref()
-            .map(|p| (p.id.clone(), p.name.clone()))
-            .unwrap_or_else(|| (project_id.to_string(), project_id.to_string()));
-
-        let reviewers = pr.reviewers.as_deref().unwrap_or(&[]);
-        let approvals = reviewers.iter().filter(|r| r.vote == 10).count() as i64;
-
-        let web_url = format!(
-            "{}/{}/_git/{}/pullrequest/{}",
-            org.base_url,
-            encode_path_segment(&proj_name),
-            encode_path_segment(&repo_name),
-            pr.pull_request_id
-        );
-        summaries.push(MyCreatedPullRequestSummary {
-            organization_id: org.id.clone(),
-            project_id: proj_id,
-            project_name: proj_name,
-            repository_id: repo.id.clone(),
-            repository_name: repo_name,
-            pull_request_id: pr.pull_request_id,
-            title: pr.title.clone(),
-            creation_date: pr.creation_date.to_rfc3339(),
-            source_ref_name: short_ref(&pr.source_ref_name),
-            target_ref_name: short_ref(&pr.target_ref_name),
-            web_url: Some(web_url),
-            is_draft: pr.is_draft.unwrap_or(false),
-            approvals,
-            reviewer_count: reviewers.len() as i64,
-        });
-    }
-    Ok(summaries)
+    cached_reviews
 }
