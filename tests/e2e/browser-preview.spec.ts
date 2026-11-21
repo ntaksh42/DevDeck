@@ -47,15 +47,15 @@ test.describe("browser preview", () => {
     // Sections expand by clicking their header (My Reviews groups PRs by the
     // reviewer's next action). Expanding "Waiting for author" reveals its PR
     // while the still-collapsed "Rejected" section keeps its PR hidden.
-    await main.getByRole("button", { name: /Waiting for author/ }).click();
+    await main.getByRole("button", { name: /^Waiting for author/ }).click();
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
 
-    await main.getByRole("button", { name: /Approved by you/ }).click();
+    await main.getByRole("button", { name: /^Approved by you/ }).click();
     await expect(main.getByText("Dark mode support for settings screen")).toBeVisible();
     await expect(main.getByText("Add OpenTelemetry tracing support")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
-    await main.getByRole("button", { name: /Rejected by you/ }).click();
+    await main.getByRole("button", { name: /^Rejected by you/ }).click();
 
     // The filter is folded into the Reviews tab strip until opened.
     await main.getByRole("button", { name: "Filter reviews" }).click();
@@ -66,7 +66,7 @@ test.describe("browser preview", () => {
     await main.getByPlaceholder("Filter by repo, title, author…").fill("");
     await main.getByLabel("Show Drafts").check();
     // Draft PRs land in their own collapsed "Drafts" section; expand it to see them.
-    await main.getByRole("button", { name: /Drafts/ }).click();
+    await main.getByRole("button", { name: /^Drafts/ }).click();
     await expect(main.getByText("Draft", { exact: true })).toBeVisible();
 
     await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
