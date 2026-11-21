@@ -22,6 +22,7 @@ import { PrReviewHeader } from "./PrReviewHeader";
 import { PrReviewToolbar } from "./PrReviewToolbar";
 import { ReviewTab } from "./PrReviewTabContents";
 import { ResultTab } from "./PrSecondaryTabs";
+import { useHasResult } from "@/components/agent-notes/resultQueries";
 import { LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsPanel } from "./LinkedWorkItemsPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 
@@ -64,7 +65,13 @@ export function usePrReviewPanels({
   onOpenLinkedWorkItems?: () => void;
   /** Bumped by R on the grid: the Result tab enters agent-note comment mode. */
   resultCommentRequest?: number;
-}): { anchor: DockablePanelSpec; secondary: DockablePanelSpec[] } {
+}): {
+  anchor: DockablePanelSpec;
+  secondary: DockablePanelSpec[];
+  /** Panels to fold to their tab strip: Result while the PR has no result. */
+  collapsedIds: string[];
+} {
+  const hasResult = useHasResult(selectedPr ? { target: "pull-request", itemId: selectedPr.pullRequestId } : null);
   const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
   usePublishAgentListScope(agentList);
   usePublishAgentSubject(
@@ -292,11 +299,12 @@ export function usePrReviewPanels({
     {
       id: "result",
       title: "Result",
-      headerActions: toolbar,
+      // Its own group below Conversation, so it leaves the PR toolbar to
+      // Conversation. Folded while the PR has no result (collapsedIds).
       content: withChrome(!selectedPr ? noPrSelected : (
         <ResultTab selectedPr={selectedPr} commentModeRequest={resultCommentRequest} />
       ), true),
-      position: { relativeTo: "review", direction: "within" },
+      position: { relativeTo: "review", direction: "below" },
     },
     ...(onOpenLinkedWorkItems
       ? [
@@ -316,5 +324,5 @@ export function usePrReviewPanels({
       : []),
   ];
 
-  return { anchor, secondary };
+  return { anchor, secondary, collapsedIds: hasResult ? [] : ["result"] };
 }

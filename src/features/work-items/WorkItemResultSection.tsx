@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getAppSettings, getWorkItemResultPreview } from "@/lib/azdoCommands";
+import { appSettingsQuery, workItemResultQuery } from "@/components/agent-notes/resultQueries";
 import { AgentResultPanel } from "@/components/agent-notes/AgentResultPanel";
 
 // Mirrors the PR "Result" tab (PrSecondaryTabs.tsx), matching a locally
@@ -14,19 +14,11 @@ export function WorkItemResultSection({
   workItemId: number;
   commentModeRequest?: number;
 }) {
-  const settingsQuery = useQuery({
-    queryKey: ["appSettings"],
-    queryFn: getAppSettings,
-    staleTime: 5 * 60_000,
-  });
+  const settingsQuery = useQuery(appSettingsQuery);
 
   const hasFolder = !!settingsQuery.data?.workItemResultFolderPath;
 
-  const previewQuery = useQuery({
-    queryKey: ["workItemResultPreview", workItemId],
-    queryFn: () => getWorkItemResultPreview({ workItemId }),
-    enabled: hasFolder,
-  });
+  const previewQuery = useQuery(workItemResultQuery(workItemId, hasFolder));
 
   return (
     <AgentResultPanel

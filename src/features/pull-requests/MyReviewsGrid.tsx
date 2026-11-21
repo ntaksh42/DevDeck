@@ -77,7 +77,7 @@ export function MyReviewsGrid({
     setActivateRequest((prev) => ({ id: 'result', key: (prev?.key ?? 0) + 1 }));
   }
   const filterBar = useDockFilter(g.filterInputRef, () => g.focusRow(g.selectedIndex));
-  const { anchor: reviewAnchor, secondary: reviewSecondary } = usePrReviewPanels({
+  const { anchor: reviewAnchor, secondary: reviewSecondary, collapsedIds: reviewCollapsed } = usePrReviewPanels({
     selectedPr: g.selectedPr,
     maximized: g.maximized,
     onToggleMaximize: () => g.setMaximized((v) => !v),
@@ -447,7 +447,7 @@ export function MyReviewsGrid({
               : panel,
           ),
         ] satisfies DockablePanelSpec[]}
-        collapsedIds={linkedCollapsed ? [LINKED_WORK_ITEMS_PANEL_ID] : undefined}
+        collapsedIds={linkedCollapsed ? [...reviewCollapsed, LINKED_WORK_ITEMS_PANEL_ID] : reviewCollapsed}
         maximizedId={g.maximized ? 'review' : undefined}
         activatePanel={activateRequest}
       />

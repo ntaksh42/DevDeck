@@ -317,7 +317,7 @@ export function PullRequestResults({
     if (selectedResult) recordRecentPullRequest(selectedResult);
   }, [selectedResult]);
 
-  const { anchor: reviewAnchor, secondary: reviewSecondary } = usePrReviewPanels({
+  const { anchor: reviewAnchor, secondary: reviewSecondary, collapsedIds: reviewCollapsed } = usePrReviewPanels({
     selectedPr,
     maximized,
     onToggleMaximize: () => setMaximized((value) => !value),
@@ -424,6 +424,7 @@ export function PullRequestResults({
           },
           ...reviewSecondary,
         ] satisfies DockablePanelSpec[]}
+        collapsedIds={reviewCollapsed}
         maximizedId={maximized ? 'review' : undefined}
         activatePanel={resultCommentRequest > 0 ? { id: 'result', key: resultCommentRequest } : undefined}
       />

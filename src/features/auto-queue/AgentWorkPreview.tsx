@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { listAgentNotes, readAgentWorkLog, type AgentWorkEntry } from "@/lib/azdoCommands";
+import { readAgentWorkLog, type AgentWorkEntry } from "@/lib/azdoCommands";
 import { ResultTab } from "@/features/pull-requests/PrSecondaryTabs";
 import { WorkItemResultSection } from "@/features/work-items/WorkItemResultSection";
+import { pipelineResultQuery } from "@/components/agent-notes/resultQueries";
 import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
 import { PreviewEmptyState } from "@/components/StateDisplay";
 import { AgentWorkLinks } from "./AgentWorkLinks";
@@ -70,11 +71,7 @@ function Log({ entry }: { entry: AgentWorkEntry }) {
  * about a selection, like the PR Result tab and the work item Result panel.
  */
 function PipelineResult({ askId, status }: { askId: number; status: AgentWorkEntry["status"] }) {
-  const result = useQuery({
-    queryKey: ["agentWorkPipelineResult", askId, status],
-    queryFn: () => listAgentNotes({ target: "ask", itemId: askId }),
-    refetchInterval: status === "running" || status === "waiting" ? 5_000 : false,
-  });
+  const result = useQuery(pipelineResultQuery(askId, status));
   if (result.isError) return <PreviewEmptyState message="Could not load the agent response." />;
   const replies = result.data?.flatMap((note) => note.replies) ?? [];
   if (!replies.length) return <PreviewEmptyState message={result.isPending ? "Loading…" : "No response yet."} />;

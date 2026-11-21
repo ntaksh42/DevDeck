@@ -43,6 +43,11 @@ export function useCollapsedGroups(
   const expandedHeights = useRef(new Map<string, number>());
   const collapsedKey = (collapsedIds ?? []).join(",");
 
+  // A group that also holds a panel not being collapsed (e.g. Result tabbed
+  // with Preview in a saved layout) stays open, or that panel would fold too.
+  const foldable = (group: DockviewGroupPanel, collapsed: Set<string>) =>
+    group.panels.every((panel) => collapsed.has(panel.id));
+
   const fold = (group: DockviewGroupPanel) => {
     group.api.setConstraints({ minimumHeight: 0, maximumHeight: COLLAPSED_GROUP_HEIGHT });
     group.api.setSize({ height: COLLAPSED_GROUP_HEIGHT });
@@ -53,11 +58,11 @@ export function useCollapsedGroups(
   useEffect(() => {
     const api = apiRef.current;
     if (!api || !collapsedKey) return;
-    const collapsed = collapsedKey.split(",");
+    const collapsed = new Set(collapsedKey.split(","));
     const subscription = api.onDidLayoutChange(() => {
       for (const id of collapsed) {
         const group = api.getPanel(id)?.api.group;
-        if (group && group.api.height > COLLAPSED_GROUP_HEIGHT + 1) fold(group);
+        if (group && group.api.height > COLLAPSED_GROUP_HEIGHT + 1 && foldable(group, collapsed)) fold(group);
       }
     });
     return () => subscription.dispose();
@@ -72,6 +77,7 @@ export function useCollapsedGroups(
       const group = api.getPanel(spec.id)?.api.group;
       if (!group) continue;
       if (collapsed.has(spec.id)) {
+        if (!foldable(group, collapsed)) continue;
         if (!expandedHeights.current.has(spec.id)) expandedHeights.current.set(spec.id, group.api.height);
         fold(group);
       } else if (expandedHeights.current.has(spec.id)) {

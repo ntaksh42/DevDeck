@@ -1,9 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  getAppSettings,
-  getReviewResultPreview,
-  type ReviewPullRequestSummary,
-} from "@/lib/azdoCommands";
+import type { ReviewPullRequestSummary } from "@/lib/azdoCommands";
+import { appSettingsQuery, reviewResultQuery } from "@/components/agent-notes/resultQueries";
 import { AgentResultPanel } from "@/components/agent-notes/AgentResultPanel";
 
 // ── Result tab (local HTML review-result preview, moved from MyReviewsGrid) ──
@@ -17,16 +14,8 @@ export function ResultTab({
   selectedPr: Pick<ReviewPullRequestSummary, "pullRequestId">;
   commentModeRequest?: number;
 }) {
-  const settingsQuery = useQuery({
-    queryKey: ["appSettings"],
-    queryFn: getAppSettings,
-    staleTime: 5 * 60_000,
-  });
-
-  const previewQuery = useQuery({
-    queryKey: ["reviewResultPreview", selectedPr.pullRequestId],
-    queryFn: () => getReviewResultPreview({ pullRequestId: selectedPr.pullRequestId }),
-  });
+  const settingsQuery = useQuery(appSettingsQuery);
+  const previewQuery = useQuery(reviewResultQuery(selectedPr.pullRequestId));
 
   const hasFolder = !!settingsQuery.data?.reviewResultFolderPath;
 

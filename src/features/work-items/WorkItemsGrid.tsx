@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { commandErrorMessage } from '@/lib/azdoCommands';
+import { commandErrorMessage, type WorkItemSummary } from '@/lib/azdoCommands';
 import { focusPrimaryGrid, isEditableTarget } from '@/lib/utils';
 import { ListStateChip } from '@/components/ListStatusBar';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
@@ -35,7 +35,7 @@ import { WiColumnFilterDropdown } from './WiColumnFilterDropdown';
 import { WiFieldColumnsSection } from './WiFieldColumnsSection';
 import { useWiGridState } from './useWiGridState';
 import { useWiGridLogic } from './useWiGridLogic';
-import type { WorkItemSummary } from '@/lib/azdoCommands';
+import { useHasResult } from '@/components/agent-notes/resultQueries';
 import { usePublishAgentListScope } from '@/components/agent/agentListScope';
 import { usePublishAgentSubject } from '@/components/agent/agentSubject';
 import { wiAgentList, wiFilterNotes, type WiAgentListInfo } from './wiAgentList';
@@ -294,6 +294,7 @@ export function WorkItemsGrid({
     </PreviewToolbarSlotProvider>
   );
 
+  const hasResult = useHasResult(g.selectedItem ? { target: 'work-item', itemId: g.selectedItem.id } : null);
   const resultPane = g.selectedItem ? (
     <WorkItemResultSection
       workItemId={g.selectedItem.id}
@@ -408,17 +409,16 @@ export function WorkItemsGrid({
               maxWidth: MAX_WORK_ITEM_PREVIEW_WIDTH,
             },
             {
-              // Tabbed together with Preview by default -- the investigation
-              // result is auxiliary content the user can drag into its own
-              // split or floating window, not something that should crowd
-              // the main preview open by default.
+              // Below Preview, folded to its tab strip while the selected
+              // item has no investigation result (collapsedIds below).
               id: 'result',
               title: 'Result',
               content: resultPane,
-              position: { relativeTo: 'preview', direction: 'within' },
+              position: { relativeTo: 'preview', direction: 'below' },
               minWidth: 320,
             },
           ] satisfies DockablePanelSpec[]}
+          collapsedIds={hasResult ? undefined : ['result']}
           activatePanel={
             state.resultCommentRequest > 0
               ? { id: 'result', key: state.resultCommentRequest }

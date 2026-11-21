@@ -20,6 +20,7 @@ import { openEntryInApp, openEntryInBrowser } from "./AgentWorkLinks";
 import { agentWorkSubject, sortRuns, StatusBadge, TABS, timeLabel, type AgentWorkTab } from "./agentWorkStatus";
 import { AgentWorkTabs } from "./AgentWorkTabs";
 import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
+import { useHasResult } from "@/components/agent-notes/resultQueries";
 
 const WORK_KEY = ["agentWork"];
 
@@ -49,6 +50,11 @@ export function AgentWorkView() {
   }, [entries, activeTab, doneView]);
   const focused = items.find((item) => agentWorkKey(item) === focusKey) ?? items[0] ?? null;
   const focusedIndex = focused ? items.indexOf(focused) : -1;
+  const hasResult = useHasResult(
+    !focused ? null
+      : focused.target === "pipeline" ? { target: "pipeline", askId: focused.askId ?? null, status: focused.status }
+      : { target: focused.target, itemId: focused.id },
+  );
   // The Agent panel follows the selected item, so questions go to its conversation.
   const subject = focused && activeTab.id !== "candidates" ? agentWorkSubject(focused) : null;
   usePublishAgentSubject(subject);
@@ -256,15 +262,16 @@ export function AgentWorkView() {
                 minWidth: 320,
               },
               {
-                // Tabbed with Details by default; drag it (or use the move
-                // menu) into its own split or a floating window.
+                // Below Details, folded to its tab strip while the focused
+                // item has no result yet (collapsedIds below).
                 id: "result",
                 title: "Result",
                 content: <AgentWorkResult entry={focused} />,
-                position: { relativeTo: "details", direction: "within" },
+                position: { relativeTo: "details", direction: "below" },
                 minWidth: 320,
               },
             ] satisfies DockablePanelSpec[]}
+            collapsedIds={hasResult ? undefined : ["result"]}
           />
         </div>
       )}
