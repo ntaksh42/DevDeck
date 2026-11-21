@@ -216,3 +216,20 @@ fn real_worker_round_trip() {
     }
     assert!(summarized, "no summary: {:?}", bot.chat_view().unwrap());
 }
+
+#[test]
+fn a_worker_without_a_result_folder_says_where_it_runs() {
+    let (_d, bot) = bot();
+    let target = |key: &str| snapshot::Target {
+        key: key.into(),
+        label: "!798".into(),
+        title: "t".into(),
+        repository: None,
+        web_url: None,
+    };
+    let pr = dispatch::fallback_note(&bot, Some(&target("pr:o/r/798"))).unwrap();
+    assert!(pr.contains("Review result folder"));
+    let wi = dispatch::fallback_note(&bot, Some(&target("wi:o/4521"))).unwrap();
+    assert!(wi.contains("Work item result folder"));
+    assert!(dispatch::fallback_note(&bot, None).is_none());
+}

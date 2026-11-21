@@ -152,6 +152,26 @@ fn note_target_of(row: &DispatchRow) -> NoteTarget {
     }
 }
 
+/// Why a PR / WI worker runs as a free-standing request instead of in the
+/// item's notes (its result folder is not set or missing), for a chat note.
+pub(crate) fn fallback_note(bot: &HomeBot, target: Option<&Target>) -> Option<String> {
+    let target = target?;
+    let setting = if target.key.starts_with("pr:") {
+        "Review result folder"
+    } else if target.key.starts_with("wi:") {
+        "Work item result folder"
+    } else {
+        return None;
+    };
+    if item_notes(bot, Some(target)).is_some() {
+        return None;
+    }
+    Some(format!(
+        "{}: {setting} is not set or not found, so this worker runs as a separate request and keeps no result HTML.",
+        target.label
+    ))
+}
+
 /// The item's own notes and its result folder, when that folder is set.
 fn item_notes(bot: &HomeBot, target: Option<&Target>) -> Option<(NoteTarget, i64, Option<String>)> {
     let target = target?;

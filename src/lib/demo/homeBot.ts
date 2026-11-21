@@ -155,7 +155,13 @@ export function demoSendHomeMessage(input: SendHomeMessageInput): null {
       workers = workers.map((w) => (w.id === worker.id ? { ...w, status: "done", endedAt: now() } : w));
       push(
         "orchestrator",
-        `- **${label}:** \`a1b2c3d\` で戻り値が null 許容に。直す場所は \`src/Orders/OrderServiceTests.cs:84\``,
+        [
+          `- **${label}:** \`a1b2c3d\` で戻り値が null 許容に。直す場所は \`src/Orders/OrderServiceTests.cs:84\``,
+          "- 影響: `OrderService.Find` の呼び出し 3 か所",
+          "- 再現: `dotnet test --filter Orders` で 2 件失敗",
+          "- 案: null を空の注文に置き換える (`OrderService.cs:41`)",
+          "- 未確認: 夜間ビルドでの再現",
+        ].join("\n"),
       );
     }, 5000);
   }, 1200);

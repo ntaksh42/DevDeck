@@ -91,7 +91,13 @@ pub(crate) struct LookResult {
 
 fn clip(text: &str, max: usize) -> String {
     let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    one_line.chars().take(max).collect()
+    if one_line.chars().count() <= max {
+        return one_line;
+    }
+    // Cut text ends in "…" so the reader can tell it goes on.
+    let mut cut: String = one_line.chars().take(max.saturating_sub(1)).collect();
+    cut.push('…');
+    cut
 }
 
 /// Reads the run's JSON. Values past their limits are cut; a suggestion
@@ -196,6 +202,8 @@ mod tests {
         let look = parse(&text, &snapshot()).unwrap();
         assert_eq!(look.suggestions.len(), PER_RUN);
         assert_eq!(look.suggestions[0].title.chars().count(), TITLE_MAX);
+        assert!(look.suggestions[0].title.ends_with('…'));
+        assert_eq!(clip("短い", TITLE_MAX), "短い");
     }
 
     #[test]

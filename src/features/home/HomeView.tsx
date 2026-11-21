@@ -30,6 +30,7 @@ export function HomeView() {
   const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [errorOpen, setErrorOpen] = useState(false);
   const [draft, setDraft] = useState<HomeDraft>(EMPTY_DRAFT);
   const [choice, setChoice] = useState<{ agent: AgentKind | null; model: string | null }>({ agent: null, model: null });
   const [activate, setActivate] = useState<{ id: string; key: number }>({ id: "chat", key: 1 });
@@ -180,9 +181,24 @@ export function HomeView() {
   const listPane = (
     <div className="flex h-full min-h-0 flex-col">
       {!look.running && look.error ? (
-        <div role="alert" className="truncate border-b border-destructive/30 bg-destructive/10 px-3 py-1 text-xs text-destructive" title={look.error}>
+        <button
+          type="button"
+          role="alert"
+          aria-expanded={errorOpen}
+          onClick={() => setErrorOpen((open) => !open)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            setErrorOpen(false);
+            focusList();
+          }}
+          title={errorOpen ? "Collapse (Enter)" : "Show the whole error (Enter)"}
+          className={`border-b border-destructive/30 bg-destructive/10 px-3 py-1 text-left text-xs text-destructive outline-none focus-visible:ring-1 focus-visible:ring-destructive ${
+            errorOpen ? "whitespace-pre-wrap break-words" : "truncate"
+          }`}
+        >
           Look failed{look.failuresInARow > 1 ? ` ×${look.failuresInARow}` : ""}: {look.error}
-        </div>
+        </button>
       ) : null}
       <HomeSuggestionList
         ref={attachList}
@@ -204,8 +220,9 @@ export function HomeView() {
           view.newCount ? `${view.newCount} new` : null,
           look.nextAt ? `Next look ${shortTime(look.nextAt)}` : "Look around off",
         ]}
+        helpSection="home"
       >
-        <span className="text-2xs text-muted-foreground">Q start ・ E dismiss ・ M chat ・ W workers ・ L look ・ N new</span>
+        <span className="text-2xs text-muted-foreground">Q start ・ E dismiss ・ L look</span>
       </ListStatusBar>
     </div>
   );
@@ -274,6 +291,7 @@ export function HomeView() {
             content: (
               <HomeOrchestratorChat
                 chat={chatData}
+                brief={view.brief}
                 composer={composer}
                 onStarter={(text) => setDraft((current) => ({ ...EMPTY_DRAFT, key: current.key + 1, text }))}
                 onOpenWorker={openWorker}

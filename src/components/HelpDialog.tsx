@@ -243,6 +243,15 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Candidates: select / select range / select all shown / exclude / run selected</span><kbd className={kbd}>Space / Shift+↑↓ / A / X / Ctrl+Enter</kbd></div>
           <div className={row}><span>Candidates: filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
 
+          <p {...sectionProps("home")}>Home</p>
+          <div className={row}><span>Move suggestion</span><kbd className={kbd}>↑ ↓</kbd></div>
+          <div className={row}><span>Start (puts the ask in the chat input) / dismiss</span><kbd className={kbd}>Q / E</kbd></div>
+          <div className={row}><span>Look now</span><kbd className={kbd}>L</kbd></div>
+          <div className={row}><span>Chat input / Workers / new chat</span><kbd className={kbd}>M / W / N</kbd></div>
+          <div className={row}><span>Open the target in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Workers: open / stop (Enter confirms)</span><kbd className={kbd}>Enter / X</kbd></div>
+          <div className={row}><span>Back to the suggestions</span><kbd className={kbd}>Esc</kbd></div>
+
           <p className={section}>Notifications</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Open / jump to item (marks read)</span><kbd className={kbd}>Enter</kbd></div>

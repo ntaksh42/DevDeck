@@ -242,6 +242,7 @@ impl HomeBot {
                             model,
                         ) {
                             Ok(id) => {
+                                notes.extend(dispatch::fallback_note(self, target.as_ref()));
                                 starts += 1;
                                 started.push(id);
                             }
