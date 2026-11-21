@@ -136,6 +136,20 @@ export async function saveHomeBotSettings(input: HomeBotSettings): Promise<HomeB
   return homeBotSettingsSchema.parse(await invokeCommand("save_home_bot_settings", { input }));
 }
 
+/** A pipeline the Pipelines view watches; Look around reads its latest run. */
+export type HomeWatchedPipeline = {
+  organizationId: string;
+  projectId: string;
+  projectName: string;
+  definitionId: number;
+  definitionName: string;
+};
+
+/** Copies the Pipelines view's watch list to the backend for Look around. */
+export async function saveHomePipelines(pipelines: HomeWatchedPipeline[]): Promise<void> {
+  await invokeCommand("save_home_pipelines", { input: { pipelines } });
+}
+
 export async function clearHomeDismissed(): Promise<void> {
   await invokeCommand("clear_home_dismissed", {});
 }

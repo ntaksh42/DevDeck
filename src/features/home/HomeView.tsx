@@ -10,6 +10,7 @@ import { commandErrorMessage, getAppSettings, startHomeSuggestion, type AgentKin
 import { openExternalUrl } from "@/lib/openExternal";
 import { pushNotice, pushToast } from "@/lib/toast";
 import { clamp, formatRelativeDate } from "@/lib/utils";
+import { shareWithLookAround } from "@/features/pipelines/pipelineSubscriptionsStorage";
 import { HomeChatComposer } from "./HomeChatComposer";
 import { EMPTY_DRAFT, HomeOrchestratorChat, OrchestratorStatePill, type HomeDraft } from "./HomeOrchestratorChat";
 import { HOME_SUGGESTIONS_SHOWN, HomeSuggestionList } from "./HomeSuggestionList";
@@ -39,6 +40,8 @@ export function HomeView() {
 
   // Opening Home reads the suggestions (and arms the schedule the first time).
   useEffect(() => markSeen(), [markSeen]);
+  // Look around reads the watched pipelines from a backend copy; refresh it.
+  useEffect(() => shareWithLookAround(), []);
 
   const focusList = useCallback(() => listRef.current?.focus(), []);
   const attachList = useCallback((element: HTMLDivElement | null) => {

@@ -7,6 +7,7 @@ mod chat;
 mod dispatch;
 mod look;
 mod material;
+mod pipelines;
 mod runner;
 mod schedule;
 mod snapshot;
@@ -24,6 +25,7 @@ use chrono::Local;
 use crate::agent_notes::AgentNoteService;
 use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
+pub use pipelines::WatchedPipeline;
 use runner::{ReadAgent, RunError, Tools};
 pub use types::*;
 
@@ -154,7 +156,13 @@ impl HomeBot {
         let now = now_ms();
         let run_id = store::begin_run(&conn, trigger, slot, &settings.agent, model, now)?;
         self.notify();
-        let snapshot = snapshot::build(&self.db, chrono::Utc::now())?;
+        let mut snapshot = snapshot::build(&self.db, chrono::Utc::now())?;
+        let watched = pipelines::overview(&self.db);
+        snapshot.markdown = if snapshot.markdown.contains(snapshot::NO_PIPELINES) {
+            snapshot.markdown.replace(snapshot::NO_PIPELINES, &watched)
+        } else {
+            snapshot.markdown + &watched
+        };
         let (open, started, dismissed) = store::history_titles(&conn, now)?;
         let workspace = self.workspace();
         let prompt = look::prompt(
@@ -275,6 +283,11 @@ impl HomeBot {
 
     pub fn dismissed_count(&self) -> Result<i64> {
         store::dismissed_count(&self.db.open()?)
+    }
+
+    /// The Pipelines view's watch list, which Look around reads.
+    pub fn save_pipelines(&self, list: Vec<WatchedPipeline>) -> Result<()> {
+        pipelines::save_watch(&self.db.open()?, &list)
     }
 
     pub fn save_settings(&self, input: HomeBotSettings) -> Result<HomeBotSettings> {

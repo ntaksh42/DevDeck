@@ -196,6 +196,8 @@ export function dispatchHomeBot(command: string, args: unknown): unknown {
       return demoStartHomeSuggestion(String(input.id));
     case "save_home_bot_settings":
       return demoSaveHomeBotSettings(input as unknown as HomeBotSettings);
+    case "save_home_pipelines":
+      return null;
     case "clear_home_dismissed":
       return demoClearHomeDismissed();
     case "count_home_dismissed":

@@ -32,7 +32,7 @@ Home は、DevDeck が同期した PR・Work Item・Inbox・Agent の会話を�
 
 ## Look around
 
-- 実行: `run_home_look_now`、またはスケジュールの枠。DevDeck が同期キャッシュから概要 (Markdown、最大 6 万字) を作り、エージェントを読み取り専用で起動する。概要に入るのは、接続ごとの Inbox の未処理 (判断メモの判定付き)、レビュー対象 PR (自分の投票・CI・マージ状態)、自作 PR (承認数・マージ可能か)、割当 WI と、Needs you の Agent 会話。各行の先頭に対象キー (`pr:{org}/{repositoryId}/{id}` / `wi:{org}/{id}`) を付ける。パイプラインはキャッシュが無いので含めない。
+- 実行: `run_home_look_now`、またはスケジュールの枠。DevDeck が同期キャッシュから概要 (Markdown、最大 6 万字) を作り、エージェントを読み取り専用で起動する。概要に入るのは、接続ごとの Inbox の未処理 (判断メモの判定付き)、レビュー対象 PR (自分の投票・CI・マージ状態)、自作 PR (承認数・マージ可能か)、割当 WI と、Needs you の Agent 会話。各行の先頭に対象キー (`pr:{org}/{repositoryId}/{id}` / `wi:{org}/{id}`) を付ける。見回りのときだけ、Pipelines ビューで Watch しているパイプライン (先頭 30 件) の最新の実行を API で読み、失敗・一部失敗・取り消しのものを URL 付きで、残りは件数だけ「Watched pipelines」の節に入れる (読めなかったものは理由を書く)。Watch 一覧はフロントの localStorage にあるので、保存のたびと Home を開いたときに `save_home_pipelines` で `app_settings` の `home_bot_pipelines` に写す。パイプラインの提案は対象キーを持たない。Orchestrator のターンの概要にはパイプラインを入れない。
 - 出力: JSON `{brief: string[], suggestions: [{title, why, ask, target}]}`。DevDeck が検証し、題 40 字・理由 80 字・依頼文 2000 字・ブリーフ 3 行 (各 60 字)・提案 5 件で切る。題・理由・ブリーフの行は、切ったときに末尾を「…」にする。プロンプトでは題 25 字・理由とブリーフ各行 30 字以内の体言止めを求める。概要に無い `target` を名指しした提案は捨てる。
 - 提案の状態: open / started (送信した) / dismissed / replaced。同じ提案 (対象キー、無ければ空白と大小文字を無視した題) が再び来たら元の行を更新する。見回りが成功すると、その回に出なかった open は replaced。open は 3 日で replaced、replaced・started・dismissed は 30 日で削除。dismissed から 30 日以内の同じ提案は保存しない。プロンプトには表示中・着手済み (14 日)・却下 (30 日) の題を渡す。
 - 未読: Home を開いた時刻 (`mark_home_seen`) より後に作られた open の提案。
@@ -76,7 +76,7 @@ Settings → Views & workflow → **Home Bot**。値は `app_settings` の `home
 
 ## IPC
 
-`get_home_bot` / `run_home_look_now` / `mark_home_seen` / `dismiss_home_suggestion` / `start_home_suggestion` / `save_home_bot_settings` / `clear_home_dismissed` / `count_home_dismissed` / `get_home_chat` / `send_home_message` (`text`, `target`, `suggestionId`, `agent`, `model`) / `new_home_chat` / `stop_home_worker`。変化はイベント `home:updated` で知らせ、フロントは `["homeBot"]` / `["homeChat"]` を無効化する。ブラウザのデモ (`src/lib/demo/homeBot.ts`) は固定の提案と、メッセージごとに worker を 1 つ起動して約 5 秒後に要約する台本で動く。
+`get_home_bot` / `run_home_look_now` / `mark_home_seen` / `dismiss_home_suggestion` / `start_home_suggestion` / `save_home_bot_settings` / `save_home_pipelines` (`pipelines`: Watch 一覧) / `clear_home_dismissed` / `count_home_dismissed` / `get_home_chat` / `send_home_message` (`text`, `target`, `suggestionId`, `agent`, `model`) / `new_home_chat` / `stop_home_worker`。変化はイベント `home:updated` で知らせ、フロントは `["homeBot"]` / `["homeChat"]` を無効化する。ブラウザのデモ (`src/lib/demo/homeBot.ts`) は固定の提案と、メッセージごとに worker を 1 つ起動して約 5 秒後に要約する台本で動く。
 
 ## データ (スキーマ v32)
 

@@ -13,7 +13,7 @@ pub(crate) const ASK_MAX: usize = 2_000;
 pub(crate) const BRIEF_MAX_LINES: usize = 3;
 pub(crate) const BRIEF_LINE_MAX: usize = 60;
 
-const DEFAULT_FOCUS: &str = "Anything waiting on the user: reviews asked of them, failing checks or conflicts on their pull requests, questions put to them, approvals, and agent conversations that need them.";
+const DEFAULT_FOCUS: &str = "Anything waiting on the user: reviews asked of them, failing checks or conflicts on their pull requests, failing watched pipelines, questions put to them, approvals, and agent conversations that need them.";
 
 pub(crate) struct History {
     pub open: Vec<String>,
