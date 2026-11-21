@@ -14,6 +14,7 @@ test('reorders watched pipelines in Manual mode and restores that order after re
   const ci = rows.filter({ hasText: 'CI' });
   const nightly = rows.filter({ hasText: 'Nightly' });
   await expect(sort).toHaveValue('status');
+  await expect(sort.locator('option[value="manual"]')).toHaveText('Sort: Manual (reorder)');
   await expect(ci).not.toHaveAttribute('draggable', 'true');
   await sort.selectOption('manual');
   await expect(rows).toHaveText([/CI/, /Nightly/]);
@@ -27,6 +28,7 @@ test('reorders watched pipelines in Manual mode and restores that order after re
 
   await nightly.focus();
   await page.keyboard.press('Alt+ArrowDown');
+  await expect(nightly.getByText('Alt+↑/↓')).toBeVisible();
   await expect(rows).toHaveText([/CI/, /Nightly/]);
   await expect(nightly).toBeFocused();
   await page.keyboard.press('Alt+ArrowUp');

@@ -88,7 +88,7 @@ export function ViewCard({
       aria-keyshortcuts={OPTION_KEY_SHORTCUTS}
       onClick={onSelect}
       onDoubleClick={onEdit}
-      className={`rounded-md border px-2.5 py-1.5 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${drag ? REORDER_CLASSES : ""} ${selectionClasses(
+      className={`group rounded-md border px-2.5 py-1.5 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${drag ? REORDER_CLASSES : ""} ${selectionClasses(
         selected,
         stats.alerting,
       )}`}
@@ -98,7 +98,10 @@ export function ViewCard({
           {view.name}
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          {drag ? <span title={REORDER_HINT}><GripVertical className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /></span> : null}
+          {drag ? <span title={REORDER_HINT} className="flex items-center gap-1 text-muted-foreground" aria-hidden="true">
+            <GripVertical className="h-3.5 w-3.5" />
+            <span className="hidden text-2xs group-focus:inline">Shift+←/→/↑/↓</span>
+          </span> : null}
           {view.pinned ? <Pin className="h-3.5 w-3.5 text-primary" aria-hidden="true" /> : null}
           {query?.isFetching ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -178,7 +181,7 @@ export function ViewCompactRow({
       onClick={onSelect}
       onDoubleClick={onEdit}
       title={metaTitle}
-      className={`inline-flex items-center text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`group inline-flex items-center text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${
         chip
           ? "h-8 shrink-0 gap-1.5 rounded-md border px-2.5"
           : "w-fit max-w-full gap-2 justify-self-start rounded border px-2 py-1"
@@ -204,6 +207,9 @@ export function ViewCompactRow({
       <span className="min-w-0 max-w-[140px] truncate text-xs font-medium" title={view.name}>
         {view.name}
       </span>
+      {drag || chip ? <span aria-hidden="true" className="hidden shrink-0 text-2xs text-muted-foreground group-focus:inline">
+        Shift+←/→/↑/↓
+      </span> : null}
       <span
         className={`shrink-0 text-xs font-semibold tabular-nums ${stats.alerting ? "text-destructive" : ""}`}
       >

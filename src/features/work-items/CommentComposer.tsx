@@ -193,6 +193,7 @@ export function CommentComposer({
       }}
     >
       <CommentField
+        key={selectedItem ? JSON.stringify([selectedItem.organizationId, selectedItem.projectId, selectedItem.id]) : undefined}
         textareaRef={textareaRef}
         containerRef={mentionPicker.containerRef}
         data-work-item-comment-input="true"

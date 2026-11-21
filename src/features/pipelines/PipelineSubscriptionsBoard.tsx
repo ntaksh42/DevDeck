@@ -291,12 +291,14 @@ export function PipelineSubscriptionsBoard({
         value={sort}
         onChange={(event) => changeSort(event.target.value as BoardSort)}
         aria-label="Sort pipelines"
+        aria-description="Choose Manual to rearrange watched pipelines"
+        title="Choose Manual to rearrange watched pipelines"
         className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
       >
         <option value="status">Sort: Status</option>
         <option value="name">Sort: Name</option>
         <option value="lastRun">Sort: Last run</option>
-        <option value="manual">Sort: Manual</option>
+        <option value="manual">Sort: Manual (reorder)</option>
       </select>
       <button
         type="button"
@@ -348,7 +350,7 @@ export function PipelineSubscriptionsBoard({
                   data-grid-focus-fallback={key === rovingKey ? "true" : undefined}
                   aria-expanded={isOpen}
                   aria-keyshortcuts={canReorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
-                  className={`flex min-w-0 flex-1 items-center gap-2 text-left ${drag ? "cursor-grab" : ""}`}
+                  className={`group flex min-w-0 flex-1 items-center gap-2 text-left ${drag ? "cursor-grab" : ""}`}
                 >
                   {drag ? <span title="Drag to reorder or press Alt + Up / Down"><GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /></span> : null}
                   {isOpen ? (
@@ -362,6 +364,7 @@ export function PipelineSubscriptionsBoard({
                   <span className="truncate text-xs text-muted-foreground" title={sub.projectName}>
                     {sub.projectName}
                   </span>
+                  {drag ? <span aria-hidden="true" className="hidden shrink-0 text-2xs text-muted-foreground group-focus:inline">Alt+↑/↓</span> : null}
                 </button>
                 {query?.isFetching ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />

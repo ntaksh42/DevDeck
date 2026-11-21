@@ -29,6 +29,7 @@ test('reorders saved view cards and compact rows and remembers their order', asy
 
   await alpha.focus();
   await page.keyboard.press('Shift+ArrowLeft');
+  await expect(alpha.getByText('Shift+←/→/↑/↓')).toBeVisible();
   await expect.poll(order).toEqual(['Alpha', 'Charlie', 'Bravo']);
   await expect(alpha).toBeFocused();
 

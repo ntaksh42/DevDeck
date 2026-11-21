@@ -64,7 +64,7 @@ export function ReviewSectionHeader({ label, count, collapsed, preview, section,
         aria-label={`Reorder group ${label}`}
         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
         title="Drag to reorder or press Alt+Up / Alt+Down"
-        className="h-full shrink-0 cursor-grab px-1 text-muted-foreground hover:bg-muted focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-ring"
+        className="group flex h-full shrink-0 cursor-grab items-center gap-1 px-1 text-muted-foreground hover:bg-muted focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-ring"
         onKeyDown={(event) => {
           if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
           event.preventDefault();
@@ -73,6 +73,7 @@ export function ReviewSectionHeader({ label, count, collapsed, preview, section,
         }}
       >
         <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+        <span aria-hidden="true" className="hidden text-2xs group-focus:inline">Alt+↑/↓</span>
       </button>
       <button
         type="button"

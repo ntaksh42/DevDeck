@@ -66,7 +66,7 @@ export function SidebarPinnedViews({ views, setViews, counts, activeId, disabled
             }}
           >
             <NavSubItem active={activeId === view.id} disabled={disabled} label={view.name}
-              badge={counts[index]?.data ?? null} onClick={() => onOpen(view.id)} />
+              badge={counts[index]?.data ?? null} reorderable={canReorder} onClick={() => onOpen(view.id)} />
           </div>
         );
       })}
