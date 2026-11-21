@@ -20,7 +20,7 @@ import { matchesCombo, resolveKeybindings } from "@/lib/keybindings";
 import { focusPrimaryGrid, isEditableTarget } from "@/lib/utils";
 import { LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { ResultFrame } from "./ResultFrame";
-import type { ResultComment } from "./resultComment";
+import type { CommentPoster } from "./resultComment";
 import { lastAgentReplyAt, markItemSeen } from "./noteSeen";
 import { buildTextIndex, hashResult, listBlocks, locateQuote } from "./resultAnchoring";
 import { useAgentNoteActions } from "./useAgentNoteActions";
@@ -66,14 +66,17 @@ export function AgentResultPanel({
   const { target, itemId } = item;
   const actions = useAgentNoteActions(item, hasFolder);
   const queryClient = useQueryClient();
-  const postComment = pullRequest
-    ? async ({ filePath, line, content }: ResultComment) => {
-        await postPullRequestComment({ ...pullRequest, content, filePath, rightLine: line });
-        void queryClient.invalidateQueries({
-          queryKey: ["prReview", pullRequest.organizationId, pullRequest.repositoryId, pullRequest.pullRequestId],
-        });
-      }
-    : undefined;
+  const commentPoster: CommentPoster | undefined = useMemo(() => {
+    if (!pullRequest) return undefined;
+    const { organizationId, projectId, repositoryId, pullRequestId } = pullRequest;
+    return {
+      scope: `${organizationId ?? ""}:${projectId}:${repositoryId}:${pullRequestId}`,
+      post: async ({ filePath, line, content }) => {
+        await postPullRequestComment({ organizationId, projectId, repositoryId, pullRequestId, content, filePath, rightLine: line });
+        void queryClient.invalidateQueries({ queryKey: ["prReview", organizationId, repositoryId, pullRequestId] });
+      },
+    };
+  }, [pullRequest, queryClient]);
 
   const frameRef = useRef<HTMLIFrameElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -372,7 +375,7 @@ export function AgentResultPanel({
             onComment={startComment}
             onRevealNote={reveal}
             onOpenNote={openNote}
-            onPostComment={postComment}
+            commentPoster={commentPoster}
           />
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-border p-4">

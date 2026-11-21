@@ -6,7 +6,7 @@ import { focusPrimaryGrid } from "@/lib/utils";
 import { bindFramePaneFocus } from "@/lib/paneFocus";
 import { openExternalUrl } from "@/lib/openExternal";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
-import { POST_STATE_ATTR, postFromLink, readResultComment, type ResultComment } from "./resultComment";
+import { handleResultLinkClick, prepareResultLinks, RESULT_COMMENT_CSS, type CommentPoster } from "./resultComment";
 import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
 // Renders the investigation result in a script-less sandboxed iframe and layers
@@ -54,14 +54,14 @@ type Props = {
   onRevealNote: (id: string) => void;
   onOpenNote: (id: string) => void;
   /** Posts a finding link's comment to the pull request. Without it, such links just open. */
-  onPostComment?: (comment: ResultComment) => Promise<void>;
+  commentPoster?: CommentPoster;
 };
 
 export function ResultFrame({
   html, title, frameRef, frame, onFrameLoad, anchors, activeId, pendingRange,
-  onComment, onRevealNote, onOpenNote, onPostComment,
+  onComment, onRevealNote, onOpenNote, commentPoster,
 }: Props) {
-  const onPostCommentRef = useLatestRef(onPostComment);
+  const commentPosterRef = useLatestRef(commentPoster);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [blockMode, setBlockMode] = useState(false);
   const [blockIdx, setBlockIdx] = useState(0);
@@ -167,7 +167,7 @@ export function ResultFrame({
     const doc = frameRef.current?.contentDocument;
     if (doc?.head) {
       const style = doc.createElement("style");
-      style.textContent = HIGHLIGHT_CSS;
+      style.textContent = HIGHLIGHT_CSS + RESULT_COMMENT_CSS;
       doc.head.appendChild(style);
     }
     // The sandbox blocks navigation, so web links open in the user's browser.
@@ -177,15 +177,11 @@ export function ResultFrame({
       const href = link?.getAttribute("href") ?? "";
       if (!link || !/^https?:\/\//i.test(href)) return;
       event.preventDefault();
-      const comment = readResultComment(link);
-      const post = onPostCommentRef.current;
-      if (comment && post && !link.hasAttribute(POST_STATE_ATTR)) {
-        void postFromLink(link, comment, post, href);
-        return;
-      }
-      if (link.getAttribute(POST_STATE_ATTR) === "posting") return;
-      void openExternalUrl(href).catch(() => undefined);
+      void handleResultLinkClick(link, href, commentPosterRef.current, (url) => {
+        void openExternalUrl(url).catch(() => undefined);
+      });
     });
+    if (doc) prepareResultLinks(doc, commentPosterRef.current);
     onFrameLoad();
   }
 
