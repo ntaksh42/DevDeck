@@ -46,3 +46,7 @@ entity_id
 local_id
 origin_id
 azdodeck-*.png
+
+# Agent worktrees and generated review/report sheets (local only)
+/.worktrees/
+/review/
