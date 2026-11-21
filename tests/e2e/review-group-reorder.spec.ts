@@ -19,6 +19,7 @@ test('reorders review groups by drag and keyboard and remembers each grouping', 
   const handle = grid.getByRole('button', { name: secondRepo!, exact: true });
   await handle.focus();
   await page.keyboard.press('Alt+ArrowUp');
+  await expect(handle.getByText('Alt+↑/↓')).toBeVisible();
   const reorderedRepos = [secondRepo, firstRepo, ...otherRepos];
   await expect.poll(order).toEqual(reorderedRepos);
   await expect(handle).toBeFocused();

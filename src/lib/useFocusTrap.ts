@@ -59,7 +59,9 @@ export function useFocusTrap(
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
       if (restoreFocus) {
-        restoreTimerRef.current = window.setTimeout(() => openerRef.current?.focus(), 0);
+        restoreTimerRef.current = window.setTimeout(() => {
+          if (document.activeElement === document.body) openerRef.current?.focus();
+        }, 0);
       }
     };
   }, [containerRef, restoreFocus]);

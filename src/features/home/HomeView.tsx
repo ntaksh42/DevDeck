@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { modelChoices, settingsModel } from "@/components/agent/agentModels";
@@ -10,6 +11,7 @@ import { commandErrorMessage, getAppSettings, startHomeSuggestion, type AgentKin
 import { openExternalUrl } from "@/lib/openExternal";
 import { pushNotice, pushToast } from "@/lib/toast";
 import { clamp, formatRelativeDate } from "@/lib/utils";
+import { useLatestRef } from "@/lib/useLatestRef";
 import { shareWithLookAround } from "@/features/pipelines/pipelineSubscriptionsStorage";
 import { HomeChatComposer } from "./HomeChatComposer";
 import { EMPTY_DRAFT, HomeOrchestratorChat, OrchestratorStatePill, type HomeDraft } from "./HomeOrchestratorChat";
@@ -33,6 +35,9 @@ export function HomeView() {
   const [showAll, setShowAll] = useState(false);
   const [errorOpen, setErrorOpen] = useState(false);
   const [draft, setDraft] = useState<HomeDraft>(EMPTY_DRAFT);
+  const draftRef = useLatestRef(draft);
+  const { confirm, dialogProps } = useConfirm();
+  const draftRequest = useRef(0);
   const [choice, setChoice] = useState<{ agent: AgentKind | null; model: string | null }>({ agent: null, model: null });
   const [activate, setActivate] = useState<{ id: string; key: number }>({ id: "chat", key: 1 });
   const listRef = useRef<HTMLDivElement>(null);
@@ -80,20 +85,37 @@ export function HomeView() {
     setSelectedId(target.id);
   }
 
+  function offerDraft(next: Omit<HomeDraft, "key">) {
+    const apply = () => {
+      setDraft((current) => ({ ...next, key: current.key + 1 }));
+      showPanel("chat");
+    };
+    if (draftRef.current.text.trim()) {
+      confirm({
+        title: "Replace your draft?",
+        message: "Your current message will be replaced.",
+        confirmLabel: "Replace draft",
+        onConfirm: apply,
+      });
+    } else {
+      apply();
+    }
+  }
+
   async function start() {
     if (!selected) return;
+    const request = ++draftRequest.current;
     try {
       const ask = await startHomeSuggestion(selected.id);
-      setDraft((current) => ({
-        key: current.key + 1,
+      if (request !== draftRequest.current) return;
+      offerDraft({
         text: ask.ask,
         target: ask.target,
         targetLabel: ask.targetLabel,
         suggestionId: selected.id,
-      }));
-      showPanel("chat");
+      });
     } catch (error) {
-      pushToast(commandErrorMessage(error));
+      if (request === draftRequest.current) pushToast(commandErrorMessage(error));
     }
   }
 
@@ -111,7 +133,7 @@ export function HomeView() {
 
   async function sendMessage(text: string) {
     await send.mutateAsync({ text, target: draft.target, suggestionId: draft.suggestionId, agent, model });
-    setDraft((current) => ({ ...EMPTY_DRAFT, key: current.key + 1 }));
+    setDraft((current) => current === draft ? { ...EMPTY_DRAFT, key: current.key + 1 } : current);
     setChoice({ agent: null, model: null });
     focusList();
   }
@@ -272,6 +294,7 @@ export function HomeView() {
   const composer = (
     <HomeChatComposer
       draft={draft}
+      onChange={(text) => setDraft((current) => ({ ...current, text }))}
       busy={send.isPending || chatData?.state === "thinking"}
       agent={agent}
       defaultAgent={homeAgent}
@@ -301,7 +324,10 @@ export function HomeView() {
                 chat={chatData}
                 brief={view.brief}
                 composer={composer}
-                onStarter={(text) => setDraft((current) => ({ ...EMPTY_DRAFT, key: current.key + 1, text }))}
+                onStarter={(text) => {
+                  draftRequest.current += 1;
+                  offerDraft({ text, target: null, targetLabel: null, suggestionId: null });
+                }}
                 onOpenWorker={openWorker}
               />
             ),
@@ -325,6 +351,7 @@ export function HomeView() {
           },
         ] satisfies DockablePanelSpec[]}
       />
+      {dialogProps ? <ConfirmDialog {...dialogProps} cancelLabel="Keep draft" /> : null}
     </div>
   );
 }

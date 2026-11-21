@@ -77,15 +77,15 @@ export function CommentField({
       const links: string[] = [];
       for (const file of images) {
         const url = await uploadCommentImage(imageTarget, file);
+        if (!field.isConnected || field.value !== value) return;
         links.push(`![Pasted image](<${url}>)`);
       }
-      if (!field.isConnected || field.value !== value) return;
       const inserted = `\n${links.join("\n")}\n`;
       const caret = selectionStart + inserted.length;
       onImagePaste(value.slice(0, selectionStart) + inserted + value.slice(selectionEnd), caret);
       requestAnimationFrame(() => field.setSelectionRange(caret, caret));
     } catch (error) {
-      setImageError(commandErrorMessage(error));
+      if (field.isConnected) setImageError(commandErrorMessage(error));
     } finally {
       uploading.current = false;
       setImagePending(false);
