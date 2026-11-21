@@ -15,7 +15,7 @@ export type HomeDraft = {
 export const EMPTY_DRAFT: HomeDraft = { key: 0, text: "", target: null, targetLabel: null, suggestionId: null };
 
 /** Starters shown on an empty chat; one click puts it in the input. */
-const STARTERS = ["今日は何から手を付けるべき？", "承認やレビューで自分を待っているものは？", "自分の PR で止まっているものを洗い出して"];
+const STARTERS = ["今日の優先は？", "自分待ちのものは？", "止まっている自分の PR は？"];
 
 function stateLabel(state: HomeChatView["state"], waitingOn: number): string {
   if (state === "thinking") return "Replying…";
@@ -203,10 +203,7 @@ export function HomeOrchestratorChat({
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-600 text-white dark:bg-violet-500">
                 <Bot className="h-6 w-6" aria-hidden="true" />
               </span>
-              <div>
-                <p className="text-sm font-semibold">Orchestrator</p>
-                <p className="text-xs text-muted-foreground">質問に答え、調査やレビューは worker に任せて結果をまとめます。</p>
-              </div>
+              <p className="text-sm font-semibold">Orchestrator</p>
               <div className="flex flex-wrap justify-center gap-2">
                 {STARTERS.map((starter) => (
                   <button
@@ -242,7 +239,7 @@ export function HomeOrchestratorChat({
           {chat?.error ? (
             <div className="flex justify-center">
               <p role="alert" className="rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive">
-                The last reply failed: {chat.error}
+                Reply failed: {chat.error}
               </p>
             </div>
           ) : null}

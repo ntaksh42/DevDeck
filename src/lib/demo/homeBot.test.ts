@@ -19,7 +19,7 @@ describe("Home Bot demo", () => {
     vi.advanceTimersByTime(5100);
     const done = chat();
     expect(done.workers[0].status).toBe("done");
-    expect(done.messages[done.messages.length - 1]?.body).toContain("!798 の結果");
+    expect(done.messages[done.messages.length - 1]?.body).toContain("**!798:**");
   });
 
   it("dismisses and starts suggestions, and keeps the settings", () => {

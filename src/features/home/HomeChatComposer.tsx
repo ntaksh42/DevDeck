@@ -133,7 +133,7 @@ export function HomeChatComposer({
           rows={1}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={busy ? "The Orchestrator is replying…" : "Message the Orchestrator… (Enter to send, Shift+Enter for a new line)"}
+          placeholder={busy ? "The Orchestrator is replying…" : "Message the Orchestrator…"}
           aria-label="Message the Orchestrator"
           className="block max-h-[200px] w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-sm leading-6 outline-none placeholder:text-muted-foreground"
         />

@@ -179,14 +179,9 @@ export function HomeView() {
 
   const listPane = (
     <div className="flex h-full min-h-0 flex-col">
-      {look.running ? (
-        <div role="status" className="border-b border-info/30 bg-info/10 px-3 py-1 text-xs text-info">
-          ● Looking around… (read-only)
-        </div>
-      ) : look.error ? (
-        <div role="alert" className="border-b border-destructive/30 bg-destructive/10 px-3 py-1 text-xs text-destructive">
-          Last look failed{look.failuresInARow > 1 ? ` (${look.failuresInARow} in a row)` : ""}: {look.error}
-          {view.settings.enabled ? " Press L to try again." : " Look around is off; turn it on in Settings."}
+      {!look.running && look.error ? (
+        <div role="alert" className="truncate border-b border-destructive/30 bg-destructive/10 px-3 py-1 text-xs text-destructive" title={look.error}>
+          Look failed{look.failuresInARow > 1 ? ` ×${look.failuresInARow}` : ""}: {look.error}
         </div>
       ) : null}
       <HomeSuggestionList
@@ -210,14 +205,14 @@ export function HomeView() {
           look.nextAt ? `Next look ${shortTime(look.nextAt)}` : "Look around off",
         ]}
       >
-        <span className="text-2xs text-muted-foreground">Q start ・ E dismiss ・ M chat ・ W workers ・ L look now ・ N new chat</span>
+        <span className="text-2xs text-muted-foreground">Q start ・ E dismiss ・ M chat ・ W workers ・ L look ・ N new</span>
       </ListStatusBar>
     </div>
   );
 
   const lookButton = (
     <span className="flex items-center gap-2 text-2xs text-muted-foreground">
-      <span>{lookText}</span>
+      <span role="status">{lookText}</span>
       <button
         type="button"
         onClick={() => lookNow.mutate()}

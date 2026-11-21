@@ -89,7 +89,7 @@ export function HomeWorkersPanel({
         onKeyDown={onKeyDown}
         className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-primary"
       >
-        {workers.length === 0 && <PreviewEmptyState message="No workers yet." hint="Ask the Orchestrator to look into something." />}
+        {workers.length === 0 && <PreviewEmptyState message="No workers yet." />}
         {workers.map((worker, i) => {
           const selected = focused?.id === worker.id;
           return (
@@ -109,7 +109,7 @@ export function HomeWorkersPanel({
                 <div className="truncate text-xs text-muted-foreground">{workerDetail(worker)}</div>
                 {confirmingId === worker.id ? (
                   <div role="alert" className="mt-0.5 rounded bg-destructive/10 px-1.5 text-xs text-destructive">
-                    Stop this worker? Enter to stop, Esc to keep it running.
+                    Stop? Enter ・ Esc cancels
                   </div>
                 ) : null}
               </div>
@@ -119,7 +119,7 @@ export function HomeWorkersPanel({
         })}
       </div>
       <ListStatusBar summary={[itemCount(workers.length), `${running} running ・ ${HOME_WORKER_LIMIT} max`]}>
-        <span className="text-2xs text-muted-foreground">Enter: open in Agent panel ・ X: stop</span>
+        <span className="text-2xs text-muted-foreground">Enter open ・ X stop</span>
       </ListStatusBar>
     </div>
   );
