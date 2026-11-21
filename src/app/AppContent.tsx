@@ -1,14 +1,13 @@
-import { Suspense } from "react";
+import { Suspense, type Dispatch, type SetStateAction } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
+import { handlePaneFocusKey } from "@/lib/paneFocus";
 import { MyReviewsGrid } from "@/features/pull-requests/MyReviewsGrid";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
 import type { WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
 import {
-  CommitSearch,
   PipelinesView,
-  CodeBrowseView,
   WorkItemSearch,
   WorkItemViewsPanel,
   MyWorkItemsPanel,
@@ -16,9 +15,11 @@ import {
   SetupPanel,
   PullRequestSearch,
   MyPullRequestsGrid,
-  AnalyzeView,
   CrossOrgSummaryView,
+  HomeView,
   NotificationsView,
+  InboxView,
+  AgentWorkView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
 
@@ -28,20 +29,18 @@ export interface AppContentProps {
   organizationsQuery: Pick<UseQueryResult, "isLoading" | "isError" | "error" | "refetch">;
   pullRequestSearchRequest: ExternalSearchRequest | null;
   workItemSearchRequest: ExternalSearchRequest | null;
-  commitSearchRequest: ExternalSearchRequest | null;
   myReviewsSelectRequest: MyReviewsSelectRequest | null;
   selectedWorkItemViewRequestId: string | null;
   onPullRequestSearchHandled: () => void;
   onWorkItemSearchHandled: () => void;
-  onCommitSearchHandled: () => void;
   onMyReviewsSelectHandled: () => void;
   onSelectedViewChange: (id: string | null) => void;
   onSelectedViewRequestHandled: () => void;
-  onWorkItemNavViewsChange: (views: WorkItemQueryView[]) => void;
+  workItemNavViews: WorkItemQueryView[];
+  setWorkItemNavViews: Dispatch<SetStateAction<WorkItemQueryView[]>>;
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
   onOpenView: (view: "pipelines" | "settings" | "myReviews" | "myWorkItems") => void;
-  onOpenCommit: (query: string, organizationId?: string) => void;
 }
 
 export function AppContent({
@@ -50,26 +49,27 @@ export function AppContent({
   organizationsQuery,
   pullRequestSearchRequest,
   workItemSearchRequest,
-  commitSearchRequest,
   myReviewsSelectRequest,
   selectedWorkItemViewRequestId,
   onPullRequestSearchHandled,
   onWorkItemSearchHandled,
-  onCommitSearchHandled,
   onMyReviewsSelectHandled,
   onSelectedViewChange,
   onSelectedViewRequestHandled,
-  onWorkItemNavViewsChange,
+  workItemNavViews,
+  setWorkItemNavViews,
   onOpenSettings,
   onOpenPullRequest,
   onOpenView,
-  onOpenCommit,
 }: AppContentProps) {
   return (
     <section
-      className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 ${
+      data-focus-pane="view"
+      tabIndex={-1}
+      onKeyDownCapture={handlePaneFocusKey}
+      className={`flex min-h-0 flex-1 flex-col outline-none ${
         activeView === "settings" || organizations.length === 0
-          ? "overflow-auto"
+          ? "overflow-auto px-3 py-3 lg:px-5"
           : "overflow-hidden"
       }`}
     >
@@ -106,24 +106,21 @@ export function AppContent({
             selectedViewRequestId={selectedWorkItemViewRequestId}
             onSelectedViewChange={onSelectedViewChange}
             onSelectedViewRequestHandled={onSelectedViewRequestHandled}
-            onViewsChange={onWorkItemNavViewsChange}
-          />
-        ) : activeView === "commits" ? (
-          <CommitSearch
-            externalSearch={commitSearchRequest}
-            onExternalSearchHandled={onCommitSearchHandled}
-            onOpenPullRequest={onOpenPullRequest}
+            views={workItemNavViews}
+            setViews={setWorkItemNavViews}
           />
         ) : activeView === "pipelines" ? (
           <PipelinesView />
-        ) : activeView === "codeSearch" ? (
-          <CodeBrowseView onOpenCommit={onOpenCommit} />
+        ) : activeView === "inbox" ? (
+          <InboxView />
+        ) : activeView === "home" ? (
+          <HomeView />
+        ) : activeView === "autoQueue" ? (
+          <AgentWorkView />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (
           <CrossOrgSummaryView onOpenView={onOpenView} />
-        ) : activeView === "analyze" ? (
-          <AnalyzeView />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

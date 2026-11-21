@@ -5,10 +5,6 @@ use tauri::State;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::agent_notes::AgentNoteService;
-use crate::cancellation::CancellationRegistry;
-use crate::code_browse::CodeBrowseService;
-use crate::code_search::CodeSearchService;
-use crate::commits::CommitService;
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
 use crate::orgs::OrganizationService;
@@ -17,6 +13,7 @@ use crate::pr_review::PrReviewService;
 use crate::project_info::ProjectInfoService;
 use crate::providers::{AzdoProvider, GithubProvider, Provider};
 use crate::prs::PullRequestService;
+use crate::repos::RepoService;
 use crate::secrets::SecretStore;
 use crate::settings::SettingsService;
 use crate::snooze::SnoozeService;
@@ -31,16 +28,13 @@ pub(crate) struct AppState {
     pub(crate) pull_requests: PullRequestService,
     pub(crate) pr_review: PrReviewService,
     pub(crate) work_items: WorkItemService,
-    pub(crate) commits: CommitService,
     pub(crate) pipelines: PipelineService,
-    pub(crate) code_search: CodeSearchService,
-    pub(crate) code_browse: CodeBrowseService,
+    pub(crate) repos: RepoService,
     pub(crate) wiki: WikiService,
     pub(crate) project_info: ProjectInfoService,
     pub(crate) settings: SettingsService,
     pub(crate) agent_notes: AgentNoteService,
     pub(crate) snooze: SnoozeService,
-    pub(crate) cancellation: CancellationRegistry,
     pub(crate) sync_trigger: mpsc::Sender<SyncTrigger>,
     /// The API-layer provider for the active connection. Built lazily from the
     /// active organization and swapped when the active connection changes, so
@@ -86,9 +80,7 @@ impl AppState {
                 self.pull_requests.clone(),
                 self.pr_review.clone(),
                 self.work_items.clone(),
-                self.commits.clone(),
-                self.code_search.clone(),
-                self.code_browse.clone(),
+                self.repos.clone(),
                 self.wiki.clone(),
                 self.project_info.clone(),
                 self.pipelines.clone(),

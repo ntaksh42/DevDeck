@@ -1,16 +1,20 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
+import { focusPrimaryGrid, isEditableTarget } from '@/lib/utils';
+import { ListStateChip } from '@/components/ListStatusBar';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import { DockableWorkspace, type DockablePanelSpec } from '@/components/DockableWorkspace';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { PreviewToolbarSlotProvider, usePreviewToolbarSlot } from '@/components/PreviewToolbarSlot';
-import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
+import { MemoWorkItemPreviewPanel } from './MemoWorkItemPreviewPanel';
+import type { WorkItemDuplicateDraft } from './workItemChanges';
 import { WorkItemResultSection } from './WorkItemResultSection';
-import { storeCustomPreviewFields } from './previewFieldsStorage';
-import { workItemQueryKeys } from './queryKeys';
+import { storeCustomPreviewFields, type CustomPreviewField } from './previewFieldsStorage';
+import { invalidateWorkItemSnoozeCaches } from './queryKeys';
 import {
   DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
   MAX_WORK_ITEM_PREVIEW_WIDTH,
@@ -21,7 +25,10 @@ import {
   type WiSortState,
 } from './workItemsGridHelpers';
 import { BulkActionBar, BulkFailurePanel } from './BulkActionBar';
+import { useWorkItemInvestigation } from './useWorkItemInvestigation';
+import { InvestigateSplitButton } from './InvestigateSplitButton';
 import { WiGridHeader } from './WiGridHeader';
+import { useExtraColumnLabel } from './useWorkItemFields';
 import { WiGridBody } from './WiGridBody';
 import { WiGridStatusBar } from './WiGridStatusBar';
 import { WiColumnFilterDropdown } from './WiColumnFilterDropdown';
@@ -29,22 +36,23 @@ import { WiFieldColumnsSection } from './WiFieldColumnsSection';
 import { useWiGridState } from './useWiGridState';
 import { useWiGridLogic } from './useWiGridLogic';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
-
+import { usePublishAgentListScope } from '@/components/agent/agentListScope';
+import { usePublishAgentSubject } from '@/components/agent/agentSubject';
+import { wiAgentList, wiFilterNotes, type WiAgentListInfo } from './wiAgentList';
 // Re-export so existing importers (e.g. bulkSelectionSummary.test.ts) keep working.
 export { summarizeBy } from './BulkActionBar';
-
 // Stable empty array for the `extraColumns` default: a fresh `[]` on every
 // render would flow down into the memoized MemoWiRow and defeat its memo,
 // since callers that omit this prop would otherwise pass a new reference
 // every render.
 const EMPTY_EXTRA_COLUMNS: string[] = [];
-
 export function WorkItemsGrid({
   results,
   loading,
   searched,
   autoFocus = false,
   emptyMessage,
+  emptyContent,
   dataUpdatedAt,
   isFetching = false,
   activeExternalFilterCount = 0,
@@ -59,18 +67,24 @@ export function WorkItemsGrid({
   triageScope,
   snoozeOrganizationId,
   filterBar,
+  agentList,
+  filterResetKey,
 }: {
+  /** Offered to the Agent panel as "This list" (the visible rows and these notes). */
+  agentList?: WiAgentListInfo;
   results: WorkItemSummary[];
   loading: boolean;
   searched: boolean;
   autoFocus?: boolean;
   emptyMessage?: string;
+  /** Replaces the default "Run a search" empty state before the first search. */
+  emptyContent?: ReactNode;
   dataUpdatedAt?: number;
   isFetching?: boolean;
   activeExternalFilterCount?: number;
   extraColumns?: string[];
-  /** Org/project whose fields the Columns menu offers as extra columns. */
-  fieldColumnsSource?: { organizationId: string; projectId: string };
+  /** Organization whose fields the Columns menu offers as extra columns. */
+  fieldColumnsSource?: { organizationId: string };
   /** When set, the Columns menu can add/remove extra field columns. */
   onExtraColumnsChange?: (columns: string[]) => void;
   initialSort?: WiSortState;
@@ -82,6 +96,7 @@ export function WorkItemsGrid({
   snoozeOrganizationId?: string;
   /** Rendered in the grid's dock tab strip (see `WorkItemFilterBar`). */
   filterBar?: ReactNode;
+  filterResetKey?: number;
 }) {
   const state = useWiGridState({
     storageKeyScope,
@@ -90,16 +105,40 @@ export function WorkItemsGrid({
     onSortChange,
     snoozeOrganizationId,
   });
-
+  const columnDrag = useColumnDrag(state.reorderColumn);
+  useEffect(() => {
+    if (filterResetKey === undefined) return;
+    state.setColumnFilters({});
+    state.setStaleOnly(false);
+  }, [filterResetKey]);
+  const extraColumnLabel = useExtraColumnLabel(fieldColumnsSource?.organizationId);
   const g = useWiGridLogic(
-    { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
+    { results, loading, triageScope, extraColumns, extraColumnLabel, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
-
+  usePublishAgentListScope(
+    agentList && searched
+      ? wiAgentList(agentList, g.displayed, () => wiFilterNotes(state.columnFilters, state.staleOnly))
+      : undefined,
+  );
+  const investigation = useWorkItemInvestigation(g.checkedItems.length ? g.checkedItems : g.selectedItem ? [g.selectedItem] : []);
+  const investigateButton = <InvestigateSplitButton {...investigation} title="Investigate selected work items (I)" />;
+  const selectedForAgent = g.selectedItem;
+  usePublishAgentSubject(
+    selectedForAgent
+      ? {
+          kind: 'work-item',
+          id: selectedForAgent.id,
+          title: selectedForAgent.title,
+          organizationId: selectedForAgent.organizationId,
+          projectId: selectedForAgent.projectId,
+          webUrl: selectedForAgent.webUrl,
+        }
+      : null,
+  );
   // Duplicate flow: the preview panel hands over a prefilled draft (D key or
   // the header button) and the create dialog finishes the job.
   const [duplicateDraft, setDuplicateDraft] = useState<CreateWorkItemDraft | null>(null);
-
   const snoozeFallbackItems = useMemo(
     () =>
       new Map(
@@ -115,21 +154,36 @@ export function WorkItemsGrid({
     ? `${WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY}:${storageKeyScope}`
     : WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY;
 
+  /** Back from the Done / Snoozed list to the open one, keeping keyboard focus in the grid. */
+  function leaveStateView() {
+    state.setShowDone(false);
+    state.setShowSnoozed(false);
+    window.setTimeout(focusPrimaryGrid, 0);
+  }
+  const stateView = state.showSnoozed ? 'Snoozed' : state.showDone ? 'Done' : null;
+
   const gridPane = (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+    <div data-grid-focus-fallback="true" tabIndex={-1}
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
+      onKeyDown={(event) => {
+        // Escape from the Done / Snoozed list (rows or status bar) goes back to the open list.
+        if (event.key !== 'Escape' || !stateView || state.openFilterCol || g.checkedItems.length > 0) return;
+        if (isEditableTarget(event.target)) return;
+        event.preventDefault();
+        leaveStateView();
+      }}
+    >
       {state.showSnoozed && snoozeOrganizationId ? (
         <SnoozedItemsPanel
           organizationId={snoozeOrganizationId}
           itemType="work_item"
           fallbackItems={snoozeFallbackItems}
           onUnsnoozed={() =>
-            state.queryClient.invalidateQueries({
-              queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),
-            })
+            invalidateWorkItemSnoozeCaches(state.queryClient, snoozeOrganizationId)
           }
         />
       ) : (
-      <div ref={state.setGridScrollNode} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+      <div ref={state.setGridScrollNode} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto [overflow-anchor:none]">
         <div ref={state.gridRef} style={{ minWidth: state.gridMinWidth }}>
           <WiGridHeader
             displayed={g.displayed}
@@ -137,34 +191,34 @@ export function WorkItemsGrid({
             setCheckedIds={state.setCheckedIds}
             setLastCheckedIndex={state.setLastCheckedIndex}
             wiColTemplate={state.wiColTemplate}
-            visibleColumns={state.visibleColumns}
+            visibleColumns={state.shownColumns}
             sort={state.sort}
             onSort={state.applyWiSort}
             columnFilters={state.columnFilters}
             onFilterOpen={g.openFilter}
             columnResizeProps={state.columnResizeProps}
+            columnDrag={columnDrag}
             extraColumns={extraColumns}
+            extraColumnLabel={extraColumnLabel}
           />
           <WiGridBody
+            scroller={state.scrollerAttached}
             showBlockingLoading={g.showBlockingLoading}
             searched={searched}
             sorted={g.sorted}
             displayed={g.displayed}
             emptyMessage={emptyMessage}
+            emptyContent={emptyContent}
             clearAllFilters={g.clearAllFilters}
-            firstVirtualRow={g.firstVirtualRow}
-            virtualRows={g.virtualRows}
             selectedIndex={g.selectedIndex}
             checkedIds={state.checkedIds}
             unreadKeys={g.unreadKeys}
             wiColTemplate={state.wiColTemplate}
-            visibleColumns={state.visibleColumns}
+            visibleColumns={state.shownColumns}
             extraColumns={extraColumns}
             staleThresholdDays={g.staleThresholdDays}
             rowColorRules={g.rowColorRules}
             rowRefs={state.rowRefs}
-            virtualTopPadding={g.virtualTopPadding}
-            virtualBottomPadding={g.virtualBottomPadding}
             setSelectedIndex={g.setSelectedIndex}
             handleCheckboxChange={g.handleCheckboxChange}
             onShiftRangeSelect={g.selectRangeTo}
@@ -189,27 +243,43 @@ export function WorkItemsGrid({
         snoozeEnabled={state.snoozeEnabled}
         showSnoozed={state.showSnoozed}
         setShowSnoozed={state.setShowSnoozed}
+        snoozedCount={state.snoozedKeys.size}
         activeFilterCount={g.activeFilterCount}
         clearAllFilters={g.clearAllFilters}
         staleOnly={state.staleOnly}
         setStaleOnly={state.setStaleOnly}
         staleCount={g.staleCount}
         staleThresholdDays={g.staleThresholdDays}
+        fitWidths={{ auto: state.autoColumnWidths, onFit: state.resetColumnWidths }}
         setColumnMenuRect={state.setColumnMenuRect}
       />
     </div>
   );
 
   const previewToolbar = usePreviewToolbarSlot();
+  const { setCustomPreviewFields } = state;
+  // Stable so the memoized preview skips re-rendering while the grid scrolls.
+  const handleCustomPreviewFieldsChange = useCallback((fields: CustomPreviewField[]) => {
+    storeCustomPreviewFields(fields);
+    setCustomPreviewFields(fields);
+  }, [setCustomPreviewFields]);
+  const handleDuplicate = useCallback((draft: WorkItemDuplicateDraft) =>
+    setDuplicateDraft({
+      projectId: draft.projectId,
+      workItemType: draft.workItemType ?? undefined,
+      title: draft.title,
+      priority: draft.priority ?? undefined,
+      areaPath: draft.areaPath ?? undefined,
+      iterationPath: draft.iterationPath ?? undefined,
+      tags: draft.tags.join("; "),
+      assignedTo: draft.assignedTo ?? undefined,
+    }), []);
   const previewPane = (
     <PreviewToolbarSlotProvider value={previewToolbar.element}>
-      <WorkItemPreviewPanel
+      <MemoWorkItemPreviewPanel
         customPreviewFields={state.customPreviewFields}
         focusCommentRequest={state.focusCommentRequest}
-        onCustomPreviewFieldsChange={(fields) => {
-          storeCustomPreviewFields(fields);
-          state.setCustomPreviewFields(fields);
-        }}
+        onCustomPreviewFieldsChange={handleCustomPreviewFieldsChange}
         openAssigneeRequest={state.openAssigneeRequest}
         openFieldRequest={state.openFieldRequest}
         openPriorityRequest={state.openPriorityRequest}
@@ -219,18 +289,7 @@ export function WorkItemsGrid({
         previewLoading={g.previewQuery.isFetching}
         selectedItem={g.selectedItem}
         onPreviewUpdated={g.handlePreviewUpdated}
-        onDuplicate={(draft) =>
-          setDuplicateDraft({
-            projectId: draft.projectId,
-            workItemType: draft.workItemType ?? undefined,
-            title: draft.title,
-            priority: draft.priority ?? undefined,
-            areaPath: draft.areaPath ?? undefined,
-            iterationPath: draft.iterationPath ?? undefined,
-            tags: draft.tags.join("; "),
-            assignedTo: draft.assignedTo ?? undefined,
-          })
-        }
+        onDuplicate={handleDuplicate}
       />
     </PreviewToolbarSlotProvider>
   );
@@ -251,7 +310,11 @@ export function WorkItemsGrid({
       ref={state.containerRef}
       className="flex min-h-0 flex-1 flex-col outline-none"
       tabIndex={-1}
-      onKeyDown={g.handleKeyDown}
+      onKeyDown={(event) => {
+        if (!event.defaultPrevented && !isEditableTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'i') {
+          event.preventDefault(); investigation.onRun();
+        } else g.handleKeyDown(event);
+      }}
       onFocusCapture={g.handleGridFocusCapture}
       onBlurCapture={g.handleGridBlurCapture}
     >
@@ -309,6 +372,7 @@ export function WorkItemsGrid({
           onPrioritySelect={(priority) => g.bulk.bulkPriorityMutation.mutate(priority)}
           tagsPending={g.bulk.bulkTagsMutation.isPending}
           onTagsApply={(tag, mode) => g.bulk.bulkTagsMutation.mutate({ tag, mode })}
+          extraActions={investigateButton}
           snoozePending={state.snoozeMutation.isPending}
           onSnoozeOpen={(anchorRect) => {
             state.snoozeTargetRef.current = [...g.checkedItems];
@@ -326,7 +390,13 @@ export function WorkItemsGrid({
         <DockableWorkspace
           storageKey={`${previewStorageKey}:dockview:v1`}
           panels={[
-            { id: 'grid', title: 'Work items', content: gridPane, minWidth: 480, headerActions: filterBar },
+            { id: 'grid', title: 'Work items', content: gridPane, minWidth: 480, headerActions: (
+              <div className="flex h-full min-w-0 items-center gap-1">
+                {stateView ? <ListStateChip label={stateView} onClear={leaveStateView} /> : null}
+                {filterBar}
+                {!g.checkedItems.length && g.selectedItem ? investigateButton : null}
+              </div>
+            ) },
             {
               id: 'preview',
               title: 'Preview',
@@ -357,7 +427,7 @@ export function WorkItemsGrid({
         />
       ) : (
         <>
-          {filterBar ? <div className="flex h-5 shrink-0 justify-end">{filterBar}</div> : null}
+          <div className="flex shrink-0 justify-end">{filterBar}{!g.checkedItems.length && g.selectedItem ? investigateButton : null}</div>
           {gridPane}
         </>
       )}
@@ -380,14 +450,13 @@ export function WorkItemsGrid({
           visibleColumns={state.visibleColumns}
           requiredColumns={WI_GRID_REQUIRED_COLUMNS}
           onToggle={state.toggleColumnVisibility}
+          onMove={state.moveColumn}
           onReset={state.resetColumnVisibility}
-          onAutoFitWidths={state.resetColumnWidths}
           onClose={() => state.setColumnMenuRect(null)}
         >
           {fieldColumnsSource && onExtraColumnsChange ? (
             <WiFieldColumnsSection
               organizationId={fieldColumnsSource.organizationId}
-              projectId={fieldColumnsSource.projectId}
               extraColumns={extraColumns}
               onExtraColumnsChange={onExtraColumnsChange}
             />

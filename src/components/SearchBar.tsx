@@ -27,7 +27,7 @@ export function SearchInput({
   autoFocus?: boolean;
 }) {
   return (
-    <div className="flex h-8 min-w-[200px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+    <div className="flex h-7 min-w-[200px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
       <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <input
         value={value}
@@ -35,6 +35,7 @@ export function SearchInput({
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        data-filter-input="true"
         autoFocus={autoFocus}
         className="min-w-0 flex-1 bg-transparent text-sm outline-none"
       />
@@ -61,12 +62,12 @@ export function FiltersToggle({
       onClick={onToggle}
       aria-expanded={open}
       aria-controls={controls}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
     >
       <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
       Filters
       {count > 0 ? (
-        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none text-primary-foreground">
+        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold leading-none text-primary-foreground">
           {count}
         </span>
       ) : null}
@@ -79,11 +80,18 @@ export function FiltersToggle({
 }
 
 export function SearchSubmitButton({ pending, disabled }: { pending: boolean; disabled?: boolean }) {
+  // While pending the button is only aria-disabled and swallows clicks (which
+  // also covers Enter in the search input): a truly disabled button would drop
+  // keyboard focus to <body> the moment a search starts.
   return (
     <button
       type="submit"
-      disabled={pending || disabled}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      aria-disabled={pending || undefined}
+      onClick={(event) => {
+        if (pending) event.preventDefault();
+      }}
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
     >
       {pending ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -99,14 +107,14 @@ export function SearchSubmitButton({ pending, disabled }: { pending: boolean; di
 export function FilterField({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
   return (
     <label className={`grid gap-0.5 ${className}`}>
-      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="text-2xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );
 }
 
 export const filterInputClass =
-  "h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+  "h-7 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
 /**
  * Native `<select>` drawn like the custom MultiSelectFilter trigger (same
@@ -125,8 +133,8 @@ export function NativeSelect({
     <span className={`relative inline-flex min-w-0 ${className}`}>
       <select
         {...props}
-        className={`w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-2 pr-7 outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
-          compact ? "h-7 text-xs" : "h-8 text-sm"
+        className={`w-full min-w-0 appearance-none bg-none rounded-md border border-input bg-background pl-2 pr-7 outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
+          compact ? "h-7 text-xs" : "h-7 text-sm"
         }`}
       >
         {children}

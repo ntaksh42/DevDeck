@@ -4,6 +4,7 @@ import {
   type AppSettings,
   type UpdateAppSettingsInput,
 } from '@/lib/azdoCommands';
+import { DEFAULT_AUTO_AGENT_MAX_PER_SYNC } from '@/lib/reviewSettings';
 
 export function settingsInput(
   settings: AppSettings | undefined,
@@ -14,6 +15,21 @@ export function settingsInput(
     workItemResultFolderPath: settings?.workItemResultFolderPath ?? null,
     showWindowHotkey: settings?.showWindowHotkey ?? null,
     agentCommand: settings?.agentCommand ?? null,
+    codexCommand: settings?.codexCommand ?? null,
+    defaultAgent: settings?.defaultAgent ?? null,
+    agentAutoPostEnabled: settings?.agentAutoPostEnabled ?? false,
+    claudeModel: settings?.claudeModel ?? null,
+    codexModel: settings?.codexModel ?? null,
+    claudeModelChoices: settings?.claudeModelChoices ?? null,
+    codexModelChoices: settings?.codexModelChoices ?? null,
+    agentWorkspacePath: settings?.agentWorkspacePath ?? null,
+    inboxInsightEnabled: settings?.inboxInsightEnabled ?? false,
+    inboxInsightModel: settings?.inboxInsightModel ?? null,
+    inboxInsightMaxPerSync: settings?.inboxInsightMaxPerSync ?? 3,
+    autoAgentEnabled: settings?.autoAgentEnabled ?? false,
+    autoAgentMaxPerSync: settings?.autoAgentMaxPerSync ?? DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
+    autoAgentIntervalMinutes: settings?.autoAgentIntervalMinutes ?? 15,
+    autoAgentPipelinesEnabled: settings?.autoAgentPipelinesEnabled ?? false,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,

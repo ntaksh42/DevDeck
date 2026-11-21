@@ -6,7 +6,7 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 const MAX_RESULTS = 8;
 const CHIP_BUTTON =
-  "inline-flex items-center gap-0.5 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50";
+  "inline-flex items-center gap-0.5 rounded border border-border bg-card px-1.5 py-0.5 text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50";
 
 export type AddReviewerRequest = { reviewerId?: string; isRequired: boolean };
 
@@ -125,7 +125,7 @@ export function PrReviewerAdder({
               placeholder="Search people (2+ characters)"
               className="min-w-0 flex-1 rounded border border-input bg-background px-1.5 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+            <label className="flex shrink-0 items-center gap-1 text-2xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={required}
@@ -135,7 +135,7 @@ export function PrReviewerAdder({
             </label>
           </div>
           {term.length >= 2 && !search.isFetching && candidates.length === 0 ? (
-            <p className="px-1 text-[11px] text-muted-foreground">No matching people.</p>
+            <p className="px-1 text-2xs text-muted-foreground">No matching people.</p>
           ) : null}
           {candidates.length > 0 ? (
             <ul id="pr-reviewer-results" role="listbox" aria-label="People">

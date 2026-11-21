@@ -71,6 +71,7 @@ fn comment_to_dto(comment: IssueComment) -> WorkItemComment {
         id: comment.id as i64,
         text: comment.body.clone(),
         rendered_text: comment.body,
+        format: Some("markdown".to_string()),
         created_by: comment.user.map(|u| u.login),
         created_by_id: None,
         created_by_unique_name: None,

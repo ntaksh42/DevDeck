@@ -1,20 +1,26 @@
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { matchRowColorClass, type RowColorRule } from '@/lib/rowColorRules';
 import { workItemUnreadKey } from './workItemUnreadTracking';
 import { WorkItemGridRow } from './WorkItemGridRow';
-import { workItemSummaryKey, type WiSortKey } from './workItemsGridHelpers';
+import { useVirtualRowWindow } from '@/lib/useGridVirtualizer';
+import {
+  WI_GRID_OVERSCAN,
+  WI_GRID_ROW_HEIGHT,
+  workItemSummaryKey,
+  type WiSortKey,
+} from './workItemsGridHelpers';
 
 export function WiGridBody({
+  scroller,
   showBlockingLoading,
   searched,
   sorted,
   displayed,
   emptyMessage,
+  emptyContent,
   clearAllFilters,
-  firstVirtualRow,
-  virtualRows,
   selectedIndex,
   checkedIds,
   unreadKeys,
@@ -24,22 +30,22 @@ export function WiGridBody({
   staleThresholdDays,
   rowColorRules,
   rowRefs,
-  virtualTopPadding,
-  virtualBottomPadding,
   setSelectedIndex,
   handleCheckboxChange,
   onShiftRangeSelect,
   onCtrlToggleSelect,
   onClearSelection,
 }: {
+  /** The scroll container: its viewport picks the rows to render. */
+  scroller: HTMLDivElement | null;
   showBlockingLoading: boolean;
   searched: boolean;
   sorted: WorkItemSummary[];
   displayed: WorkItemSummary[];
   emptyMessage: string | undefined;
+  /** Replaces the default "Run a search" empty state (e.g. recent searches). */
+  emptyContent?: ReactNode;
   clearAllFilters: () => void;
-  firstVirtualRow: number;
-  virtualRows: WorkItemSummary[];
   selectedIndex: number;
   checkedIds: Set<string>;
   unreadKeys: Set<string>;
@@ -49,40 +55,61 @@ export function WiGridBody({
   staleThresholdDays: number;
   rowColorRules: RowColorRule[];
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;
-  virtualTopPadding: number;
-  virtualBottomPadding: number;
   setSelectedIndex: (i: number) => void;
   handleCheckboxChange: (index: number, checked: boolean, shiftKey: boolean) => void;
   onShiftRangeSelect: (index: number, anchorIndex?: number) => void;
   onCtrlToggleSelect: (index: number, focusedIndex: number) => void;
   onClearSelection: () => void;
 }) {
+  // The scroll position is tracked here, so scrolling re-renders only the rows
+  // and not the grid's header, status bar, or preview.
+  const {
+    width: paneWidth,
+    firstRow: firstVirtualRow,
+    lastRow,
+    topPadding: virtualTopPadding,
+    bottomPadding: virtualBottomPadding,
+    totalHeight,
+  } = useVirtualRowWindow(scroller, {
+    rowCount: displayed.length,
+    rowHeight: WI_GRID_ROW_HEIGHT,
+    overscan: WI_GRID_OVERSCAN,
+  });
+  const virtualRows = displayed.slice(firstVirtualRow, lastRow);
+
   // Rows read the focused index from this ref rather than as a prop: passing
   // `selectedIndex` to every row would invalidate the whole memoized window on
   // each arrow-key press, which is exactly what the memo is there to avoid.
   const focusedIndexRef = useRef(selectedIndex);
   focusedIndexRef.current = selectedIndex;
 
+  const inPane = (node: ReactNode) => (
+    <div className="sticky left-0 flex flex-col" style={{ width: paneWidth || undefined }}>
+      {node}
+    </div>
+  );
   if (showBlockingLoading) {
-    return <LoadingState />;
+    return inPane(<LoadingState />);
   }
   if (!searched) {
-    return (
-      <PreviewEmptyState
-        message={emptyMessage ?? "Run a search to load work items."}
-        hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
-      />
+    return inPane(
+      emptyContent ?? (
+        <PreviewEmptyState
+          message={emptyMessage ?? "Run a search to load work items."}
+          hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
+        />
+      ),
     );
   }
   if (sorted.length === 0) {
-    return (
+    return inPane(
       <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
         No work items matched.
-      </div>
+      </div>,
     );
   }
   if (displayed.length === 0) {
-    return (
+    return inPane(
       <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
         <span>No items match the active filters.</span>
         <button
@@ -92,7 +119,7 @@ export function WiGridBody({
         >
           Clear filters
         </button>
-      </div>
+      </div>,
     );
   }
   return (
@@ -101,6 +128,7 @@ export function WiGridBody({
       aria-label="Work items"
       data-primary-grid="true"
       tabIndex={-1}
+      style={{ minHeight: totalHeight }}
     >
       {virtualTopPadding > 0 ? (
         <div style={{ height: virtualTopPadding }} />

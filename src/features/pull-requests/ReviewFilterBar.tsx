@@ -1,6 +1,9 @@
 import type { RefObject } from 'react';
 import { DockFilterBar, type DockFilterChip } from '@/components/DockFilterBar';
+import { ListStateChip } from '@/components/ListStatusBar';
 import { FilterAutocomplete } from '@/components/FilterAutocomplete';
+import { DraftsCheckbox } from './DraftsCheckbox';
+import type { ReviewGroupBy } from './myReviewsTypes';
 
 type ReviewFilterBarProps = {
   textFilter: string;
@@ -8,9 +11,13 @@ type ReviewFilterBarProps = {
   filterInputRef: RefObject<HTMLInputElement | null>;
   showDrafts: boolean;
   onShowDraftsChange: (checked: boolean) => void;
-  /** Drafts currently hidden by the Show Drafts toggle; surfaced so they are never silently missing. */
-  hiddenDraftCount?: number;
+  /** Drafts in the unfiltered list, shown next to the Show Drafts toggle. */
+  draftCount?: number;
+  groupBy: ReviewGroupBy;
+  onGroupByChange: (groupBy: ReviewGroupBy) => void;
   filterSuggestionPool: string[];
+  /** Set while the list shows its Done / Snoozed state; the chip returns to the open list. */
+  stateView?: { label: string; onClear: () => void };
   open: boolean;
   onOpen: () => void;
   /** `returnFocus` is false when focus already moved elsewhere (blur). */
@@ -24,54 +31,60 @@ export function ReviewFilterBar({
   filterInputRef,
   showDrafts,
   onShowDraftsChange,
-  hiddenDraftCount = 0,
+  draftCount = 0,
+  groupBy,
+  onGroupByChange,
   filterSuggestionPool,
+  stateView,
   open,
   onOpen,
   onClose,
 }: ReviewFilterBarProps) {
   const chips: DockFilterChip[] = [];
   if (textFilter) chips.push({ label: `“${textFilter}”`, onEdit: onOpen, onClear: () => onTextFilterChange('') });
-  if (showDrafts) chips.push({ label: 'Drafts shown', onClear: () => onShowDraftsChange(false) });
-  if (!showDrafts && hiddenDraftCount > 0) {
-    const reveal = () => onShowDraftsChange(true);
-    chips.push({
-      label: `${hiddenDraftCount} draft${hiddenDraftCount === 1 ? '' : 's'} hidden`,
-      onEdit: reveal,
-      onClear: reveal,
-    });
-  }
 
   return (
-    <DockFilterBar
-      label="Filter reviews"
-      open={open}
-      onOpen={onOpen}
-      onClose={onClose}
-      inputRef={filterInputRef}
-      hasValue={!!textFilter}
-      chips={chips}
-    >
-      <div className="w-56">
-        <FilterAutocomplete
-          compact
-          value={textFilter}
-          onChange={onTextFilterChange}
-          onClear={() => onTextFilterChange('')}
-          placeholder="Filter by repo, title, author…"
-          suggestionPool={filterSuggestionPool}
-          inputRef={filterInputRef}
-        />
-      </div>
-      <label className="flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={showDrafts}
-          onChange={(e) => onShowDraftsChange(e.target.checked)}
-          className="h-3 w-3 rounded border-input"
-        />
-        Show Drafts
+    <div className="flex h-full min-w-0 items-center">
+      {stateView ? <ListStateChip {...stateView} /> : null}
+      <DockFilterBar
+        label="Filter reviews"
+        open={open}
+        onOpen={onOpen}
+        onClose={onClose}
+        inputRef={filterInputRef}
+        hasValue={!!textFilter}
+        chips={chips}
+      >
+        <div className="w-56">
+          <FilterAutocomplete
+            compact
+            value={textFilter}
+            onChange={onTextFilterChange}
+            onClear={() => onTextFilterChange('')}
+            placeholder="Filter by repo, title, author…"
+            suggestionPool={filterSuggestionPool}
+            inputRef={filterInputRef}
+          />
+        </div>
+      </DockFilterBar>
+      <DraftsCheckbox
+        checked={showDrafts}
+        onChange={onShowDraftsChange}
+        draftCount={draftCount}
+        title="Show draft pull requests (D)"
+      />
+      <label title="Group rows by (B)" className="flex shrink-0 items-center gap-1 pr-1 text-2xs text-muted-foreground">
+        Group
+        <select
+          aria-label="Group reviews by"
+          value={groupBy}
+          onChange={(e) => onGroupByChange(e.target.value as ReviewGroupBy)}
+          className="h-5 rounded border border-input bg-background px-1 text-2xs text-foreground"
+        >
+          <option value="status">Status</option>
+          <option value="repository">Repository</option>
+        </select>
       </label>
-    </DockFilterBar>
+    </div>
   );
 }

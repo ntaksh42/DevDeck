@@ -1,10 +1,33 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  hasTextSelectionWithin,
   formatRelativeDate,
+  focusPrimaryGrid,
   handleSearchInputEscape,
   isImeComposing,
   markdownLink,
 } from "./utils";
+
+describe("focusPrimaryGrid", () => {
+  it.each(["row", "option"])("focuses the selected %s before other tabbable controls", (role) => {
+    const grid = document.createElement("div");
+    grid.dataset.primaryGrid = "true";
+    const button = document.createElement("button");
+    button.tabIndex = 0;
+    const selected = document.createElement("div");
+    selected.setAttribute("role", role);
+    selected.setAttribute("aria-selected", "true");
+    selected.tabIndex = -1;
+    grid.append(button, selected);
+    document.body.appendChild(grid);
+    try {
+      expect(focusPrimaryGrid()).toBe(true);
+      expect(document.activeElement).toBe(selected);
+    } finally {
+      grid.remove();
+    }
+  });
+});
 
 describe("markdownLink", () => {
   it("wraps the text and url in Markdown link syntax", () => {
@@ -113,5 +136,65 @@ describe("isImeComposing", () => {
     expect(isImeComposing({ key: "Enter" })).toBe(false);
     expect(isImeComposing({ key: "Enter", isComposing: false })).toBe(false);
     expect(isImeComposing({ key: "Escape", nativeEvent: { isComposing: false } })).toBe(false);
+  });
+});
+
+describe("handleSearchInputEscape focus hand-off", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  function escapeIn(input: HTMLInputElement) {
+    handleSearchInputEscape({ key: "Escape", preventDefault: vi.fn(), currentTarget: input } as any);
+  }
+
+  it("moves focus to the results grid's selected row", () => {
+    document.body.innerHTML = `
+      <input id="q" />
+      <div data-primary-grid="true" tabindex="-1">
+        <div role="row" aria-selected="false" tabindex="-1"></div>
+        <div role="row" aria-selected="true" tabindex="-1" id="selected"></div>
+      </div>`;
+    const input = document.getElementById("q") as HTMLInputElement;
+    input.focus();
+
+    escapeIn(input);
+
+    expect(document.activeElement).toBe(document.getElementById("selected"));
+  });
+
+  it("falls back to the grid placeholder pane while there are no results", () => {
+    document.body.innerHTML = `<input id="q" /><div data-grid-focus-fallback="true" tabindex="-1" id="pane"></div>`;
+    const input = document.getElementById("q") as HTMLInputElement;
+    input.focus();
+
+    escapeIn(input);
+
+    expect(document.activeElement).toBe(document.getElementById("pane"));
+  });
+});
+
+describe("hasTextSelectionWithin", () => {
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+    document.body.innerHTML = "";
+  });
+
+  function selectText(node: Node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }
+
+  it("is true only for a selection inside the event target", () => {
+    document.body.innerHTML = '<div id="preview"><p id="text">Some description</p></div><div id="row">Row</div>';
+    const preview = document.getElementById("preview")!;
+    const row = document.getElementById("row")!;
+    expect(hasTextSelectionWithin(preview)).toBe(false);
+    selectText(document.getElementById("text")!);
+    expect(hasTextSelectionWithin(preview)).toBe(true);
+    expect(hasTextSelectionWithin(row)).toBe(false);
+    expect(hasTextSelectionWithin(null)).toBe(false);
   });
 });

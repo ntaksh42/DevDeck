@@ -1,5 +1,6 @@
 import {
   type DragEvent as ReactDragEvent,
+  type Dispatch, type SetStateAction,
   type KeyboardEvent as ReactKeyboardEvent,
   forwardRef,
   type ReactNode,
@@ -11,20 +12,23 @@ import {
 import {
   Bell,
   BookOpen,
-  ChartLine,
-  Code,
   GitBranch,
   GitPullRequest,
   Layers,
   ListChecks,
   Settings,
 } from "lucide-react";
-import type { ProviderCapabilities } from "@/lib/azdoCommands";
+import { useQuery } from "@tanstack/react-query";
+import { listWorkItemProjects, type ProviderCapabilities } from "@/lib/azdoCommands";
+import { useViewCountQueries } from "@/features/work-items/useViewCountQueries";
+import { workItemQueryKeys } from "@/features/work-items/queryKeys";
 import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/navOrder";
 import { isEditableTarget } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { NavButton, NavSection, NavSubGroup, NavSubItem } from "@/components/Nav";
-import { viewCountBaseline, type WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
+import { SidebarPinnedNav } from "./SidebarPinnedNav";
+import { SidebarPinnedViews } from "./SidebarPinnedViews";
+import type { WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
 import type { View, NavSectionId } from "./types";
 import { DEFAULT_SIDEBAR_WIDTH } from "./types";
 
@@ -35,6 +39,7 @@ export interface AppSidebarHandle {
 export interface AppSidebarProps {
   activeView: View;
   organizationsLength: number;
+  organizationId: string;
   /// Capabilities of the active connection's provider. When a feature is not
   /// supported, its nav entry is hidden so the UI never offers it. `null` while
   /// loading shows everything.
@@ -43,10 +48,12 @@ export interface AppSidebarProps {
   sidebarWidth: number;
   setSidebarWidth: (w: number) => void;
   workItemNavViews: WorkItemQueryView[];
+  setWorkItemNavViews: Dispatch<SetStateAction<WorkItemQueryView[]>>;
   activeWorkItemViewId: string | null;
   myReviewsBadge: number | null;
   myWorkItemsBadge: number | null;
   notificationsBadge: number | null;
+  inboxBadge: number | null;
   crossOrgSummaryEnabled: boolean;
   onNavigate: (view: View) => void;
   onOpenHelp: () => void;
@@ -58,15 +65,17 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
   {
     activeView,
     organizationsLength,
+    organizationId,
     capabilities,
     sidebarCollapsed,
     sidebarWidth,
     setSidebarWidth,
-    workItemNavViews,
+    workItemNavViews, setWorkItemNavViews,
     activeWorkItemViewId,
     myReviewsBadge,
     myWorkItemsBadge,
     notificationsBadge,
+    inboxBadge,
     crossOrgSummaryEnabled,
     onNavigate,
     onOpenHelp,
@@ -92,7 +101,6 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
-    code: true,
   });
   const [pinnedViewsExpanded, setPinnedViewsExpanded] = useState(true);
 
@@ -269,6 +277,19 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
   }
 
   const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
+  const pinnedProjects = useQuery({
+    queryKey: workItemQueryKeys.projects(organizationId),
+    queryFn: () => listWorkItemProjects({ organizationId }),
+    enabled: !!organizationId && pinnedWorkItemViews.some((view) => !view.projectId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const pinnedCounts = useViewCountQueries({
+    views: pinnedWorkItemViews,
+    selectedOrganizationId: organizationId,
+    projectOptions: pinnedProjects.data ?? [],
+    recordHistory: false,
+  });
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
   );
@@ -336,20 +357,18 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             onNavigate("workItemViews");
           }}
         >
-          {pinnedWorkItemViews.map((item) => (
-            <NavSubItem
-              key={item.id}
-              active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
-              disabled={organizationsLength === 0}
-              label={item.name}
-              badge={viewCountBaseline(item.id)}
-              onClick={() => {
-                onSetActiveWorkItemViewId(item.id);
-                onSetSelectedWorkItemViewRequestId(item.id);
-                onNavigate("workItemViews");
-              }}
-            />
-          ))}
+          <SidebarPinnedViews
+            views={pinnedWorkItemViews}
+            setViews={setWorkItemNavViews}
+            counts={pinnedCounts}
+            activeId={activeView === "workItemViews" ? activeWorkItemViewId : null}
+            disabled={organizationsLength === 0}
+            onOpen={(id) => {
+              onSetActiveWorkItemViewId(id);
+              onSetSelectedWorkItemViewRequestId(id);
+              onNavigate("workItemViews");
+            }}
+          />
         </NavSubGroup>
         <NavSubItem
           active={activeView === "workItems"}
@@ -369,47 +388,11 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         onClick={() => onNavigate("pipelines")}
       />
     ),
-    codeSearch: (
-      <NavSection
-        key="codeSearch"
-        id="code"
-        icon={<Code className="h-4 w-4" aria-hidden="true" />}
-        label="Code"
-        disabled={organizationsLength === 0}
-        expanded={navExpanded.code}
-        onExpandedChange={(expanded) => setNavSectionExpanded("code", expanded)}
-      >
-        {capabilities?.codeBrowse !== false ? (
-          <NavSubItem
-            active={activeView === "codeSearch"}
-            disabled={organizationsLength === 0}
-            label="Files"
-            onClick={() => onNavigate("codeSearch")}
-          />
-        ) : null}
-        <NavSubItem
-          active={activeView === "commits"}
-          disabled={organizationsLength === 0}
-          label="Commits"
-          onClick={() => onNavigate("commits")}
-        />
-      </NavSection>
-    ),
-    analyze: (
-      <NavButton
-        key="analyze"
-        active={activeView === "analyze"}
-        disabled={organizationsLength === 0}
-        icon={<ChartLine className="h-4 w-4" aria-hidden="true" />}
-        label="Analyze"
-        onClick={() => onNavigate("analyze")}
-      />
-    ),
   };
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 flex-col border-r border-border bg-card ${
+      className={`app-frame fixed inset-y-0 left-0 flex-col border-r border-border bg-background ${
         sidebarCollapsed ? "hidden" : "hidden lg:flex"
       }`}
       style={{ width: sidebarWidth }}
@@ -420,6 +403,12 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         className="flex flex-1 flex-col p-2"
         onKeyDown={handleNavKeyDown}
       >
+        <SidebarPinnedNav
+          activeView={activeView}
+          disabled={organizationsLength === 0}
+          inboxBadge={inboxBadge}
+          onNavigate={onNavigate}
+        />
         <div className="space-y-1">
           {navOrder
             .filter(

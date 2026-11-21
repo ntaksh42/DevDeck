@@ -6,15 +6,27 @@ import {
 } from "@/lib/snoozePresets";
 
 // Anchored popover for choosing a snooze deadline: fixed presets plus a custom
-// local datetime. Calls onSnooze with a UTC ISO8601 instant and closes.
+// local datetime. Calls onSnooze with a UTC ISO8601 instant and closes. The
+// optional props let other "pick a time" flows (e.g. Inbox reminders) reuse the
+// same keyboard behavior with their own wording and one extra action.
 export function SnoozeMenu({
   anchorRect,
   onSnooze,
   onClose,
+  title = "Snooze until",
+  note,
+  confirmLabel = "Snooze until selected",
+  extraAction,
 }: {
   anchorRect: DOMRect;
   onSnooze: (snoozeUntil: string) => void;
   onClose: () => void;
+  title?: string;
+  /** One line under the title (e.g. what the choice does). */
+  note?: string;
+  confirmLabel?: string;
+  /** An item after the presets, e.g. cancelling an existing reminder. */
+  extraAction?: { label: string; onSelect: () => void };
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [customValue, setCustomValue] = useState("");
@@ -72,6 +84,16 @@ export function SnoozeMenu({
         onClose();
         return;
       }
+      // 1-9 pick a preset, except while typing in the custom date field.
+      const preset = /^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey
+        ? SNOOZE_PRESETS[Number(e.key) - 1]
+        : undefined;
+      if (preset && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        e.stopPropagation();
+        onSnooze(presetToIso(preset));
+        return;
+      }
       if (menuRef.current?.contains(e.target as Node)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -83,7 +105,7 @@ export function SnoozeMenu({
     }
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  }, [onClose, onSnooze]);
 
   // Up/Down move focus between the focusable controls (presets, the custom
   // input, the confirm button), wrapping at the ends.
@@ -115,34 +137,49 @@ export function SnoozeMenu({
     }
   }
 
-  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 280);
+  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - (note || extraAction ? 360 : 280));
   const left = Math.min(anchorRect.left, window.innerWidth - 240);
 
   return (
     <div
       ref={menuRef}
       role="menu"
-      aria-label="Snooze until"
+      aria-label={title}
       onKeyDown={handleMenuKeyDown}
       className="fixed z-50 w-60 rounded-md border border-border bg-popover shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Snooze until
+        {title}
       </div>
+      {note ? <p className="px-2 pt-1.5 text-xs text-muted-foreground">{note}</p> : null}
       <div className="p-1">
-        {SNOOZE_PRESETS.map((preset) => (
+        {SNOOZE_PRESETS.map((preset, presetIndex) => (
           <button
             key={preset.id}
             type="button"
             role="menuitem"
             data-snooze-item="true"
             onClick={() => onSnooze(presetToIso(preset))}
-            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary"
+            aria-keyshortcuts={String(presetIndex + 1)}
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary"
           >
-            {preset.label}
+            <kbd className="w-3 shrink-0 font-mono text-2xs text-muted-foreground">{presetIndex + 1}</kbd>
+            <span className="min-w-0 flex-1">{preset.label}</span>
           </button>
         ))}
+        {extraAction ? (
+          <button
+            type="button"
+            role="menuitem"
+            data-snooze-item="true"
+            onClick={extraAction.onSelect}
+            className="mt-1 flex w-full items-center gap-2 rounded border-t border-border px-2 py-1 text-left text-sm hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary"
+          >
+            <span className="w-3 shrink-0" />
+            <span className="min-w-0 flex-1">{extraAction.label}</span>
+          </button>
+        ) : null}
       </div>
       <div className="border-t border-border p-2">
         <label className="mb-1 block text-xs text-muted-foreground">
@@ -177,7 +214,7 @@ export function SnoozeMenu({
           }}
           className="mt-1.5 w-full rounded border border-border bg-card px-2 py-1 text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Snooze until selected
+          {confirmLabel}
         </button>
       </div>
     </div>

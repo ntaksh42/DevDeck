@@ -22,7 +22,7 @@ test.describe("browser preview", () => {
     await expect(
       reviewGrid.getByText("Add rate limiting middleware to all endpoints"),
     ).toBeVisible();
-    await expect(main.getByText(/6 total,\s*2 not voted/)).toBeVisible();
+    await expect(main.getByText(/6 items\s*·\s*2 not voted/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
 
     // The PR review panel shows the selected PR with vote actions and comments.
@@ -49,12 +49,12 @@ test.describe("browser preview", () => {
     // while the still-collapsed "Rejected" section keeps its PR hidden.
     await main.getByRole("button", { name: /Waiting for author/ }).click();
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
-    await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
+    await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
 
     await main.getByRole("button", { name: /Approved by you/ }).click();
     await expect(main.getByText("Dark mode support for settings screen")).toBeVisible();
     await expect(main.getByText("Add OpenTelemetry tracing support")).toBeVisible();
-    await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
+    await expect(main.getByText("Upgrade EKS cluster to 1.29", { exact: true })).toHaveCount(0);
     await main.getByRole("button", { name: /Rejected by you/ }).click();
 
     // The filter is folded into the Reviews tab strip until opened.
@@ -81,35 +81,17 @@ test.describe("browser preview", () => {
     ).toBeVisible();
     const commentInput = main.getByRole("textbox", { name: "Comment" });
     await commentInput.fill("@Ali");
-    await main.getByRole("button", { name: /Alice Johnson/ }).click();
+    await page.locator("[data-floating-overlay]").getByRole("button", { name: /Alice Johnson/ }).click();
     await commentInput.fill("@Alice Johnson please check");
     await main.getByRole("button", { name: "Post comment" }).click();
     await expect(main.getByText("Comment posted")).toBeVisible();
-
-    await page.getByRole("button", { name: "Commits" }).click();
-    await main.getByPlaceholder("message, author, SHA — or path:src/auth").fill("dashboard");
-    await expect(main.getByLabel("Project")).toBeVisible();
-    await expect(main.getByLabel("Repository")).toBeVisible();
-    // Author/branch/date live behind the collapsed "Filters" panel, which only
-    // starts open when one of those filters already has a value.
-    await main.getByRole("button", { name: /^Filters/ }).click();
-    await main.getByLabel("From", { exact: true }).fill("2026-05-01");
-    await main.getByLabel("To", { exact: true }).fill("2026-05-28");
-    await main.getByRole("button", { name: "Search" }).click();
-    await expect(main.getByText("Add commit search dashboard").first()).toBeVisible();
-
-    // The "/" grid shortcut must return focus to the commit search field.
-    const commitGrid = main.getByRole("grid", { name: "Commit search results" });
-    await commitGrid.getByRole("row").filter({ hasText: "Add commit search dashboard" }).click();
-    await page.keyboard.press("/");
-    await expect(main.getByRole("textbox", { name: "Filter" })).toBeFocused();
 
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(main.getByRole("heading", { name: "Connections" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Sync health" })).toBeVisible();
     await expect(main.getByText("Pull requests / My Reviews")).toBeVisible();
-    await expect(main.getByText("https://dev.azure.com/contoso")).toBeVisible();
+    await expect(main.getByText("https://dev.azure.com/contoso").first()).toBeVisible();
   });
 
   test("renders rich Azure DevOps work item content through the demo harness", async ({
@@ -162,7 +144,7 @@ test.describe("browser preview", () => {
 
     const commentInput = main.getByRole("textbox", { name: "Comment" });
     await commentInput.fill("@Demo");
-    await main.getByRole("button", { name: /Demo User/ }).click();
+    await page.locator("[data-floating-overlay]").getByRole("button", { name: /Demo User/ }).click();
     await expect(commentInput).toHaveValue(/^@Demo User /);
 
     await commentInput.fill("@Demo User checking mention flow");
@@ -195,7 +177,16 @@ test("adds a searched field as a Work Item View column from the Columns menu", a
   await expect(page.locator('[data-primary-grid="true"]')).toBeFocused();
 });
 
-test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ page }) => {
+test("snoozes a Work Item View row with Z and updates its board and pinned count", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("azdodeck:workItemQueryViews", JSON.stringify([{
+      id: "snooze-test",
+      name: "Snooze test",
+      projectId: "platform",
+      pinned: true,
+      wiql: "SELECT [System.Id] FROM WorkItems",
+    }]));
+  });
   await page.goto("/");
   const main = page.getByRole("main");
   await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
@@ -207,6 +198,12 @@ test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ 
   await firstRow.click();
   await expect(firstRow).toBeFocused();
   const rowCount = await grid.getByRole("row").count();
+  const rowLabel = await firstRow.getByRole("checkbox").getAttribute("aria-label");
+  const itemNumber = rowLabel?.replace("Select ", "") ?? "";
+  const pinned = page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("button", { name: /^Snooze test(?:, |$)/ });
+  await expect(pinned).toHaveAccessibleName(/^Snooze test, \d+$/);
+  const originalCount = Number((await pinned.getAttribute("aria-label"))?.split(", ")[1]);
 
   await page.keyboard.press("z");
   const menu = page.getByRole("menu", { name: "Snooze until" });
@@ -218,15 +215,25 @@ test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ 
     .poll(() => grid.evaluate((node) => node.contains(document.activeElement)))
     .toBe(true);
 
-  await main.getByRole("button", { name: "Snoozed" }).click();
+  await expect(pinned).toHaveAccessibleName(`Snooze test, ${originalCount - 1}`);
+  await main.getByRole("button", { name: "Board", exact: true }).click();
+  const board = main.getByRole("group", { name: /^Work item board/ });
+  await expect(board).toBeVisible();
+  await expect(board.getByRole("button", { name: itemNumber, exact: true })).toHaveCount(0);
+  await main.getByRole("button", { name: "List", exact: true }).click();
+
+  await main.getByRole("button", { name: /^Snoozed \d+$/ }).click();
   const unsnooze = main.getByRole("button", { name: "Unsnooze" });
   await expect(unsnooze).toHaveCount(1);
   await unsnooze.click();
-  await main.getByRole("button", { name: "Back to inbox" }).click();
+  await main.getByRole("button", { name: /^Snoozed \d+$/ }).click();
   await expect(grid.getByRole("row")).toHaveCount(rowCount);
+  await expect(pinned).toHaveAccessibleName(`Snooze test, ${originalCount}`);
+  await main.getByRole("button", { name: "Board", exact: true }).click();
+  await expect(board.getByRole("button", { name: itemNumber, exact: true })).toBeVisible();
 });
 
-test("leaves an agent note on a PR review result with R", async ({ page }) => {
+test("asks the agent about selected result text with R then C", async ({ page }) => {
   await page.goto("/");
   const main = page.getByRole("main");
   const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
@@ -236,82 +243,72 @@ test("leaves an agent note on a PR review result with R", async ({ page }) => {
   await expect(main.getByText("1 needs you")).toBeVisible();
   await expect(frame).toBeFocused();
 
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("c");
-  const composer = main.getByRole("textbox", { name: "Note to the agent" });
-  await expect(composer).toBeFocused();
-  await composer.fill("Please re-check this paragraph.");
-  await page.keyboard.press("Control+Enter");
-  await expect(main.getByText("1 open")).toBeVisible();
-  await expect(frame).toBeFocused();
-
   // The help shortcut still reaches the app while the result has focus.
   await page.keyboard.press("?");
-  await expect(page.getByRole("button", { name: "Close keyboard shortcuts" })).toBeVisible();
+  const closeHelp = page.getByRole("button", { name: "Close keyboard shortcuts" });
+  await expect(closeHelp).toBeVisible();
+  await closeHelp.click();
+  await frame.focus();
+
+  // C on a block opens the Agent panel with the block quoted.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("c");
+  const panel = page.getByRole("complementary", { name: "Agent" });
+  await expect(panel.getByText("Quoting")).toBeVisible();
+  const input = panel.getByPlaceholder(/^Ask (about|the agent)/);
+  await expect(input).toBeFocused();
+  await input.fill("Please re-check this paragraph.");
+  await page.keyboard.press("Control+Enter");
+  // The note is saved (the browser demo cannot start the agent itself).
+  await expect(main.getByText("2 open")).toBeVisible();
+  await expect(panel.getByText("Please re-check this paragraph.").first()).toBeVisible();
 });
 
-test("keeps focus on a done agent note after a reply reopens it", async ({ page }) => {
+test("replies to, deletes and resolves notes from the Agent panel keyboard", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /^My Items/ }).click();
   const main = page.getByRole("main");
   await main.getByText("Validate onboarding with PAT credentials").first().click();
-  await page.keyboard.press("r");
-  await expect(page.locator("[data-agent-result-frame='true']")).toBeFocused();
+  // The Agent panel starts closed; Ctrl+J opens it.
+  await page.keyboard.press("Control+j");
+  const panel = page.getByRole("complementary", { name: "Agent" });
+  await expect(panel).toBeVisible();
+  // Each conversation is one row of the list; Enter opens it over the panel and Esc goes back.
+  const row = (text: string) => panel.locator("button[data-agent-conversation]").filter({ hasText: text });
+  const chat = panel.locator("[data-agent-chat]");
 
-  // Done notes are folded under their header; Enter opens it.
-  await main.getByRole("button", { name: "Done (1)" }).focus();
+  const open = row("Include the batch tenants too");
+  await open.focus();
   await page.keyboard.press("Enter");
-  await page.keyboard.press("ArrowDown");
-  const doneNote = main.locator('[data-agent-note-id="20260925-174000.md"]');
-  await expect(doneNote).toBeFocused();
+  await expect(chat).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(open).toBeFocused();
+
+  // A reply on a done note reopens it.
+  const done = row("Check the rollout against the main branch");
+  await done.focus();
   await page.keyboard.press("r");
-  const reply = main.getByRole("textbox", { name: "Reply to note 20260925-174000.md" });
+  const reply = panel.getByPlaceholder(/^Reply…/);
   await expect(reply).toBeFocused();
   await reply.fill("Please also check release.");
   await page.keyboard.press("Control+Enter");
-
-  await expect(main.getByText("2 open")).toBeVisible();
-  await expect(main.locator('[data-agent-note-id="20260925-174000.md"]')).toBeFocused();
-});
-
-test("manages agent notes from the keyboard", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: /^My Items/ }).click();
-  const main = page.getByRole("main");
-  await main.getByText("Validate onboarding with PAT credentials").first().click();
-  await page.keyboard.press("r");
-  await expect(page.locator("[data-agent-result-frame='true']")).toBeFocused();
-  const note = main.locator('[data-agent-note-id="20260926-091500.md"]');
-
-  // Collapse to one line and back.
-  await note.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(note.getByRole("button", { name: "Expand note" })).toBeVisible();
-  await page.keyboard.press("ArrowRight");
-  await expect(note.getByRole("button", { name: "Collapse note" })).toBeVisible();
-
-  // Drafts wait until they are sent together.
-  await page.keyboard.press("c");
-  const composer = main.getByRole("textbox", { name: "Note to the agent" });
-  await expect(composer).toBeFocused();
-  await composer.fill("First draft");
-  await page.keyboard.press("Alt+Enter");
-  await expect(main.getByText("1 draft not sent yet")).toBeVisible();
-  await main.getByRole("button", { name: "Send all" }).click();
-  await expect(main.getByText("2 open")).toBeVisible();
+  await expect(chat.getByText("Please also check release.")).toBeVisible();
+  await chat.focus();
+  await page.keyboard.press("Escape");
+  await expect(done.getByText("Open", { exact: true })).toBeVisible();
 
   // Delete, then undo.
-  await note.focus();
+  await open.focus();
   await page.keyboard.press("Delete");
-  await expect(main.getByText("Note deleted.")).toBeVisible();
-  await expect(note).toHaveCount(0);
-  await page.keyboard.press("Control+z");
-  await expect(note).toBeVisible();
+  await expect(panel.getByText("Deleted.")).toBeVisible();
+  await expect(open).toHaveCount(0);
+  await panel.getByRole("button", { name: "Undo (Ctrl+Z)" }).click();
+  await expect(open).toBeVisible();
 
-  // Resolve moves it under Done.
-  await note.focus();
+  // X resolves.
+  await open.focus();
   await page.keyboard.press("x");
-  await expect(main.getByRole("button", { name: "Done (2)" })).toBeVisible();
+  await expect(open.getByText("Done", { exact: true })).toBeVisible();
 });
 
 test("opens the collapsed Work Items dock to half the column after a reload", async ({ page }) => {

@@ -130,7 +130,11 @@ export function useWorkItemMentionPicker({
   );
 
   function handleTextChange(text: string, cursor: number) {
-    const mention = activeMentionAt(text, cursor);
+    const mention = activeMentionAt(
+      text,
+      cursor,
+      selectedMentions.map((selected) => selected.displayName),
+    );
     setMentionStart(mention?.start ?? null);
     setMentionQuery(mention?.query ?? "");
     setActiveMentionIndex(0);
@@ -160,8 +164,10 @@ export function useWorkItemMentionPicker({
     }, 0);
   }
 
-  function resetMentions() {
-    setSelectedMentions([]);
+  // `initial` seeds the mentions already in a draft being edited, so their
+  // `@Name` text is turned back into `@<guid>` on save.
+  function resetMentions(initial: SelectedMention[] = []) {
+    setSelectedMentions(initial);
     setMentionQuery("");
     setMentionStart(null);
     setActiveMentionIndex(0);

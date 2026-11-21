@@ -1,5 +1,6 @@
 # Cargo
 /target/
+/target-check/
 
 # Logs
 logs
@@ -29,16 +30,18 @@ test-results/
 *.sln
 *.sw?
 
-# Local tooling and artifacts (release.ps1 is tracked: package.json and the
-# README reference it as the release flow)
+# Local tooling and artifacts (release.ps1, fake-ado/ and check-file-lines.mjs
+# are tracked: package.json references them as the release flow,
+# `pnpm tauri:fake` and `pnpm check:lines`)
 scripts/*
 !scripts/release.ps1
+!scripts/fake-ado/
+!scripts/check-file-lines.mjs
 .claude/*
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/close-rejected-issues/
 !.claude/skills/release-azdo-dashboard/
-!.claude/skills/review-loop/
 entity_id
 local_id
 origin_id

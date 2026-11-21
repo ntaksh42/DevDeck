@@ -1,9 +1,11 @@
 import { useQueries } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, GripVertical, Loader2, RefreshCw, X } from "lucide-react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { listPipelineRuns, type PipelineRunSummary } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
-import { NativeSelect } from "@/components/SearchBar";
+import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
 import {
   type BoardSort,
   type BoardStatusFilter,
@@ -16,6 +18,7 @@ import {
   saveBoardSort,
   sortBoardRows,
 } from "./pipelineBoard";
+import { pipelineRunSubject } from "./pipelineAgent";
 import { PipelineHistorySpark } from "./PipelineHistorySpark";
 import { RunBadge, RunningDot } from "./PipelineRunBadge";
 import { PipelineRunsGrid, type RunSelection } from "./PipelineRunsGrid";
@@ -26,6 +29,7 @@ import {
   type PipelineSubscription,
 } from "./pipelineSubscriptionsStorage";
 import { useElementWidth } from "./useElementWidth";
+import { usePipelineManualOrder } from "./usePipelineManualOrder";
 
 const ACTIVE_REFRESH_INTERVAL_MS = 15_000;
 const IDLE_REFRESH_INTERVAL_MS = 60_000;
@@ -51,8 +55,10 @@ export function PipelineSubscriptionsBoard({
   approvalsOpen = false,
   emptyContent,
   onSelectRun,
+  onDefaultRunChange,
   onRemove,
   onToggleApprovals,
+  toolbarSlot,
 }: {
   organizationId: string;
   subscriptions: PipelineSubscription[];
@@ -63,14 +69,20 @@ export function PipelineSubscriptionsBoard({
   /** Shown instead of the default hint when nothing is watched. */
   emptyContent?: ReactNode;
   onSelectRun: (selection: RunSelection) => void;
+  /** Reports the run to preview while nothing is selected: a running pipeline's latest run, else the first row's. */
+  onDefaultRunChange?: (selection: RunSelection | null) => void;
   onRemove: (projectId: string, definitionId: number) => void;
   onToggleApprovals?: () => void;
+  /** Dock tab-band element that receives the Sort select and refresh button. */
+  toolbarSlot?: HTMLElement | null;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<BoardStatusFilter>(null);
   const [sort, setSort] = useState<BoardSort>(() => loadBoardSort());
   const [rootEl, setRootEl] = useState<HTMLElement | null>(null);
   const width = useElementWidth(rootEl);
+  const { manualOrder, pipelineDrag, reorderPipeline } = usePipelineManualOrder(subscriptions, rootEl);
   // Width 0 means "not measured yet" (first paint, no layout engine): show the
   // history cells but keep the compact columns.
   const showSpark = width === 0 || width >= SPARK_MIN_WIDTH;
@@ -153,9 +165,31 @@ export function PipelineSubscriptionsBoard({
   const runningCount = allRows.filter(isRunningRow).length;
   const failedCount = allRows.filter(isFailedRow).length;
   const boardRows = useMemo(
-    () => filterBoardRows(sortBoardRows(allRows, sort), statusFilter),
-    [allRows, sort, statusFilter],
+    () => filterBoardRows(sortBoardRows(allRows, sort, manualOrder), statusFilter),
+    [allRows, sort, manualOrder, statusFilter],
   );
+  const canReorder = sort === "manual" && boardRows.length > 1;
+
+  const defaultRun = (boardRows.find(isRunningRow) ?? boardRows.find((row) => row.latest))?.latest;
+  const defaultOrganizationId = defaultRun?.organizationId;
+  const defaultProjectId = defaultRun?.projectId;
+  const defaultBuildId = defaultRun?.buildId;
+  const defaultDefinitionId = boardRows.find((row) => row.latest === defaultRun)?.sub.definitionId;
+  useEffect(() => {
+    onDefaultRunChange?.(
+      defaultOrganizationId != null &&
+        defaultProjectId != null &&
+        defaultBuildId != null &&
+        defaultDefinitionId != null
+        ? {
+            organizationId: defaultOrganizationId,
+            projectId: defaultProjectId,
+            definitionId: defaultDefinitionId,
+            buildId: defaultBuildId,
+          }
+        : null,
+    );
+  }, [defaultOrganizationId, defaultProjectId, defaultBuildId, defaultDefinitionId, onDefaultRunChange]);
 
   const lastUpdated = queries.reduce((latest, query) => Math.max(latest, query.dataUpdatedAt ?? 0), 0);
   const refreshing = queries.some((query) => query.isFetching);
@@ -171,6 +205,39 @@ export function PipelineSubscriptionsBoard({
 
   function toggleStatusFilter(next: Exclude<BoardStatusFilter, null>) {
     setStatusFilter((current) => (current === next ? null : next));
+  }
+
+  // The pipeline headers form one roving tab stop: arrows / J K move between
+  // them and Delete unwatches, so Tab reaches the board once instead of twice
+  // per pipeline.
+  const rovingKey = boardRows.some(({ key }) => key === activeKey) ? activeKey : boardRows[0]?.key;
+
+  function onHeaderKeyDown(event: KeyboardEvent<HTMLButtonElement>, sub: (typeof boardRows)[number]["sub"]) {
+    if (canReorder && event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
+      const target = boardRows[boardRows.findIndex((row) => row.key === key) + (event.key === "ArrowUp" ? -1 : 1)];
+      if (target) reorderPipeline(key, target.key, true);
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const headers = Array.from(rootEl?.querySelectorAll<HTMLElement>("[data-board-header]") ?? []);
+    const current = headers.indexOf(event.currentTarget);
+    const target =
+      event.key === "ArrowDown" || event.key === "j" ? current + 1
+        : event.key === "ArrowUp" || event.key === "k" ? current - 1
+          : event.key === "Home" ? 0
+            : event.key === "End" ? headers.length - 1
+              : null;
+    if (target !== null) {
+      event.preventDefault();
+      event.stopPropagation();
+      headers[target]?.focus();
+    } else if (event.key === "Delete") {
+      event.preventDefault();
+      onRemove(sub.projectId, sub.definitionId);
+    }
   }
 
   function changeSort(next: BoardSort) {
@@ -192,6 +259,17 @@ export function PipelineSubscriptionsBoard({
     return expandedRows[0]?.key ?? null;
   }, [allRows, expanded, selectedBuildId]);
 
+  // The Agent panel follows the watched pipeline last focused here (its latest run) until a
+  // run's details are opened, which publish their own run.
+  const agentRun = allRows.find(({ key }) => key === activeKey)?.latest;
+  usePublishAgentSubject(
+    selectedBuildId != null
+      ? undefined
+      : agentRun
+        ? pipelineRunSubject(agentRun, agentRun.organizationId, agentRun.projectId)
+        : null,
+  );
+
   if (orgSubscriptions.length === 0) {
     return (
       emptyContent ?? (
@@ -206,78 +284,41 @@ export function PipelineSubscriptionsBoard({
     );
   }
 
+  // Sort and refresh sit in the dock tab band when the host gives a slot for them.
+  const toolbarControls = (
+    <>
+      <select
+        value={sort}
+        onChange={(event) => changeSort(event.target.value as BoardSort)}
+        aria-label="Sort pipelines"
+        aria-description="Choose Manual to rearrange watched pipelines"
+        title="Choose Manual to rearrange watched pipelines"
+        className="h-4 rounded border border-input bg-background px-1 text-2xs outline-none focus:ring-2 focus:ring-ring"
+      >
+        <option value="status">Sort: Status</option>
+        <option value="name">Sort: Name</option>
+        <option value="lastRun">Sort: Last run</option>
+        <option value="manual">Sort: Manual (reorder)</option>
+      </select>
+      <button
+        type="button"
+        onClick={() => queries.forEach((query) => void query.refetch())}
+        title={lastUpdated ? `Updated ${formatClock(lastUpdated)} — click to refresh` : "Refresh runs"}
+        aria-label="Refresh runs"
+        className="inline-flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-2xs text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+        {lastUpdated ? <span className="tabular-nums">{formatClock(lastUpdated)}</span> : null}
+      </button>
+    </>
+  );
+
   return (
     <div
       ref={setRootEl}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="text-base font-semibold">Watched pipelines</h2>
-        <span className="text-sm text-muted-foreground">{orgSubscriptions.length}</span>
-        {runningCount > 0 || statusFilter === "running" ? (
-          <button
-            type="button"
-            aria-pressed={statusFilter === "running"}
-            onClick={() => toggleStatusFilter("running")}
-            title={`${runningCount} watched pipeline${runningCount === 1 ? "" : "s"} currently running — click to show only these`}
-            className={`${PILL_BASE} bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 ${
-              statusFilter === "running" ? "ring-2 ring-blue-500" : ""
-            }`}
-          >
-            <RunningDot />
-            {runningCount} running
-          </button>
-        ) : null}
-        {failedCount > 0 || statusFilter === "failed" ? (
-          <button
-            type="button"
-            aria-pressed={statusFilter === "failed"}
-            onClick={() => toggleStatusFilter("failed")}
-            title={`${failedCount} watched pipeline${failedCount === 1 ? "" : "s"} whose latest run failed — click to show only these`}
-            className={`${PILL_BASE} bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 ${
-              statusFilter === "failed" ? "ring-2 ring-red-500" : ""
-            }`}
-          >
-            <X className="h-3 w-3" aria-hidden="true" />
-            {failedCount} failed
-          </button>
-        ) : null}
-        {approvalCount > 0 && onToggleApprovals ? (
-          <button
-            type="button"
-            aria-pressed={approvalsOpen}
-            onClick={onToggleApprovals}
-            title="Pending approvals assigned to you in the selected project — click to show or hide them"
-            className={`${PILL_BASE} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ${
-              approvalsOpen ? "ring-2 ring-amber-500" : ""
-            }`}
-          >
-            {approvalCount} {approvalCount === 1 ? "approval" : "approvals"}
-          </button>
-        ) : null}
-        <div className="ml-auto flex items-center gap-2">
-          <NativeSelect
-            compact
-            value={sort}
-            onChange={(event) => changeSort(event.target.value as BoardSort)}
-            aria-label="Sort pipelines"
-          >
-            <option value="status">Sort: Status</option>
-            <option value="name">Sort: Name</option>
-            <option value="lastRun">Sort: Last run</option>
-          </NativeSelect>
-          <button
-            type="button"
-            onClick={() => queries.forEach((query) => void query.refetch())}
-            title={lastUpdated ? `Updated ${formatClock(lastUpdated)} — click to refresh` : "Refresh runs"}
-            aria-label="Refresh runs"
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-            {lastUpdated ? <span className="tabular-nums">{formatClock(lastUpdated)}</span> : null}
-          </button>
-        </div>
-      </div>
+      {toolbarSlot ? createPortal(toolbarControls, toolbarSlot) : toolbarControls}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {boardRows.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -289,19 +330,29 @@ export function PipelineSubscriptionsBoard({
         ) : null}
         {boardRows.map(({ sub, key, query, runs, latest, visual, isRunning }) => {
           const isOpen = expanded.has(key);
+          const drag = canReorder ? pipelineDrag(key) : undefined;
           return (
             <div key={key} className="border-b border-border last:border-b-0">
               <div
-                className={`flex items-center gap-2 border-l-2 px-2 py-1.5 hover:bg-muted/40 ${
-                  isRunning ? "border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/30" : "border-l-transparent"
+                {...drag?.cell}
+                className={`flex items-center gap-2 border-l-2 px-2 py-1.5 hover:bg-muted/40 data-[drop-target=true]:ring-1 data-[drop-target=true]:ring-inset data-[drop-target=true]:ring-primary ${
+                  isRunning ? "border-l-info bg-info/10" : "border-l-transparent"
                 }`}
               >
                 <button
+                  {...drag?.handle}
                   type="button"
                   onClick={() => toggle(key)}
+                  onFocus={() => setActiveKey(key)}
+                  onKeyDown={(event) => onHeaderKeyDown(event, sub)}
+                  tabIndex={key === rovingKey ? 0 : -1}
+                  data-board-header={key}
+                  data-grid-focus-fallback={key === rovingKey ? "true" : undefined}
                   aria-expanded={isOpen}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  aria-keyshortcuts={canReorder ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
+                  className={`group flex min-w-0 flex-1 items-center gap-2 text-left ${drag ? "cursor-grab" : ""}`}
                 >
+                  {drag ? <span title="Drag to reorder or press Alt + Up / Down"><GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /></span> : null}
                   {isOpen ? (
                     <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   ) : (
@@ -313,6 +364,7 @@ export function PipelineSubscriptionsBoard({
                   <span className="truncate text-xs text-muted-foreground" title={sub.projectName}>
                     {sub.projectName}
                   </span>
+                  {drag ? <span aria-hidden="true" className="hidden shrink-0 text-2xs text-muted-foreground group-focus:inline">Alt+↑/↓</span> : null}
                 </button>
                 {query?.isFetching ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -345,7 +397,8 @@ export function PipelineSubscriptionsBoard({
                 <button
                   type="button"
                   onClick={() => onRemove(sub.projectId, sub.definitionId)}
-                  title="Remove from watched pipelines"
+                  tabIndex={-1}
+                  title="Remove from watched pipelines (Delete)"
                   aria-label={`Remove ${sub.definitionName} from watched pipelines`}
                   className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
@@ -382,6 +435,56 @@ export function PipelineSubscriptionsBoard({
           <kbd className="font-mono">R</kbd> re-run · <kbd className="font-mono">X</kbd> cancel
         </div>
       ) : null}
+      <ListStatusBar
+        summary={[
+          itemCount(orgSubscriptions.length),
+          runningCount > 0 || statusFilter === "running" ? (
+            <button
+              key="running"
+              type="button"
+              aria-pressed={statusFilter === "running"}
+              onClick={() => toggleStatusFilter("running")}
+              title={`${runningCount} watched pipeline${runningCount === 1 ? "" : "s"} currently running — click to show only these`}
+              className={`${PILL_BASE} bg-info/10 text-info ${
+                statusFilter === "running" ? "ring-2 ring-blue-500" : ""
+              }`}
+            >
+              <RunningDot />
+              {runningCount} running
+            </button>
+          ) : null,
+          failedCount > 0 || statusFilter === "failed" ? (
+            <button
+              key="failed"
+              type="button"
+              aria-pressed={statusFilter === "failed"}
+              onClick={() => toggleStatusFilter("failed")}
+              title={`${failedCount} watched pipeline${failedCount === 1 ? "" : "s"} whose latest run failed — click to show only these`}
+              className={`${PILL_BASE} bg-destructive/10 text-destructive ${
+                statusFilter === "failed" ? "ring-2 ring-red-500" : ""
+              }`}
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+              {failedCount} failed
+            </button>
+          ) : null,
+          approvalCount > 0 && onToggleApprovals ? (
+            <button
+              key="approvals"
+              type="button"
+              aria-pressed={approvalsOpen}
+              onClick={onToggleApprovals}
+              title="Pending approvals assigned to you in the selected project — click to show or hide them"
+              className={`${PILL_BASE} bg-warning/10 text-warning ${
+                approvalsOpen ? "ring-2 ring-amber-500" : ""
+              }`}
+            >
+              {approvalCount} {approvalCount === 1 ? "approval" : "approvals"}
+            </button>
+          ) : null,
+        ]}
+        helpSection="pipelines"
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ vi.mock("@/lib/openExternal", () => ({
 }));
 
 import { WikiPageDialog } from "./WikiPageDialog";
+import { OPEN_AGENT_PANEL_EVENT, type OpenAgentPanelDetail } from "@/components/agent/agentSubject";
 
 const hit: WikiSearchHit = {
   fileName: "Deploy-Guide.md",
@@ -73,14 +74,14 @@ describe("WikiPageDialog", () => {
   it("wraps Tab and Shift+Tab at the dialog edges", async () => {
     renderDialog();
     await screen.findByRole("heading", { name: "Deploy Guide", level: 1 });
-    const open = screen.getByRole("button", { name: /Open in Azure DevOps/ });
+    const ask = screen.getByRole("button", { name: /Ask agent/ });
     const body = document.activeElement as HTMLElement;
 
-    // Tab order is Open -> Close -> body, so the body is the last stop.
+    // Tab order is Ask agent -> Open -> Close -> body, so the body is the last stop.
     fireEvent.keyDown(body, { key: "Tab" });
-    expect(document.activeElement).toBe(open);
+    expect(document.activeElement).toBe(ask);
 
-    fireEvent.keyDown(open, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(ask, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(body);
   });
 
@@ -89,5 +90,16 @@ describe("WikiPageDialog", () => {
     renderDialog();
 
     expect((await screen.findByRole("alert")).textContent).toBe("Page not found");
+  });
+
+  it("asks the agent about the page in the Agent panel and closes", async () => {
+    const opened: OpenAgentPanelDetail[] = [];
+    const listener = (event: Event) => opened.push((event as CustomEvent<OpenAgentPanelDetail>).detail);
+    window.addEventListener(OPEN_AGENT_PANEL_EVENT, listener);
+    const onClose = renderDialog();
+    fireEvent.click(await screen.findByRole("button", { name: /Ask agent/ }));
+    window.removeEventListener(OPEN_AGENT_PANEL_EVENT, listener);
+    expect(onClose).toHaveBeenCalled();
+    expect(opened[0]?.subject).toMatchObject({ kind: "wiki-page", wikiId: "w-1", pagePath: "/Deploy Guide" });
   });
 });

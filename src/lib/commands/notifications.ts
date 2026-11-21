@@ -8,12 +8,14 @@ export const NOTIFICATION_KINDS = [
   "prReviewRequested",
   "prVoteReset",
   "prCommentReply",
+  "prReadyToMerge",
   "wiAssigned",
   "wiStateChanged",
   "syncFailed",
   "pipelineWatchStarted",
   "pipelineWatchFinished",
   "pipelineRunQueued",
+  "pipelineInvestigationStarted",
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -73,11 +75,15 @@ export type PipelineNotificationPayload = {
 
 /** Discriminated union returned by `parseNotificationPayload`, narrowed on `kind`. */
 export type ParsedNotificationPayload =
-  | { kind: "prReviewRequested" | "prVoteReset" | "prCommentReply"; payload: PrNotificationPayload }
+  | { kind: "prReviewRequested" | "prVoteReset" | "prCommentReply" | "prReadyToMerge"; payload: PrNotificationPayload }
   | { kind: "wiAssigned" | "wiStateChanged"; payload: WorkItemNotificationPayload }
   | { kind: "syncFailed"; payload: SyncFailedNotificationPayload }
   | {
-      kind: "pipelineWatchStarted" | "pipelineWatchFinished" | "pipelineRunQueued";
+      kind:
+        | "pipelineWatchStarted"
+        | "pipelineWatchFinished"
+        | "pipelineRunQueued"
+        | "pipelineInvestigationStarted";
       payload: PipelineNotificationPayload;
     }
   | { kind: string; payload: Record<string, unknown> };
@@ -88,6 +94,7 @@ export function parseNotificationPayload(record: NotificationRecord): ParsedNoti
   switch (record.kind) {
     case "prReviewRequested":
     case "prVoteReset":
+    case "prReadyToMerge":
     case "prCommentReply":
       return { kind: record.kind, payload: record.payload as PrNotificationPayload };
     case "wiAssigned":
@@ -98,6 +105,7 @@ export function parseNotificationPayload(record: NotificationRecord): ParsedNoti
     case "pipelineWatchStarted":
     case "pipelineWatchFinished":
     case "pipelineRunQueued":
+    case "pipelineInvestigationStarted":
       return { kind: record.kind, payload: record.payload as PipelineNotificationPayload };
     default:
       return { kind: record.kind, payload: record.payload };

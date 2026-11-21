@@ -3,16 +3,24 @@ use tauri::State;
 use crate::app_state::{ensure_write_enabled, AppState};
 use crate::error::Result;
 use crate::pr_review::{
-    AddPullRequestLabelInput, AddPullRequestReviewerInput, CreatePullRequestInput,
-    CreatedPullRequest, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
-    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
-    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
-    UpdatePullRequestInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
+    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::work_items::MentionCandidate;
+
+#[tauri::command]
+pub(crate) async fn upload_comment_image(
+    input: crate::pr_review::CommentImageInput,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.upload_comment_image(input).await
+}
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
@@ -139,16 +147,6 @@ pub async fn set_pull_request_reviewer_required(
         .await?
         .set_pull_request_reviewer_required(input)
         .await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-pub async fn create_pull_request(
-    input: CreatePullRequestInput,
-    state: State<'_, AppState>,
-) -> Result<CreatedPullRequest> {
-    ensure_write_enabled(&state).await?;
-    state.provider().await?.create_pull_request(input).await
 }
 
 #[tauri::command]

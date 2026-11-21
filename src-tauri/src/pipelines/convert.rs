@@ -3,9 +3,9 @@ use azdo_client::{
     DefinitionVariable, TestCaseResult, TestRun, Timeline,
 };
 
-use crate::commits::encode_path_segment;
 use crate::db::Organization;
 use crate::error::{AppError, Result};
+use crate::repos::encode_path_segment;
 
 use super::types::*;
 
@@ -25,11 +25,7 @@ pub(super) fn summarize_test_results(
     let mut failed_tests = Vec::new();
     for (run, results) in runs.iter().zip(failed_by_run) {
         for result in results {
-            let name = result
-                .test_case_title
-                .filter(|title| !title.trim().is_empty())
-                .or(result.automated_test_name)
-                .unwrap_or_else(|| "(unnamed test)".to_string());
+            let name = failed_test_name(&result);
             failed_tests.push(PipelineFailedTest {
                 name,
                 run_name: run.name.clone(),
@@ -49,6 +45,17 @@ pub(super) fn summarize_test_results(
         truncated: (failed_tests.len() as i64) < failed,
         failed_tests,
     }
+}
+
+/// The name a failed test is listed (and compared across runs) under.
+pub(super) fn failed_test_name(result: &TestCaseResult) -> String {
+    result
+        .test_case_title
+        .as_deref()
+        .filter(|title| !title.trim().is_empty())
+        .or(result.automated_test_name.as_deref())
+        .unwrap_or("(unnamed test)")
+        .to_string()
 }
 
 /// Stage identifiers are plain names; anything else could alter the request path.
@@ -71,6 +78,15 @@ pub(super) fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary
                 .or_else(|| approver.unique_name.clone())
         })
         .collect();
+    let pipeline_name = approval
+        .pipeline
+        .as_ref()
+        .and_then(|pipeline| pipeline.name.clone());
+    let run_name = approval
+        .pipeline
+        .as_ref()
+        .and_then(|pipeline| pipeline.owner.as_ref())
+        .and_then(|owner| owner.name.clone());
     PipelineApprovalSummary {
         id: approval.id,
         status: approval.status.unwrap_or_default(),
@@ -79,6 +95,8 @@ pub(super) fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary
         execution_order: approval.execution_order,
         created_on: approval.created_on.map(|date| date.to_rfc3339()),
         assigned_approvers,
+        pipeline_name,
+        run_name,
     }
 }
 

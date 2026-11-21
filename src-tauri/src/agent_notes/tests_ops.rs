@@ -17,6 +17,8 @@ fn note(folder: &Path, body: &str, draft: bool, m: u32) -> AgentNote {
         result_file: None,
         result_hash: Some("abc123".to_string()),
         kind: Some("question".to_string()),
+        context: None,
+        context_document: None,
         draft,
     };
     create_note(folder, input, at(m)).unwrap()
@@ -51,6 +53,8 @@ fn new_front_matter_fields_round_trip() {
         result_file: None,
         result_hash: None,
         kind: Some("later".to_string()),
+        context: None,
+        context_document: None,
         draft: false,
     };
     assert!(create_note(temp.path(), bad.clone(), at(1)).is_err());
@@ -212,8 +216,8 @@ fn summary_counts_states_per_item() {
 答え
 ",
     );
-    fs::create_dir_all(temp.path().join(NOTES_DIR).join("pr-3")).unwrap();
-    fs::create_dir_all(temp.path().join(NOTES_DIR).join("wi-x")).unwrap();
+    fs::create_dir_all(temp.path().join("pr-3")).unwrap();
+    fs::create_dir_all(temp.path().join("wi-x")).unwrap();
 
     let summaries = summary::summarize(temp.path(), NoteTarget::WorkItem).unwrap();
     assert_eq!(summaries.len(), 1);
@@ -227,4 +231,28 @@ fn summary_counts_states_per_item() {
         Some("2026-09-27T11:00:00+09:00")
     );
     assert!(s.last_modified_at.is_some());
+}
+
+#[test]
+fn old_note_stays_restorable_after_delete() {
+    let temp = tempfile::tempdir().unwrap();
+    let created = note(temp.path(), "a", false, 0);
+    let path = notes_dir(temp.path(), NoteTarget::WorkItem, 7).join(&created.id);
+    let three_days_ago =
+        std::time::SystemTime::now() - std::time::Duration::from_secs(3 * 24 * 3600);
+    fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(three_days_ago)
+        .unwrap();
+    ops::trash_note(temp.path(), NoteTarget::WorkItem, 7, &created.id).unwrap();
+    assert!(list(temp.path()).is_empty());
+    let restore = RestoreAgentNoteInput {
+        target: NoteTarget::WorkItem,
+        item_id: 7,
+        note_id: created.id.clone(),
+        status: "open".to_string(),
+    };
+    ops::restore_note(temp.path(), restore).unwrap();
 }

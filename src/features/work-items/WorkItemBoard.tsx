@@ -18,6 +18,7 @@ import {
 } from '@/lib/azdoCommands';
 import { focusPrimaryPreview, isEditableTarget } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { useActiveWorkItemSnoozes } from './useActiveWorkItemSnoozes';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import {
   loadCustomPreviewFields,
@@ -61,13 +62,14 @@ export function WorkItemBoard({
   // `columns` has been rebuilt from the optimistic override.
   const movedCardKeyRef = useRef<string | null>(null);
 
+  const snoozed = useActiveWorkItemSnoozes(organizationId);
   const effectiveResults = useMemo(
     () =>
-      results.map((item) => {
+      results.filter((item) => !snoozed.has(String(item.id))).map((item) => {
         const override = overrides.get(workItemKey(item));
         return override !== undefined ? { ...item, state: override } : item;
       }),
-    [overrides, results],
+    [overrides, results, snoozed],
   );
 
   // The board groups by state, so the relevant work item types are whatever the
@@ -349,6 +351,9 @@ export function WorkItemBoard({
     <div className="flex min-h-0 flex-1 gap-3">
       <div
         ref={containerRef}
+        data-focus-pane="board"
+        data-pane-focus-target="true"
+        data-pane-arrow-keys="local"
         tabIndex={-1}
         role="group"
         aria-label="Work item board. Use arrow keys to move between cards, Shift+Arrow to change a card's state, Enter to open the preview."
@@ -381,7 +386,7 @@ export function WorkItemBoard({
           />
         ))}
       </div>
-      <div className="hidden w-[380px] shrink-0 lg:flex lg:flex-col">
+      <div className="hidden w-[380px] shrink-0 lg:flex lg:flex-col" data-focus-pane="board-preview" tabIndex={-1}>
         <WorkItemPreviewPanel
           customPreviewFields={customPreviewFields}
           onCustomPreviewFieldsChange={(fields) => {

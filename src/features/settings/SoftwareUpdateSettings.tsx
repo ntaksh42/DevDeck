@@ -7,6 +7,7 @@ import {
   type AvailableUpdate,
 } from "@/lib/softwareUpdate";
 import { useExperimentalFlag } from "./useExperimentalFlags";
+import { SettingsRow } from './SettingsRow';
 
 type Status =
   | { kind: "idle" }
@@ -60,23 +61,11 @@ export function SoftwareUpdateSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Download className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Software update</h2>
-            <p className="text-sm text-muted-foreground">
-              Check for a newer release and install it. Opt-in — nothing is
-              downloaded until you check.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 p-3">
+    <SettingsRow
+      title="Software update"
+      description={<>Check for a newer release and install it. Opt-in — nothing is downloaded until you check.</>}
+    >
+      <div className="flex flex-wrap items-center gap-3">
         {!supported ? (
           <p className="text-sm text-muted-foreground">
             Updates are available in the installed desktop app.
@@ -132,6 +121,6 @@ export function SoftwareUpdateSettings() {
           </>
         )}
       </div>
-    </div>
+    </SettingsRow>
   );
 }

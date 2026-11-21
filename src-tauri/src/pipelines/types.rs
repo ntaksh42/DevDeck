@@ -149,6 +149,9 @@ pub struct PipelineApprovalSummary {
     pub execution_order: Option<String>,
     pub created_on: Option<String>,
     pub assigned_approvers: Vec<String>,
+    /// The pipeline and its waiting run's build number, when the service sent them.
+    pub pipeline_name: Option<String>,
+    pub run_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

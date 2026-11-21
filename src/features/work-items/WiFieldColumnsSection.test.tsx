@@ -20,6 +20,7 @@ afterEach(() => {
 });
 
 const FIELDS: WorkItemFieldOption[] = [
+  { referenceName: "Contoso.Release", name: "Release", fieldType: "string", custom: false },
   { referenceName: "Microsoft.VSTS.Common.Priority", name: "Priority", fieldType: "integer", custom: false },
   { referenceName: "Microsoft.VSTS.Common.Severity", name: "Severity", fieldType: "string", custom: false },
   { referenceName: "Custom.Team", name: "Team", fieldType: "string", custom: true },
@@ -32,7 +33,6 @@ function renderSection(extraColumns: string[], onChange = vi.fn()) {
     <QueryClientProvider client={client}>
       <WiFieldColumnsSection
         organizationId="contoso"
-        projectId="demo"
         extraColumns={extraColumns}
         onExtraColumnsChange={onChange}
       />
@@ -42,6 +42,18 @@ function renderSection(extraColumns: string[], onChange = vi.fn()) {
 }
 
 describe("WiFieldColumnsSection", () => {
+  it("loads organization fields without a project and offers non-Custom namespaces", async () => {
+    const onChange = renderSection([]);
+    const field = await screen.findByRole("button", { name: /Release/ });
+    expect(listWorkItemFields).toHaveBeenCalledWith({ organizationId: "contoso", projectId: "" });
+    const search = screen.getByLabelText("Search fields to add as columns");
+    fireEvent.change(search, { target: { value: "Contoso.Release" } });
+    expect(field).toBeTruthy();
+    fireEvent.keyDown(search, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith(["Contoso.Release"]);
+    expect(document.activeElement).toBe(search);
+  });
+
   it("narrows the field list by search and adds the first match on Enter", async () => {
     const onChange = renderSection([]);
     const search = screen.getByLabelText("Search fields to add as columns");

@@ -4,6 +4,7 @@ import {
   LAYOUT_STORAGE_PREFIX,
   clearLayoutStorage,
 } from "@/lib/layoutReset";
+import { SettingsRow } from './SettingsRow';
 
 export function DataCacheSettings() {
   const queryClient = useQueryClient();
@@ -38,14 +39,12 @@ export function DataCacheSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-card" data-cache-revision={revision}>
-      <div className="border-b border-border px-3 py-2">
-        <h2 className="text-base font-semibold">Data cache</h2>
-        <p className="text-sm text-muted-foreground">
-          Clear cached server responses without removing organizations or saved WIQL views.
-        </p>
-      </div>
-      <div className="grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
+    <SettingsRow
+      data-cache-revision={revision}
+      title="Data cache"
+      description={<>Clear cached server responses without removing organizations or saved WIQL views.</>}
+    >
+      <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
         <div className="grid gap-1 text-sm">
           <p>
             <span className="text-muted-foreground">Query cache:</span>{" "}
@@ -76,7 +75,7 @@ export function DataCacheSettings() {
           </button>
         </div>
       </div>
-    </div>
+    </SettingsRow>
   );
 }
 

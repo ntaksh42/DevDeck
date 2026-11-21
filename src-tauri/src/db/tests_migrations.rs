@@ -40,12 +40,12 @@ fn migrate_v1_db_upgrades_to_latest() {
 
     let count: i64 = conn
         .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='commits'",
+            "SELECT count(*) FROM sqlite_master WHERE name IN ('commits', 'commits_fts', 'commit_prs')",
             [],
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(count, 1);
+    assert_eq!(count, 0);
 
     let fts_count: i64 = conn
         .query_row(
@@ -260,4 +260,45 @@ fn migrate_v19_db_upgrades_to_v20_adds_pr_author_id_column() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].created_by.as_deref(), Some("Alice"));
     assert_eq!(results[0].created_by_id, None);
+}
+
+#[test]
+fn migrate_v22_db_drops_commit_cache_and_sync_rows() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+    // Rebuild what a v22 database still carried for the removed Commits view.
+    conn.execute_batch(
+        r#"
+        CREATE TABLE commits(org_id TEXT, repository_id TEXT, commit_id TEXT);
+        CREATE VIRTUAL TABLE commits_fts USING fts5(comment);
+        CREATE TABLE commit_prs(org_id TEXT, commit_id TEXT);
+        INSERT INTO organizations(id, name, base_url, auth_provider, credential_key, created_at, updated_at)
+            VALUES('org1', 'org1', 'https://dev.azure.com/org1', 'pat', 'key', '2024-01-01', '2024-01-01');
+        INSERT INTO sync_state(scope, org_id) VALUES
+            ('commits:org1', 'org1'),
+            ('internal:commit_full_sync:org1', 'org1'),
+            ('prs:org1', 'org1');
+        PRAGMA user_version = 22;
+        "#,
+    )
+    .unwrap();
+
+    migrate(&conn).unwrap();
+
+    let tables: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name IN ('commits', 'commits_fts', 'commit_prs')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(tables, 0);
+    let scopes: Vec<String> = conn
+        .prepare("SELECT scope FROM sync_state ORDER BY scope")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    assert_eq!(scopes, vec!["prs:org1".to_string()]);
 }

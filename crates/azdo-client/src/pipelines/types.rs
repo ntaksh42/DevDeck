@@ -106,6 +106,8 @@ pub struct Build {
     pub status: Option<String>,
     pub result: Option<String>,
     pub source_branch: Option<String>,
+    /// The commit the build ran on.
+    pub source_version: Option<String>,
     pub reason: Option<String>,
     pub queue_time: Option<DateTime<Utc>>,
     pub start_time: Option<DateTime<Utc>>,
@@ -175,6 +177,25 @@ pub struct Approval {
     #[serde(default)]
     pub steps: Vec<ApprovalStep>,
     pub created_on: Option<DateTime<Utc>>,
+    /// The pipeline and run that wait on this approval, when the service
+    /// includes them.
+    #[serde(default)]
+    pub pipeline: Option<ApprovalPipeline>,
+}
+
+/// The pipeline an approval belongs to; `owner` is the run that is waiting.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalPipeline {
+    pub name: Option<String>,
+    pub owner: Option<ApprovalPipelineOwner>,
+}
+
+/// The waiting run: its build number (`name`), e.g. `20260513.1`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalPipelineOwner {
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

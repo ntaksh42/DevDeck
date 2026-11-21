@@ -2,19 +2,33 @@ import { z } from "zod";
 import { invokeCommand } from "./runtime";
 
 // Notes for the external AI agent that investigates work items and reviews
-// pull requests. The backend stores each note as a Markdown file under
-// the matching result folder (`.to-agent-msg/wi-{id}/` or `pr-{id}/`); the agent
+// pull requests, plus free-standing requests from any view (`ask`). The
+// backend stores each note as a Markdown file under the app data folder
+// (`agent-notes/wi-{id}/`, `pr-{id}/` or `ask-{id}/`); the agent
 // moves handled notes into `_done/`. Unsent drafts live in `_draft/`.
 
-export type AgentNoteTarget = "work-item" | "pull-request";
+export type AgentNoteTarget = "work-item" | "pull-request" | "ask";
 
-export type AgentNoteKind = "fix" | "question" | "redo";
+/** The coding agent a request is handed to. */
+export type AgentKind = "claude" | "codex";
+
+export type AgentNoteKind = "fix" | "question" | "redo" | "investigate" | "summarize";
 
 const noteReplySchema = z.object({
   author: z.string(),
   createdAt: z.string(),
   body: z.string(),
+  /** `post`: a comment the agent proposes to leave on the item; DevDeck posts it, signed. */
+  kind: z.enum(["reply", "post"]).catch("reply").optional(),
+  /** Set once DevDeck posted a `post` reply: when, and where (`thread-12` / `comment-34`). */
+  postedAt: z.string().nullable().optional(),
+  postedRef: z.string().nullable().optional(),
+  /** A `post` on a pull request line: the file (`/src/a.ts`) and the 1-based line on the new side. */
+  filePath: z.string().nullable().optional(),
+  line: z.number().nullable().optional(),
 });
+
+export type NoteReply = z.infer<typeof noteReplySchema>;
 
 const agentNoteSchema = z.object({
   id: z.string(),
@@ -29,6 +43,8 @@ const agentNoteSchema = z.object({
   resultFile: z.string().nullable(),
   resultHash: z.string().nullable().optional().default(null),
   kind: z.string().nullable().optional().default(null),
+  context: z.string().nullable().optional().default(null),
+  contextFile: z.string().nullable().optional().default(null),
   resolved: z.string().nullable(),
   replies: z.array(noteReplySchema),
   filePath: z.string(),
@@ -53,6 +69,10 @@ export type CreateAgentNoteInput = AgentNoteItem & {
   resultFile?: string | null;
   resultHash?: string | null;
   kind?: AgentNoteKind | null;
+  /** One line naming the subject (title, URL). */
+  context?: string | null;
+  /** Material DevDeck gathered for the agent, which has no Azure DevOps access. */
+  contextDocument?: string | null;
   draft?: boolean;
 };
 
@@ -127,6 +147,7 @@ const agentNoteSummarySchema = z.object({
   needsYou: z.number(),
   drafts: z.number(),
   done: z.number(),
+  doneByAgent: z.number().default(0),
   lastAgentReplyAt: z.string().nullable(),
   lastModifiedAt: z.string().nullable(),
 });
@@ -141,7 +162,52 @@ export async function summarizeAgentNotes(input: {
   return z.array(agentNoteSummarySchema).parse(result);
 }
 
-/** Starts the agent command from Settings for one item's notes. */
-export async function runAgent(input: AgentNoteItem): Promise<void> {
+/**
+ * Starts the agent command from Settings for one item's notes.
+ * `repositoryName` (pull requests) selects the repository's clone inside the
+ * workspace folder as the working directory. `agent` defaults to the one
+ * chosen in Settings, `model` to that agent's model there ("" for the agent's
+ * own setting).
+ */
+export async function runAgent(
+  input: AgentNoteItem & { repositoryName?: string | null; agent?: AgentKind; model?: string },
+): Promise<void> {
   await invokeCommand("run_agent", { input });
+}
+
+const agentAskSchema = z.object({
+  itemId: z.number(),
+  lastModifiedAt: z.string().nullable(),
+  notes: z.array(agentNoteSchema),
+});
+
+export type AgentAsk = z.infer<typeof agentAskSchema>;
+
+/** Free-standing requests (`ask` target), most recently touched first. */
+export async function listAgentAsks(): Promise<AgentAsk[]> {
+  const result = await invokeCommand("list_agent_asks", {});
+  return z.array(agentAskSchema).parse(result);
+}
+
+export type PostAgentCommentInput = AgentNoteItem & {
+  noteId: string;
+  /** Index of the proposal among the note's replies. */
+  replyIndex: number;
+  /** DevDeck posts it without the user approving this comment (Settings must allow it). */
+  auto?: boolean;
+  organizationId?: string | null;
+  projectId: string;
+  /** Pull request notes. */
+  repositoryId?: string | null;
+  /** Pull request notes: reply in this thread instead of opening one. */
+  threadId?: number | null;
+};
+
+/**
+ * Posts a comment the agent proposed in a note to its work item / pull
+ * request, signed with the agent's name. The backend refuses a proposal that
+ * was posted already.
+ */
+export async function postAgentComment(input: PostAgentCommentInput): Promise<void> {
+  await invokeCommand("post_agent_comment", { input });
 }

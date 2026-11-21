@@ -18,7 +18,7 @@ import { type AddReviewerRequest, PrReviewerAdder } from "./PrReviewerAdder";
 import { PrLabelsRow } from "./PrLabelsRow";
 
 const BADGE_BASE =
-  "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium";
+  "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-2xs font-medium";
 
 function shortRef(refName: string): string {
   return refName.replace(/^refs\/heads\//, "");
@@ -36,7 +36,7 @@ function StateBadge({ isDraft }: { isDraft: boolean }) {
   }
   return (
     <span
-      className={`${BADGE_BASE} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300`}
+      className={`${BADGE_BASE} border-success/30 bg-success/10 text-success`}
     >
       <span
         className="h-1.5 w-1.5 rounded-full bg-emerald-500"
@@ -56,7 +56,7 @@ function ciBadge(pr: ReviewPullRequestSummary) {
     return (
       <span
         key="ci"
-        className={`${BADGE_BASE} border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300`}
+        className={`${BADGE_BASE} border-destructive/30 bg-destructive/10 text-destructive`}
       >
         <XCircle className="h-3 w-3" aria-hidden="true" />
         CI failed · {pr.ciCheckCount}
@@ -67,7 +67,7 @@ function ciBadge(pr: ReviewPullRequestSummary) {
     return (
       <span
         key="ci"
-        className={`${BADGE_BASE} border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300`}
+        className={`${BADGE_BASE} border-success/30 bg-success/10 text-success`}
       >
         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
         CI passed
@@ -78,7 +78,7 @@ function ciBadge(pr: ReviewPullRequestSummary) {
     return (
       <span
         key="ci"
-        className={`${BADGE_BASE} border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300`}
+        className={`${BADGE_BASE} border-warning/30 bg-warning/10 text-warning`}
       >
         <Loader className="h-3 w-3 animate-spin" aria-hidden="true" />
         CI running
@@ -114,13 +114,13 @@ function approvedBadge(review: PullRequestReview | null) {
       key="approved"
       className={`${BADGE_BASE} ${
         complete
-          ? "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
+          ? "border-success/30 bg-success/10 text-success"
           : "border-border bg-muted text-muted-foreground"
       }`}
       title={`${approved} of ${total} reviewers approved`}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${approved > 0 ? "bg-emerald-500" : "bg-gray-300"}`}
+        className={`h-1.5 w-1.5 rounded-full ${approved > 0 ? "bg-emerald-500" : "bg-muted-foreground/30"}`}
         aria-hidden="true"
       />
       {approved} / {total} approved
@@ -148,7 +148,7 @@ function commentsBadge(review: PullRequestReview | null) {
       key="comments"
       className={`${BADGE_BASE} ${
         hasUnresolved
-          ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+          ? "border-warning/30 bg-warning/10 text-warning"
           : "border-border bg-muted text-muted-foreground"
       }`}
       title={`${commentThreads.length} comment thread${
@@ -164,9 +164,8 @@ function commentsBadge(review: PullRequestReview | null) {
 }
 
 // Persistent PR header shown above every tab. Pulls live fields from `review`
-// when available (review/files tabs) and falls back to the cached summary
-// `selectedPr` otherwise, so the title/branch/state stay populated on the
-// commits and result tabs where the review query is not enabled.
+// when available and falls back to the cached summary `selectedPr` otherwise,
+// so the title/branch/state stay populated while the review query loads.
 export function PrReviewHeader({
   selectedPr,
   review,
@@ -189,13 +188,7 @@ export function PrReviewHeader({
   /** One line (id + title) instead of the full metadata block. */
   compact?: boolean;
 }) {
-  if (!selectedPr) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm text-muted-foreground">No PR selected</span>
-      </div>
-    );
-  }
+  if (!selectedPr) return null;
 
   const title = review?.title ?? selectedPr.title;
 
@@ -231,90 +224,96 @@ export function PrReviewHeader({
   ].filter(Boolean);
   const reviewers = review?.reviewers ?? [];
 
-  // Read top-down: what the PR is (title, full width), what needs attention
-  // (status badges), where it
-  // came from (branch, then id / author), then who reviews.
+  // Keep title/state together, then metadata and aligned reviewer/label rows.
   return (
-    <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
-      <h2
-        className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-foreground"
-        title={title}
-      >
-        {title}
-      </h2>
+    <div className="flex shrink-0 flex-col gap-1 border-b border-border px-2 py-1">
+      <div className="flex min-w-0 items-start gap-2">
+        <h2
+          className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-foreground"
+          title={title}
+        >
+          {title}
+        </h2>
+        <StateBadge isDraft={isDraft} />
+      </div>
       <div
         role="group"
         aria-label="Pull request metadata"
         className="flex min-w-0 flex-col gap-1"
       >
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <StateBadge isDraft={isDraft} />
-          {statusBadges}
-        </div>
-        <p className="min-w-0 truncate font-mono text-xs text-foreground" title={branchTitle}>
-          {branchLabel}
-        </p>
-        <p className="min-w-0 truncate text-xs text-muted-foreground">
-          <span className="font-mono font-semibold text-foreground">
-            #{selectedPr.pullRequestId}
-          </span>
-          {" · "}
-          {createdBy ?? "Unknown"}
-          {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
-        </p>
-        {reviewers.length > 0 || onAddReviewer ? (
+        {statusBadges.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1">
-            <span className="mr-0.5 text-xs text-muted-foreground">Reviewers</span>
-            {approvedBadge(review)}
-            {reviewers.map((reviewer) => (
-              <span
-                key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
-                className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
-                title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
-              >
-                {reviewer.displayName}
-                {reviewer.isMe ? " (you)" : ""}
+            {statusBadges}
+          </div>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <p className="min-w-0 break-all font-mono text-xs text-foreground" title={branchTitle}>
+            {branchLabel}
+          </p>
+          <p className="min-w-0 break-words text-xs text-muted-foreground">
+            <span className="font-mono font-semibold text-foreground">
+              #{selectedPr.pullRequestId}
+            </span>
+            {" · "}
+            {createdBy ?? "Unknown"}
+            {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
+          </p>
+        </div>
+        {reviewers.length > 0 || onAddReviewer ? (
+          <div className="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-1">
+            <span className="text-xs text-muted-foreground">Reviewers</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              {approvedBadge(review)}
+              {reviewers.map((reviewer) => (
                 <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(reviewer.vote)]}`}
-                  aria-hidden="true"
+                  key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
+                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-2xs text-foreground [overflow-wrap:anywhere]"
+                  title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
+                >
+                  {reviewer.displayName}
+                  {reviewer.isMe ? " (you)" : ""}
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(reviewer.vote)]}`}
+                    aria-hidden="true"
+                  />
+                  {reviewer.id && onToggleReviewerRequired && onRemoveReviewer ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={reviewerActionsBusy}
+                        onClick={() => onToggleReviewerRequired(reviewer)}
+                        title={reviewer.isRequired ? "Make optional" : "Make required"}
+                        aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
+                        className="rounded px-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
+                      >
+                        {reviewer.isRequired ? "Req" : "Opt"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewerActionsBusy}
+                        onClick={() => onRemoveReviewer(reviewer)}
+                        aria-label={`Remove reviewer ${reviewer.displayName}`}
+                        title="Remove reviewer"
+                        className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
+                      >
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </>
+                  ) : null}
+                </span>
+              ))}
+              {onAddReviewer ? (
+                <PrReviewerAdder
+                  organizationId={selectedPr.organizationId}
+                  existingReviewerIds={
+                    new Set(reviewers.flatMap((reviewer) => (reviewer.id ? [reviewer.id] : [])))
+                  }
+                  canAddMe={!reviewers.some((reviewer) => reviewer.isMe)}
+                  busy={reviewerActionsBusy}
+                  onAdd={onAddReviewer}
                 />
-                {reviewer.id && onToggleReviewerRequired && onRemoveReviewer ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={reviewerActionsBusy}
-                      onClick={() => onToggleReviewerRequired(reviewer)}
-                      title={reviewer.isRequired ? "Make optional" : "Make required"}
-                      aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
-                      className="rounded px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
-                    >
-                      {reviewer.isRequired ? "Req" : "Opt"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewerActionsBusy}
-                      onClick={() => onRemoveReviewer(reviewer)}
-                      aria-label={`Remove reviewer ${reviewer.displayName}`}
-                      title="Remove reviewer"
-                      className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
-                    >
-                      <X className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  </>
-                ) : null}
-              </span>
-            ))}
-            {onAddReviewer ? (
-              <PrReviewerAdder
-                organizationId={selectedPr.organizationId}
-                existingReviewerIds={
-                  new Set(reviewers.flatMap((reviewer) => (reviewer.id ? [reviewer.id] : [])))
-                }
-                canAddMe={!reviewers.some((reviewer) => reviewer.isMe)}
-                busy={reviewerActionsBusy}
-                onAdd={onAddReviewer}
-              />
-            ) : null}
+              ) : null}
+            </div>
           </div>
         ) : null}
         {onAddLabel && onRemoveLabel ? (

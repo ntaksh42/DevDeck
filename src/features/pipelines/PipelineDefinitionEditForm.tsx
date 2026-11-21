@@ -12,6 +12,7 @@ import {
   updatePipelineDefinition,
   type PipelineDefinitionDetail,
 } from "@/lib/azdoCommands";
+import { isImeComposing } from "@/lib/utils";
 
 type EditableVariable = {
   id: number;
@@ -167,6 +168,7 @@ export function PipelineDefinitionEditForm({
   // Contain keys so the underlying pipeline list does not also react.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       onCancel();
@@ -180,13 +182,13 @@ export function PipelineDefinitionEditForm({
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         <section className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
               Variables
             </h3>
             <button
               type="button"
               onClick={addVariable}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-2xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <Plus className="h-3 w-3" aria-hidden="true" />
               Add variable
@@ -204,7 +206,7 @@ export function PipelineDefinitionEditForm({
                     {variable.name}
                   </span>
                   <span>(secret)</span>
-                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                  <span className="shrink-0 rounded bg-warning/10 px-1.5 py-0.5 text-2xs font-medium text-warning">
                     Secret
                   </span>
                 </div>
@@ -233,7 +235,7 @@ export function PipelineDefinitionEditForm({
                   aria-label={`Variable ${index + 1} value`}
                   className={`${inputClass} flex-1 font-mono`}
                 />
-                <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                <label className="flex shrink-0 items-center gap-1 text-2xs text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={variable.allowOverride}
@@ -259,7 +261,7 @@ export function PipelineDefinitionEditForm({
         </section>
 
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
             CI trigger
           </h3>
           <label className="flex items-center gap-2 text-xs">
@@ -274,7 +276,7 @@ export function PipelineDefinitionEditForm({
             Enable continuous integration trigger
           </label>
           <label className="grid gap-1">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-2xs text-muted-foreground">
               Branch filters (one per line, e.g. +refs/heads/main)
             </span>
             <textarea
@@ -290,7 +292,7 @@ export function PipelineDefinitionEditForm({
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-2xs text-muted-foreground">
               Path filters (one per line, optional)
             </span>
             <textarea

@@ -3,16 +3,18 @@ use std::str::FromStr;
 mod agent_notes;
 mod app_state;
 mod auth;
+mod auto_agent;
 mod cache_epoch;
-mod cancellation;
-mod code_browse;
-mod code_search;
 mod commands;
-mod commits;
 mod db;
+mod dev_overrides;
 mod diagnostics;
 mod error;
 mod github;
+mod home_bot;
+mod inbox_insight;
+#[cfg(test)]
+mod ipc_contract;
 mod orgs;
 mod pipelines;
 mod pr_review;
@@ -20,6 +22,7 @@ mod project_info;
 mod projects;
 mod providers;
 mod prs;
+mod repos;
 mod search;
 mod secrets;
 mod settings;
@@ -31,10 +34,6 @@ mod work_items;
 
 use agent_notes::AgentNoteService;
 use app_state::AppState;
-use cancellation::CancellationRegistry;
-use code_browse::CodeBrowseService;
-use code_search::CodeSearchService;
-use commits::CommitService;
 use db::AppDatabase;
 use error::{AppError, Result};
 use orgs::OrganizationService;
@@ -42,6 +41,7 @@ use pipelines::PipelineService;
 use pr_review::PrReviewService;
 use project_info::ProjectInfoService;
 use prs::PullRequestService;
+use repos::RepoService;
 use secrets::SecretStore;
 use settings::SettingsService;
 use snooze::SnoozeService;
@@ -114,23 +114,39 @@ pub fn run() {
             // Surface setup failures (e.g. a failed DB migration) to stderr;
             // otherwise the window stays blank with no clue why state was never
             // managed and every command fails.
-            let app_data_dir = app.path().app_data_dir().inspect_err(|e| {
-                eprintln!("DevDeck setup failed (app_data_dir): {e}");
-            })?;
+            let app_data_dir = match dev_overrides::data_dir() {
+                Some(dir) => {
+                    std::fs::create_dir_all(&dir)?;
+                    dir
+                }
+                None => app.path().app_data_dir().inspect_err(|e| {
+                    eprintln!("DevDeck setup failed (app_data_dir): {e}");
+                })?,
+            };
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
             db.initialize().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (db.initialize): {e}");
             })?;
+            // A summary cut short by the last exit is written again.
+            if let Err(e) = db.clear_pending_inbox_insights() {
+                tracing::warn!(error = ?e, "could not reset pending inbox insights");
+            }
             let settings = db.get_app_settings().inspect_err(|e| {
                 eprintln!("DevDeck setup failed (get_app_settings): {e}");
             })?;
-            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
-                .inspect_err(|e| {
-                    eprintln!("DevDeck setup failed (configure_show_window_hotkey): {e}");
-                })?;
-            // Refresh the agent notes guide so existing result folders pick up
-            // format changes without re-saving Settings.
-            settings::place_agent_guides(&settings);
+            // The hotkey is a convenience: registering it fails outside an
+            // interactive desktop session (os error 1459), and that must not
+            // stop the app from starting.
+            if let Err(e) =
+                configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
+            {
+                eprintln!("DevDeck: show window hotkey is unavailable: {e}");
+                tracing::warn!(error = ?e, "could not register the show window hotkey");
+            }
+            // Move notes older versions kept in the result folders and refresh
+            // the agent notes guide so existing result folders pick up format
+            // changes without re-saving Settings.
+            settings::prepare_agent_notes(&settings, &agent_notes::notes_root(&db));
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
                 db: db.clone(),
@@ -138,19 +154,23 @@ pub fn run() {
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 pr_review: PrReviewService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
-                commits: CommitService::new(db.clone(), SecretStore),
                 pipelines: PipelineService::new(db.clone(), SecretStore),
-                code_search: CodeSearchService::new(db.clone(), SecretStore),
-                code_browse: CodeBrowseService::new(db.clone(), SecretStore),
+                repos: RepoService::new(db.clone(), SecretStore),
                 wiki: WikiService::new(db.clone(), SecretStore),
                 project_info: ProjectInfoService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 agent_notes: AgentNoteService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
-                cancellation: CancellationRegistry::new(),
                 sync_trigger: sync_tx,
                 active_provider: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
             });
+            let handle = app.handle().clone();
+            let notifier: home_bot::Notifier = std::sync::Arc::new(move || {
+                let _ = tauri::Emitter::emit(&handle, "home:updated", serde_json::json!({}));
+            });
+            let home_bot = home_bot::HomeBot::new(db.clone(), Some(notifier));
+            home_bot.start();
+            app.manage(home_bot);
             tauri::async_runtime::spawn(
                 SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
             );
@@ -162,6 +182,7 @@ pub fn run() {
             commands::settings::update_app_settings,
             commands::settings::get_review_result_preview,
             commands::settings::get_work_item_result_preview,
+            commands::settings::list_result_item_ids,
             commands::agent_notes::list_agent_notes,
             commands::agent_notes::create_agent_note,
             commands::agent_notes::delete_agent_note,
@@ -172,6 +193,31 @@ pub fn run() {
             commands::agent_notes::submit_agent_note_drafts,
             commands::agent_notes::summarize_agent_notes,
             commands::agent_notes::run_agent,
+            commands::agent_notes::post_agent_comment,
+            commands::agent_notes::list_agent_asks,
+            commands::auto_queue::list_auto_queue,
+            commands::auto_queue::get_auto_queue_preview,
+            commands::auto_queue::run_auto_queue,
+            commands::auto_queue::run_assigned_work_item_investigations,
+            commands::auto_queue::run_work_item_investigations,
+            commands::auto_queue::list_agent_work,
+            commands::home_bot::get_home_bot,
+            commands::home_bot::run_home_look_now,
+            commands::home_bot::mark_home_seen,
+            commands::home_bot::dismiss_home_suggestion,
+            commands::home_bot::start_home_suggestion,
+            commands::home_bot::save_home_bot_settings,
+            commands::home_bot::save_home_pipelines,
+            commands::home_bot::clear_home_dismissed,
+            commands::home_bot::count_home_dismissed,
+            commands::home_bot::get_home_chat,
+            commands::home_bot::send_home_message,
+            commands::home_bot::new_home_chat,
+            commands::home_bot::stop_home_worker,
+            commands::auto_queue::start_pipeline_investigation,
+            commands::auto_queue::read_agent_work_log,
+            commands::auto_queue::retry_agent_work,
+            commands::auto_queue::set_agent_work_excluded,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,
             commands::snooze::snooze_item,
@@ -185,6 +231,7 @@ pub fn run() {
             commands::orgs::set_active_organization,
             commands::orgs::get_provider_capabilities,
             commands::prs::search_pull_requests,
+            commands::prs::stop_pull_request_search,
             commands::prs::list_my_review_pull_requests,
             commands::prs::list_my_created_pull_requests,
             commands::pr_review::get_pull_request_review,
@@ -193,11 +240,11 @@ pub fn run() {
             commands::pr_review::list_pull_request_commits,
             commands::pr_review::list_pull_request_work_items,
             commands::pr_review::post_pull_request_comment,
+            commands::pr_review::upload_comment_image,
             commands::pr_review::set_pull_request_thread_status,
             commands::pr_review::submit_pull_request_vote,
             commands::pr_review::update_pull_request,
             commands::pr_review::set_pull_request_reviewer_required,
-            commands::pr_review::create_pull_request,
             commands::pr_review::add_pull_request_label,
             commands::pr_review::remove_pull_request_label,
             commands::pr_review::add_pull_request_reviewer,
@@ -212,9 +259,9 @@ pub fn run() {
             commands::work_items::list_work_item_projects,
             commands::work_items::run_work_item_query,
             commands::work_items::count_work_item_query,
-            commands::work_items::count_work_item_query_history,
             commands::work_items::get_work_item_preview,
             commands::work_items::search_work_item_mentions,
+            commands::work_items::resolve_mention_identities,
             commands::work_items::record_mention_interaction,
             commands::work_items::record_assignee_interaction,
             commands::work_items::search_work_item_assignees,
@@ -242,43 +289,20 @@ pub fn run() {
             commands::work_items::assign_work_items,
             commands::work_items::set_work_items_priority,
             commands::work_items::set_work_items_tags,
-            commands::commits::search_commits,
-            commands::commits::list_commit_repositories,
-            commands::commits::commit_activity,
-            commands::code::search_code,
-            commands::code::get_code_search_context,
             commands::wiki::search_wiki,
             commands::wiki::get_wiki_page,
             commands::project_info::list_project_teams,
             commands::project_info::list_service_connections,
             commands::project_info::list_service_hooks,
-            commands::code::list_repo_branches,
-            commands::code::list_repo_branch_overview,
-            commands::code::create_repo_branch,
-            commands::code::delete_repo_branch,
-            commands::code::list_repo_tags,
-            commands::code::list_repo_tag_overview,
-            commands::code::list_branch_policies,
-            commands::code::create_repo_tag,
-            commands::code::delete_repo_tag,
-            commands::code::compare_repo_revisions,
-            commands::code::list_repo_tree,
-            commands::code::get_repo_file,
-            commands::code::list_repo_history,
-            commands::code::list_repo_paths,
-            commands::code::cancel_operation,
-            commands::commits::get_commit_changes,
-            commands::commits::get_commit_file_diff,
-            commands::commits::get_commit_pull_requests,
-            commands::commits::get_commit_pull_requests_batch,
-            commands::commits::get_commit_containing_refs,
-            commands::commits::list_commit_work_items,
+            commands::repos::list_repositories,
+            commands::repos::list_repo_branches,
             commands::pipelines::list_pipeline_projects,
             commands::pipelines::list_pipeline_runs,
             commands::pipelines::list_pipeline_definitions,
             commands::pipelines::get_pipeline_run,
             commands::pipelines::list_pipeline_artifacts,
             commands::pipelines::list_pipeline_test_results,
+            commands::pipelines::list_flaky_tests,
             commands::pipelines::get_pipeline_definition,
             commands::pipelines::update_pipeline_definition,
             commands::pipelines::get_pipeline_run_log_tail,
@@ -293,7 +317,14 @@ pub fn run() {
             commands::notifications::get_unread_notifications_count,
             commands::notifications::mark_notifications_read,
             commands::notifications::mark_all_notifications_read,
-            commands::notifications::record_notification
+            commands::notifications::record_notification,
+            commands::action_inbox::list_action_inbox_items,
+            commands::action_inbox::get_action_inbox_counts,
+            commands::action_inbox::set_action_inbox_item_state,
+            commands::action_inbox::generate_action_inbox_insight,
+            commands::action_inbox::set_reply_reminder,
+            commands::action_inbox::list_reply_reminders,
+            commands::action_inbox::clear_reply_reminder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

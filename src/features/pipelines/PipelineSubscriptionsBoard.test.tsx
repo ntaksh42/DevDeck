@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useAgentSubject } from "@/components/agent/agentSubject";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PipelineRunSummary } from "@/lib/azdoCommands";
 import { PipelineSubscriptionsBoard } from "./PipelineSubscriptionsBoard";
@@ -358,5 +359,56 @@ describe("PipelineSubscriptionsBoard status pills and sorting", () => {
 
     renderBoard(101);
     expect(await screen.findByText(/first failure/)).toBeTruthy();
+  });
+});
+
+describe("PipelineSubscriptionsBoard Agent subject", () => {
+  function Probe() {
+    const subject = useAgentSubject();
+    return <output data-testid="subject">{subject ? JSON.stringify(subject) : ""}</output>;
+  }
+  function renderWithProbe(selectedBuildId: number | null) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+        <PipelineSubscriptionsBoard
+          organizationId="contoso"
+          subscriptions={subscriptions}
+          selectedBuildId={selectedBuildId}
+          onSelectRun={() => {}}
+          onRemove={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+  }
+  const published = () => screen.getByTestId("subject").textContent ?? "";
+
+  it("follows the focused watched pipeline's latest run until a run's details are open", async () => {
+    renderWithProbe(null);
+    expect(published()).toBe("");
+    const nightly = await screen.findByRole("button", { name: /Nightly/, expanded: false });
+    // Wait until the pipeline's runs have loaded: its badge shows the latest result.
+    await waitFor(() => expect(screen.getAllByText(/Succeeded|Success/i).length).toBeGreaterThan(0));
+    act(() => nightly.focus());
+    await waitFor(() =>
+      expect(JSON.parse(published())).toMatchObject({
+        kind: "pipeline-run",
+        id: 202,
+        organizationId: "contoso",
+        projectId: "demo-project",
+      }),
+    );
+    expect(JSON.parse(published()).title).toContain("Nightly");
+
+    act(() => screen.getByRole("button", { name: /CI/, expanded: false }).focus());
+    await waitFor(() => expect(JSON.parse(published())).toMatchObject({ id: 101 }));
+  });
+
+  it("leaves the subject to the run details when a run is selected", async () => {
+    renderWithProbe(202);
+    const nightly = await screen.findByRole("button", { name: /Nightly/, expanded: false });
+    act(() => nightly.focus());
+    expect(published()).toBe("");
   });
 });

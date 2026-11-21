@@ -10,6 +10,7 @@ import {
 } from '@/lib/azdoCommands';
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatAuthProvider } from './SetupPanel';
+import { SettingsRow } from './SettingsRow';
 
 export function ConnectionsSettings({
   organizations,
@@ -40,27 +41,24 @@ export function ConnectionsSettings({
   });
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <h2 className="text-base font-semibold">Connections</h2>
-        <p className="text-sm text-muted-foreground">
-          The active connection determines which platform every screen shows.
-        </p>
-      </div>
+    <SettingsRow
+      title="Connections"
+      description={<>The active connection determines which platform every screen shows.</>}
+    >
       {deleteMutation.isError && (
-        <p className="px-5 py-2 text-sm text-destructive">
+        <p className="py-2 text-sm text-destructive">
           {commandErrorMessage(deleteMutation.error)}
         </p>
       )}
       {setActiveMutation.isError && (
-        <p className="px-5 py-2 text-sm text-destructive">
+        <p className="py-2 text-sm text-destructive">
           {commandErrorMessage(setActiveMutation.error)}
         </p>
       )}
       <div
         role="radiogroup"
         aria-label="Active connection"
-        className="divide-y divide-border"
+        className="divide-y divide-border rounded-md border border-border bg-card"
       >
         {organizations.map((organization) => (
           <div
@@ -125,6 +123,6 @@ export function ConnectionsSettings({
           }}
         />
       ) : null}
-    </div>
+    </SettingsRow>
   );
 }

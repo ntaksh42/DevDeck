@@ -16,7 +16,9 @@ import {
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from "./queryKeys";
+import { isImeComposing } from "@/lib/utils";
 
 /**
  * Seed values for the create form. All fields are optional: the "New item"
@@ -71,6 +73,8 @@ export function CreateWorkItemDialog({
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
   // Focus returns to whatever opened the dialog (button, preview pane, grid).
   const restoreFocusRef = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -165,6 +169,7 @@ export function CreateWorkItemDialog({
   // Contain keys so the grid underneath does not also react to typing/arrows.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       close();
@@ -177,10 +182,13 @@ export function CreateWorkItemDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={close}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
       onKeyDown={handleKeyDown}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="wi-create-dialog-title"
@@ -364,7 +372,7 @@ export function CreateWorkItemDialog({
           ) : null}
 
           <div className="flex items-center justify-end gap-2 pt-1">
-            <span className="mr-auto text-[11px] text-muted-foreground">
+            <span className="mr-auto text-2xs text-muted-foreground">
               Ctrl+Enter to create
             </span>
             <button

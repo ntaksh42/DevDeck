@@ -5,9 +5,10 @@ import {
   focusFilterInput,
   focusPrimaryPreview,
   markdownLink,
+  hasTextSelectionWithin,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
-import { copyRowsAsTable } from '@/lib/clipboardTable';
+import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
 import { toggleTriageArchived } from '@/lib/triage';
 import {
   workItemSummaryKey,
@@ -24,6 +25,7 @@ export interface WiKeyHandlerDeps {
   checkedItems: WorkItemSummary[];
   visibleColumns: WiSortKey[];
   extraColumns: string[];
+  extraColumnLabel?: (referenceName: string) => string;
   openFilterCol: FilterableColumn | null;
   triageScope: string | undefined;
   snoozeEnabled: boolean;
@@ -54,7 +56,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
   return (e) => {
     if (e.defaultPrevented) return;
     const {
-      selectedIndex, displayed, checkedIds, checkedItems, visibleColumns, extraColumns,
+      selectedIndex, displayed, checkedIds, checkedItems, visibleColumns, extraColumns, extraColumnLabel,
       openFilterCol, triageScope,
       snoozeEnabled, snoozeTargetRef, rowRefs, moveSelection, setOpenFilterCol,
       setFilterAnchorRect, setBulkAssignOpen, setBulkStateOpen, setBulkPriorityOpen,
@@ -107,7 +109,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
         e.preventDefault();
         const item = displayed[selectedIndex];
         if (item?.webUrl) openExternalUrl(item.webUrl);
-      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C") && !hasTextSelectionWithin(e.target)) {
         // Copies every checked row, falling back to the focused row when the
         // user has not checked anything, as a table for pasting into email.
         // `c` alone stays the single-row URL copy.
@@ -118,7 +120,16 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
             : displayed[selectedIndex]
               ? [displayed[selectedIndex]]
               : [];
-        void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns), setCopyToast);
+        // Ctrl+Shift+C copies one link per row ("Copy as Link").
+        if (e.shiftKey) {
+          void copyRowsAsLinks(
+            targets,
+            (item) => ({ text: `#${item.id} ${item.title}`, url: item.webUrl }),
+            setCopyToast,
+          );
+        } else {
+          void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns, extraColumnLabel), setCopyToast);
+        }
       }
       return;
     }

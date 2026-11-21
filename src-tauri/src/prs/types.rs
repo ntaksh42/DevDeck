@@ -56,6 +56,7 @@ pub struct MyCreatedPullRequestSummary {
     pub is_draft: bool,
     pub approvals: i64,
     pub reviewer_count: i64,
+    pub ready_to_merge: bool,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -65,9 +66,16 @@ pub struct MyCreatedPullRequestsResult {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchPullRequestsInput {
+    pub progressive: Option<bool>,
+    pub search_id: Option<String>,
+    pub continuation_token: Option<String>,
+    pub retry_failed: Option<bool>,
+    pub author_id: Option<String>,
+    pub reviewer_id: Option<String>,
+    pub exclude_words: Option<String>,
     pub organization_id: Option<String>,
     pub query: Option<String>,
     /// Statuses to include. Empty/omitted defaults to active (cached) only.
@@ -81,6 +89,9 @@ pub struct SearchPullRequestsInput {
     /// Inclusive date window (`YYYY-MM-DD`) interpreted against `date_basis`.
     pub from_date: Option<String>,
     pub to_date: Option<String>,
+    /// Minutes the user's local time is ahead of UTC. The date window is a
+    /// local calendar range; omitted, it is read in UTC.
+    pub utc_offset_minutes: Option<i32>,
     /// `created` (default) or `closed`: which date the window applies to.
     pub date_basis: Option<String>,
     pub exclude_drafts: Option<bool>,
@@ -88,7 +99,7 @@ pub struct SearchPullRequestsInput {
     pub sort_by: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequestSummary {
     pub organization_id: String,
@@ -108,12 +119,31 @@ pub struct PullRequestSummary {
     pub is_draft: bool,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Default, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequestSearchResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continuation_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scanned_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_complete: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_more: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_scopes: Option<Vec<String>>,
     pub pull_requests: Vec<PullRequestSummary>,
     /// Total matches before the display cap, so the UI can show "100+".
     pub total: usize,
     pub truncated: bool,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StopPullRequestSearchInput {
+    pub organization_id: Option<String>,
+    pub search_id: String,
 }

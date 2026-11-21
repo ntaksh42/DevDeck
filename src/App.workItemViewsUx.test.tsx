@@ -52,7 +52,7 @@ async function openViewsScreen() {
 }
 
 async function addView(main: ReturnType<typeof within>, name: string) {
-  fireEvent.click(await main.findByRole("button", { name: /Add/ }));
+  fireEvent.click(await main.findByRole("button", { name: /New view/ }));
   await screen.findByRole("dialog", { name: "Add View" });
   await main.findByText("Platform");
   fireEvent.change(main.getByLabelText("Name"), { target: { value: name } });
@@ -97,43 +97,77 @@ describe("App — Work Item Views UX", () => {
     cleanup();
   });
 
-  it("collapses the view list and keeps the selected view summary on screen", async () => {
+  it("shows the views as one row of chips by default and switches to cards with the toggle", async () => {
     await openViewsScreen();
     const list = await screen.findByRole("listbox", { name: "Saved work item views" });
+    // Chip row: no card density switch, one option per view.
+    expect(screen.queryByRole("button", { name: "Compact view list" })).toBeNull();
     const firstView = within(list).getAllByRole("option")[0];
-    fireEvent.click(firstView);
+    expect(firstView.textContent).toContain("Assigned to me");
 
-    const toggle = screen.getByRole("button", { name: /Hide the view list/ });
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-
-    fireEvent.click(toggle);
-
-    // The list itself is gone, but the header still names the selected view.
-    expect(screen.queryByRole("listbox", { name: "Saved work item views" })).toBeNull();
-    const expandToggle = screen.getByRole("button", { name: /Show the view list/ });
+    const expandToggle = screen.getByRole("button", { name: /Show view cards/ });
     expect(expandToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.getAllByText("Assigned to me").length).toBeGreaterThan(0);
-    // Focus lands on the toggle rather than <body> so the keyboard is not stranded.
-    await waitFor(() => expect(document.activeElement).toBe(expandToggle));
-
     fireEvent.click(expandToggle);
-    expect(screen.getByRole("listbox", { name: "Saved work item views" })).toBeTruthy();
+
+    // The card display is back, with its density switch, and focus is on a card.
+    const cards = screen.getByRole("listbox", { name: "Saved work item views" });
+    expect(within(cards).getAllByRole("option").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Compact view list" })).toBeTruthy();
+    const collapseToggle = screen.getByRole("button", { name: /Collapse to one row of chips/ });
+    expect(collapseToggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(collapseToggle);
+    expect(screen.queryByRole("button", { name: "Compact view list" })).toBeNull();
+    // Focus lands on the toggle rather than <body> so the keyboard is not stranded.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /Show view cards/ })),
+    );
   });
 
-  it("restores the collapsed state on the next visit", async () => {
+  it("moves the selected chip with the arrow keys", async () => {
+    await openViewsScreen();
+    const list = await screen.findByRole("listbox", { name: "Saved work item views" });
+    const options = within(list).getAllByRole("option");
+    expect(options.length).toBeGreaterThan(1);
+    fireEvent.click(options[0]);
+    expect(options[0].getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(options[0], { key: "ArrowRight" });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox", { name: "Saved work item views" }))
+          .getAllByRole("option")[1]
+          .getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+  });
+
+  it("keeps pin, preview and reorder reachable from the chip row's more menu", async () => {
     await openViewsScreen();
     await screen.findByRole("listbox", { name: "Saved work item views" });
-    fireEvent.click(screen.getByRole("button", { name: /Hide the view list/ }));
+    expect(screen.queryByRole("button", { name: "Pin selected view" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "More view actions" }));
+    const menu = await screen.findByRole("menu", { name: "More view actions" });
+    expect(within(menu).getByRole("menuitem", { name: /Pin view|Unpin view/ })).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: /Hide preview|Show preview/ })).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: /Move view right/ })).toBeTruthy();
+  });
+
+  it("restores the card display on the next visit", async () => {
+    await openViewsScreen();
+    await screen.findByRole("listbox", { name: "Saved work item views" });
+    fireEvent.click(screen.getByRole("button", { name: /Show view cards/ }));
     cleanup();
 
     await openViewsScreen();
-    expect(await screen.findByRole("button", { name: /Show the view list/ })).toBeTruthy();
-    expect(screen.queryByRole("listbox", { name: "Saved work item views" })).toBeNull();
+    expect(await screen.findByRole("button", { name: /Collapse to one row of chips/ })).toBeTruthy();
   });
 
-  it("switches the view list to the compact density and persists it", async () => {
+  it("switches the card list to the compact density and persists it", async () => {
     await openViewsScreen();
     await screen.findByRole("listbox", { name: "Saved work item views" });
+    fireEvent.click(screen.getByRole("button", { name: /Show view cards/ }));
 
     const compact = screen.getByRole("button", { name: "Compact view list" });
     expect(compact.getAttribute("aria-pressed")).toBe("false");
@@ -204,6 +238,22 @@ describe("App — Work Item Views UX", () => {
     expect(screen.getByRole("dialog", { name: "Add View" })).toBeTruthy();
   });
 
+  it("stays open when a text selection drag ends on the backdrop", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Drag view");
+
+    const dialog = screen.getByRole("dialog", { name: "Add View" });
+    const backdrop = dialog.parentElement as HTMLElement;
+    // A drag that starts in the WIQL box and is released outside the dialog
+    // makes the browser fire the click on the backdrop.
+    fireEvent.mouseDown(main.getByLabelText("WIQL"));
+    fireEvent.click(backdrop);
+    expect(screen.getByRole("dialog", { name: "Add View" })).toBeTruthy();
+
+    fireEvent.mouseDown(backdrop);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Add View" })).toBeNull());
+  });
+
   it("reformats the draft query from the Format button", async () => {
     const main = await openViewsScreen();
     await addView(main, "Format view");
@@ -266,6 +316,50 @@ describe("App — Work Item Views UX", () => {
     expect(
       invokeMock.mock.calls.some(([command]) => command === "count_work_item_query"),
     ).toBe(false);
+  });
+
+  it("switches between the URL and existing-query tabs with the arrow keys", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Tab view");
+
+    const urlTab = screen.getByRole("tab", { name: "Paste URL" });
+    const queryTab = screen.getByRole("tab", { name: "From existing query" });
+    expect(urlTab.getAttribute("aria-selected")).toBe("true");
+    expect(queryTab.getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.keyDown(urlTab, { key: "ArrowRight" });
+    await waitFor(() => expect(queryTab.getAttribute("aria-selected")).toBe("true"));
+    await waitFor(() => expect(document.activeElement).toBe(queryTab));
+    expect(screen.getByRole("combobox", { name: /Import an Azure DevOps query/ })).toBeTruthy();
+
+    fireEvent.keyDown(queryTab, { key: "ArrowLeft" });
+    await waitFor(() => expect(urlTab.getAttribute("aria-selected")).toBe("true"));
+  });
+
+  it("builds WHERE conditions from the Build conditions tab", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Grid view");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Build conditions" }));
+    const field = screen.getByLabelText("Field for condition 1") as HTMLInputElement;
+    await waitFor(() => expect(document.activeElement).toBe(field));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    const rows = screen.getAllByLabelText(/^Value for condition/);
+    fireEvent.change(rows[rows.length - 1], { target: { value: "login" } });
+    expect((main.getByLabelText("WIQL") as HTMLTextAreaElement).value).toBe(
+      "SELECT [System.Id] FROM WorkItems\nWHERE [System.WorkItemType] = 'Bug'\n  AND [System.Title] CONTAINS 'login'",
+    );
+  });
+
+  it("keeps the rarely used settings in a collapsed section", async () => {
+    const main = await openViewsScreen();
+    await addView(main, "Advanced view");
+
+    const details = screen.getByText("Advanced settings").closest("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    fireEvent.click(details.querySelector("summary") as HTMLElement);
+    await waitFor(() => expect(details.open).toBe(true));
   });
 
   it("expands the WIQL editor and shrinks it again", async () => {

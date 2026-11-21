@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DevDeck Grid スクロールの調査・修正結果</title>
+<style>
+:root{color-scheme:light;--paper:#fff;--page:#f5f6f8;--ink:#202733;--muted:#586473;--line:#d8dee6;--soft:#eef1f5;--accent:#146b53;--tint:#e8f4ee}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--paper:#171d26;--page:#10151d;--ink:#e7edf5;--muted:#aab7c7;--line:#394353;--soft:#222c39;--accent:#84d4b3;--tint:#203b32}}
+*{box-sizing:border-box}body{margin:0;background:var(--background,var(--page));color:var(--foreground,var(--ink));font:15px/1.7 system-ui,"Yu Gothic UI",sans-serif;overflow-wrap:anywhere}
+main{max-width:900px;margin:auto;padding:26px 24px 38px}header{border-bottom:2px solid var(--accent);padding-bottom:18px}h1{font-size:25px;line-height:1.4;margin:10px 0}h2{font-size:18px;margin:28px 0 10px}h3{font-size:15px;margin:0 0 8px}p{margin:9px 0}a{color:var(--accent);text-underline-offset:3px}small,.meta,figcaption{color:var(--muted);font-size:13px}.badge{display:inline-block;border:1px solid var(--accent);color:var(--accent);background:var(--tint);border-radius:4px;padding:1px 8px;font-size:13px;font-weight:650}
+.lead{font-size:17px;font-weight:600}.metrics,.flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.metric,.panel{background:var(--card,var(--paper));border:1px solid var(--line);border-radius:6px;padding:16px}.metric strong{display:block;font-size:32px;line-height:1.2;color:var(--accent)}.metric span{font-size:13px;color:var(--muted)}.panel figure{margin:0}.panel svg{display:block;max-width:100%;width:100%;height:auto;color:var(--ink)}figcaption{margin-top:8px}
+table{width:100%;max-width:100%;border-collapse:collapse;table-layout:fixed;margin:12px 0;font-size:14px}th,td{text-align:left;vertical-align:top;padding:9px 10px;border:1px solid var(--line);overflow-wrap:anywhere}th{background:var(--soft);font-weight:600}.adopted{background:var(--tint)}code{font:12px/1.7 ui-monospace,Consolas,monospace}pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border:1px solid var(--line);padding:12px;border-radius:5px}.note{border-left:3px solid var(--accent);padding-left:12px}.check{color:var(--accent);font-weight:600}ul{padding-left:20px}li{margin:6px 0}footer{border-top:1px solid var(--line);margin-top:24px;padding-top:12px;font-size:12px;color:var(--muted)}
+@media(max-width:560px){main{padding:18px 14px 28px}h1{font-size:22px}.flow{grid-template-columns:1fr}.metrics{gap:8px}.metric{padding:12px}.metric strong{font-size:28px}th,td{padding:7px 6px;font-size:12px}h2{font-size:17px}}
+@media print{body{background:white;color:#202733}main{max-width:none;padding:0}section,figure,table{break-inside:avoid}.panel,.metric{background:white}}
+</style>
+</head>
+<body><main>
+<header>
+<span class="badge">原因特定・修正済み</span>
+<h1>Grid の高速スクロールで<br>描画が不安定になる問題</h1>
+<p class="meta">2026-11-03 / DevDeck / <code>fix/GridViewScrroll-2</code><br>基準コミット <code>ba18356465c749060b50a0eef48ca47eb6acea6f</code> ＋ 今回の修正（計測時の対象）</p>
+</header>
+
+<section aria-labelledby="conclusion">
+<h2 id="conclusion">結論</h2>
+<p class="lead">高速移動時だけ仮想行の位置を即時更新し、古い描画範囲が一瞬残る問題を修正した。</p>
+<p>121件の Azure 実データを WebView2 で再検証。本番用フロントエンドの62回の計測で描画不足は0回だった。通常の小さな移動は従来どおり非同期にまとめる。</p>
+<div class="metrics"><div class="metric"><strong>10 → 0</strong><span>描画不足の計測数 / 各62回 ※ビルド条件は下表</span></div><div class="metric"><strong>121件</strong><span>Azure に保存したクエリの実データ</span></div></div>
+</section>
+
+<section aria-labelledby="mechanism">
+<h2 id="mechanism">何が起きていたか</h2>
+<div class="flow">
+<div class="panel"><h3>修正前</h3><figure>
+<svg viewBox="0 0 320 238" role="img" aria-label="スクロール位置が先に変わり、仮想行の更新まで描画範囲が不足する">
+<defs><marker id="arrow-before" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="currentColor"><rect x="8" y="8" width="304" height="52" rx="5"/><path d="M160 60 V87" marker-end="url(#arrow-before)"/><rect x="8" y="94" width="304" height="52" rx="5"/><path d="M160 146 V173" marker-end="url(#arrow-before)"/><rect x="8" y="180" width="304" height="50" rx="5" stroke="var(--accent)"/></g>
+<g fill="currentColor" text-anchor="middle" font-size="14"><text x="160" y="30">スクロール位置が先に移動</text><text x="160" y="49">予備描画は前後8行</text><text x="160" y="116">React の更新は後続処理へ</text><text x="160" y="135">古い行の範囲が残る</text><text x="160" y="210" fill="var(--accent)">表示領域の一部に行がない</text></g>
+</svg><figcaption>行高ではなく、スクロールと行交換のタイミングにずれがあった。</figcaption></figure></div>
+<div class="panel"><h3>修正後</h3><figure>
+<svg viewBox="0 0 320 238" role="img" aria-label="最後の描画位置から移動量を判定し、大きい移動のみ即時更新する">
+<defs><marker id="arrow-after" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="currentColor"/></marker></defs>
+<g fill="none" stroke="currentColor"><rect x="8" y="8" width="304" height="52" rx="5"/><path d="M160 60 V87" marker-end="url(#arrow-after)"/><rect x="8" y="94" width="304" height="52" rx="5" stroke="var(--accent)"/><path d="M160 146 V173" marker-end="url(#arrow-after)"/><rect x="8" y="180" width="304" height="50" rx="5"/></g>
+<g fill="currentColor" text-anchor="middle" font-size="14"><text x="160" y="30">最後に描画が完了した位置と比較</text><text x="160" y="49">移動量が203pxを超えるか</text><text x="160" y="116" fill="var(--accent)">大きい移動だけ即時更新</text><text x="160" y="135">小さい移動は非同期更新</text><text x="160" y="210">描画前に新しい行の範囲を用意</text></g>
+</svg><figcaption>固定29px・overscan 8の Work Items では、7行＝203pxが判定の境界。</figcaption></figure></div>
+</div>
+</section>
+
+<section aria-labelledby="evidence">
+<h2 id="evidence">実データでの計測結果</h2>
+<p><a href="https://dev.azure.com/aksh0402/TestProject/_queries/query/9ab91d7e-1d04-4cd4-9b7c-bb609ad05601">DevDeck Grid Scroll Investigation 2026-11-03</a> を TestProject の My Queries に作成。組織内の既存 Work Item 121件が対象で、データの追加は行っていない。</p>
+<table><thead><tr><th>条件</th><th>描画不足</th><th>最大の不足</th><th>50ms以上の処理</th></tr></thead><tbody>
+<tr><td>修正前・開発版<br>表示高さ446px</td><td>10 / 62回</td><td>471px</td><td>0回</td></tr>
+<tr><td>調査時の全同期化<br>開発版・446px</td><td>0 / 62回</td><td>0px</td><td>3回<br>57・66・60ms</td></tr>
+<tr><td>今回の修正・開発版<br>表示高さ865px</td><td>0 / 56回</td><td>0px</td><td>6回<br>50〜99ms</td></tr>
+<tr class="adopted"><td>今回の修正・本番用フロントエンド<br>表示高さ446px</td><td><strong>0 / 62回</strong></td><td><strong>0px</strong></td><td><strong>0回</strong></td></tr>
+</tbody></table>
+<p class="meta">各試行は120px刻みの移動、600px単位の移動、先頭・末尾へのジャンプ、方向反転を含む。同じ位置の連続指定や上限でクランプされた移動では scroll イベントが発生しないため、計測数は表示高さで変わる。</p>
+<p>計測は scroll イベントから予約した <code>requestAnimationFrame</code> 内で、先頭行・末尾行が表示領域を覆うかを確認したもの。行高はすべて29pxで、各試行内の全体高さも一定だった。</p>
+<p class="note">開発版と本番用フロントエンドの処理時間は直接比較できない。描画不足の解消は確認できたが、開発版では長い処理が残る。本番用でも、すべての負荷で停止がなくなることを保証する計測ではない。</p>
+</section>
+
+<section aria-labelledby="fix">
+<h2 id="fix">修正内容と選択理由</h2>
+<table><thead><tr><th>案</th><th>効果・トレードオフ</th><th>判断</th></tr></thead><tbody>
+<tr><td>すべての移動を同期更新</td><td>描画不足を防ぐ一方、小さい移動でも即時に行交換する。調査時に長い処理を観測。</td><td>不採用</td></tr>
+<tr><td>予備描画の行数だけ増やす</td><td>猶予は増えるが、描画負荷が増え、スクロールバーによる大移動は防ぎ切れない。</td><td>不採用</td></tr>
+<tr class="adopted"><td>予備描画を使い切る移動だけ同期更新</td><td>通常の更新はまとめ、大移動では paint 前に更新。描画する行数を増やさない。</td><td>採用</td></tr>
+</tbody></table>
+<p><code>useLayoutEffect</code> で最後にコミットされた viewport を保持する。イベントを受けただけの未描画位置で判定しないので、短い間隔の小移動が積み重なった場合も取りこぼさない。初期計測・リサイズ・同じ行内の移動の扱いは維持した。</p>
+<pre><code>// src/lib/useGridVirtualizer.ts:102
+if (
+  scrolling &amp;&amp; Math.abs(next.scrollTop - renderedViewport.current.scrollTop)
+    &gt; Math.max(0, overscan - 1) * rowHeight
+) {
+  flushSync(update);
+} else {
+  update();
+}</code></pre>
+</section>
+
+<section aria-labelledby="scope">
+<h2 id="scope">影響範囲</h2>
+<table><thead><tr><th>対象</th><th>確認範囲</th></tr></thead><tbody>
+<tr><td>Work Items / Views</td><td>Azure 実データ121件の WebView2 計測、3,000行のブラウザー回帰テスト。</td></tr>
+<tr><td>My Reviews / PR Search</td><td>共有フックを使用。大量データで描画前の行範囲とキーボード移動を検証。</td></tr>
+<tr><td>Inbox / Notifications</td><td>共有フックを使用。Home・End・PageUp/Downなどの既存キーボード回帰テストを実行。</td></tr>
+</tbody></table>
+</section>
+
+<section aria-labelledby="checks">
+<h2 id="checks">検証</h2>
+<table><thead><tr><th>確認項目</th><th>結果</th></tr></thead><tbody>
+<tr><td>修正前の回帰テスト</td><td>大きい下移動・上移動・overscanなしの3件で失敗を確認。</td></tr>
+<tr><td>修正後の単体テスト</td><td class="check">192ファイル・1,199件 PASS（新規5件を含む）</td></tr>
+<tr><td>ブラウザー E2E</td><td class="check">10件 PASS（新規スクロール3件、行高2件、キーボード5件）</td></tr>
+<tr><td>TypeScript 型チェック</td><td class="check">pnpm tsc --noEmit PASS</td></tr>
+<tr><td>本番用フロントエンド</td><td class="check">pnpm build PASS</td></tr>
+<tr><td>Tauri / WebView2</td><td class="check">専用作業ツリーで開発アプリをビルド・起動。実 Azure 接続で検証。</td></tr>
+<tr><td>仕様・差分</td><td><code>docs/spec-overview.md:1008</code> を更新。<code>git diff --check</code> PASS。</td></tr>
+</tbody></table>
+<p class="meta">Node v26の Web Storage がjsdomと競合したため、単体テストは <code>NODE_OPTIONS=--no-experimental-webstorage</code> をテストプロセスだけに指定して実行。リポジトリのテスト環境設定は変更していない。ビルドの既存チャンクサイズ警告は残る。</p>
+</section>
+
+<section aria-labelledby="sources">
+<h2 id="sources">根拠と未確認事項</h2>
+<table><thead><tr><th>根拠</th><th>内容</th></tr></thead><tbody>
+<tr><td><code>src/lib/useGridVirtualizer.ts:74</code><br><code>src/lib/useGridVirtualizer.ts:102</code></td><td>コミット済み位置の保持と、必要時だけの同期更新。</td></tr>
+<tr><td><code>src/lib/useGridVirtualizer.test.tsx:25</code><br><code>tests/e2e/grid-scroll.spec.ts:3</code></td><td>イベント内での即時反映と、paint 前の行範囲を検証。</td></tr>
+<tr><td><code>output/playwright/grid-scroll/</code></td><td><code>summary.json</code>、<code>probe-controlled-async.json</code>、<code>probe-controlled-sync.json</code>、<code>probe-fixed-native-121.json</code>、<code>probe-fixed-production-446.json</code> に計測データを保存。</td></tr>
+</tbody></table>
+<ul>
+<li>実データ検証には既存データベースのコピーと別ポート1422を使用。本番用フロントエンドのビルド成果物を、同じ開発用 WebView2 で読み込んだ。インストーラーを作成・更新した検証ではない。</li>
+<li>空白の判定はDOMの幾何情報に基づく。コンポジターの映像・動画・長時間の負荷試験は取得していない。</li>
+<li>Rust のコード・API・スキーマは変更していないため、Rustの単体テストは省略。デスクトップ開発ビルドは成功した。</li>
+<li>実 Azure の多数行検証は Work Items View が対象。他画面はブラウザーデモで確認した。</li>
+</ul>
+</section>
+<footer>修正と検証は完了。HTML は外部CSS・画像・JavaScriptに依存せず、単独で表示可能。</footer>
+</main></body></html>

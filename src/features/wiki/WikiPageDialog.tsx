@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
+import { openAgentPanel } from "@/components/agent/agentSubject";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, X } from "lucide-react";
+import { Bot, ExternalLink, X } from "lucide-react";
 import { commandErrorMessage, getWikiPage, type WikiSearchHit } from "@/lib/azdoCommands";
 import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -104,6 +105,30 @@ export function WikiPageDialog({
           <button
             type="button"
             className={buttonClass}
+            title="Ask the agent about this page (Ctrl+J panel)"
+            onClick={() => {
+              onClose();
+              openAgentPanel({
+                subject: {
+                  kind: "wiki-page",
+                  title: hit.pagePath,
+                  organizationId,
+                  projectId: hit.projectId,
+                  projectName: hit.projectName,
+                  wikiId: hit.wikiId,
+                  wikiName: hit.wikiName,
+                  pagePath: hit.pagePath,
+                  webUrl,
+                },
+              });
+            }}
+          >
+            <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+            Ask agent
+          </button>
+          <button
+            type="button"
+            className={buttonClass}
             onClick={() => void openExternalUrl(webUrl)}
           >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -119,7 +144,7 @@ export function WikiPageDialog({
           className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm focus:outline-none"
         >
           {page.isPending ? (
-            <p className="text-muted-foreground">Loading...</p>
+            <p className="text-muted-foreground">Loading…</p>
           ) : page.isError ? (
             <p role="alert" className="text-destructive">
               {commandErrorMessage(page.error)}

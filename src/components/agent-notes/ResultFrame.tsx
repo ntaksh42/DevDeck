@@ -3,9 +3,10 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { MessageSquarePlus } from "lucide-react";
 import { useLatestRef } from "@/lib/useLatestRef";
 import { focusPrimaryGrid } from "@/lib/utils";
+import { bindFramePaneFocus } from "@/lib/paneFocus";
+import { openExternalUrl } from "@/lib/openExternal";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
-import { PIN_CLASS } from "./NoteCard";
-import type { CommentRequest, FrameState, NoteAnchor, NoteTone } from "./types";
+import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
 // Renders the investigation result in a script-less sandboxed iframe and layers
 // the agent-note UI on top from the parent document: highlights via the CSS
@@ -158,12 +159,21 @@ export function ResultFrame({
   }, [frame, frameRef, updateMarkers]);
 
   function handleLoad() {
+    if (frameRef.current) bindFramePaneFocus(frameRef.current);
     const doc = frameRef.current?.contentDocument;
     if (doc?.head) {
       const style = doc.createElement("style");
       style.textContent = HIGHLIGHT_CSS;
       doc.head.appendChild(style);
     }
+    // The sandbox blocks navigation, so web links open in the user's browser.
+    doc?.addEventListener("click", (event) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      const href = link?.getAttribute("href") ?? "";
+      if (!/^https?:\/\//i.test(href)) return;
+      event.preventDefault();
+      void openExternalUrl(href).catch(() => undefined);
+    });
     onFrameLoad();
   }
 
@@ -246,6 +256,7 @@ export function ResultFrame({
       role="region"
       aria-label="Investigation result. Comment mode: arrow keys move between blocks, C comments, Enter opens a note, Escape returns to the grid."
       data-agent-result-frame="true"
+      data-pane-focus-target="true"
       onKeyDown={handleKeyDown}
       onFocus={(e) => e.target === wrapRef.current && setBlockMode(true)}
       onBlur={(e) => e.target === wrapRef.current && setBlockMode(false)}
@@ -277,7 +288,7 @@ export function ResultFrame({
               onMouseEnter={() => onRevealNote(m.id)}
               onClick={() => onOpenNote(m.id)}
               style={{ top: m.pinTop }}
-              className={`pointer-events-auto absolute left-1 h-4 w-4 rounded-full text-[10px] font-bold leading-4 shadow ${
+              className={`pointer-events-auto absolute left-1 h-4 w-4 rounded-full text-3xs font-bold leading-4 shadow ${
                 m.id === activeId ? "bg-orange-500 text-white" : PIN_CLASS[m.tone]
               }`}
             >
@@ -315,7 +326,7 @@ export function ResultFrame({
         </button>
       ) : null}
       {blockMode ? (
-        <p className="pointer-events-none absolute right-4 top-1 rounded-full bg-primary px-2 text-[10px] text-primary-foreground">
+        <p className="pointer-events-none absolute right-4 top-1 rounded-full bg-primary px-2 text-3xs text-primary-foreground">
           ↑↓ move · Shift extend · C comment · Enter open note · ] [ next/prev note · Esc grid
         </p>
       ) : null}

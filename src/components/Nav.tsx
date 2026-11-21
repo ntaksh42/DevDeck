@@ -29,7 +29,7 @@ export function NavButton({
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
       className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary"
+        active ? "bg-card text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="shrink-0">{icon}</span>
@@ -93,7 +93,7 @@ function NavBadge({ count }: { count: number | null | undefined }) {
   return (
     <span
       aria-hidden="true"
-      className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground group-hover:bg-background/70"
+      className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 text-2xs font-medium tabular-nums text-muted-foreground group-hover:bg-background/70"
     >
       {count > 99 ? "99+" : count}
     </span>
@@ -111,12 +111,14 @@ export function NavSubItem({
   disabled = false,
   label,
   badge,
+  reorderable = false,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
   badge?: number | null;
+  reorderable?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -125,15 +127,17 @@ export function NavSubItem({
       disabled={disabled}
       onClick={onClick}
       aria-label={navItemAriaLabel(label, badge)}
+      aria-keyshortcuts={reorderable ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
       className={`group flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
+        active ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="min-w-0 truncate">{label}</span>
       <NavBadge count={badge} />
+      {reorderable ? <span aria-hidden="true" className="ml-auto hidden shrink-0 text-2xs group-focus:inline">Alt+↑/↓</span> : null}
     </button>
   );
 }
@@ -178,7 +182,7 @@ export function NavSubGroup({
           data-nav-subgroup={expandable ? "true" : undefined}
           data-subgroup-id={id}
           className={`group flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
+            active ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:bg-secondary"
           } disabled:cursor-not-allowed disabled:opacity-50`}
         >
           <span className="min-w-0 truncate">{label}</span>

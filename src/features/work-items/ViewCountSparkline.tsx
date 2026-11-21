@@ -5,7 +5,7 @@ const SPARKLINE_HEIGHT = 24;
 
 const TREND_CLASSES = {
   up: "text-destructive",
-  down: "text-emerald-600 dark:text-emerald-400",
+  down: "text-success",
   flat: "text-muted-foreground",
 } as const;
 

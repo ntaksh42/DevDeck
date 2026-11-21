@@ -11,9 +11,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAppSettings,
   getProviderCapabilities,
-  getUnreadNotificationsCount,
-  listMyReviewPullRequests,
-  listMyWorkItems,
   listOrganizations,
   recordNotification,
   rerunPipelineRun,
@@ -30,12 +27,13 @@ import { applyTheme, loadThemePreference, THEME_CHANGED_EVENT, watchSystemTheme 
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { storedNumber, focusPrimaryGrid } from "@/lib/utils";
 import { HelpDialog } from "@/components/HelpDialog";
+import { OPEN_HELP_EVENT, type HelpSection } from "@/lib/helpEvents";
 import { WikiPreviewHost } from "@/features/wiki/WikiPreviewHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ToastHost } from "@/components/ToastHost";
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
 import {
-  loadWorkItemQueryViews,
+  loadWorkItemQueryViews, saveWorkItemQueryViews,
   type WorkItemQueryView,
 } from "@/features/work-items/workItemViewsStorage";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
@@ -48,6 +46,7 @@ import {
 } from "@/features/navigation/viewHistory";
 import { usePipelineWatchNotifications } from "@/features/pipelines/usePipelineWatchNotifications";
 import { useAgentNoteWatcher } from "@/components/agent-notes/useAgentNoteSummaries";
+import { useInboxBadge } from "@/features/inbox/useInboxEntries";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -57,13 +56,17 @@ import {
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { AppSidebar, type AppSidebarHandle } from "./app/AppSidebar";
 import { AppHeader } from "./app/AppHeader";
+import { HeaderToolbarSlotProvider } from "./components/HeaderToolbarSlot";
 import { AppContent } from "./app/AppContent";
 import { useKeybindings } from "./app/useKeybindings";
 import { usePaletteSearch } from "./app/usePaletteSearch";
+import { usePaletteNavigation } from "./app/usePaletteNavigation";
 import { useCommandActions } from "./app/useCommandActions";
 import { useNotificationEvents } from "./app/useNotificationEvents";
 import { useSyncManager } from "./app/useSyncManager";
 import { useKeyboardShortcuts } from "./app/useKeyboardShortcuts";
+import { useSidebarBadges } from "./app/useSidebarBadges";
+import { AgentPanelHost } from "@/components/agent/AgentPanelHost";
 import {
   DEFAULT_SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_STORAGE_KEY,
@@ -81,15 +84,16 @@ function AppShell() {
   viewHistoryRef.current = viewHistory;
   const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Section a view asked Help to open at (its status bar's `?` button).
+  const [helpSection, setHelpSection] = useState<HelpSection | undefined>();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // Element focused when an overlay opened; restored on close so keyboard nav
   // resumes instead of stranding focus on <body>.
   const paletteReturnRef = useRef<HTMLElement | null>(null);
   const helpReturnRef = useRef<HTMLElement | null>(null);
   const sidebarRef = useRef<AppSidebarHandle | null>(null);
-  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
-    loadWorkItemQueryViews(),
-  );
+  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(loadWorkItemQueryViews);
+  useEffect(() => saveWorkItemQueryViews(workItemNavViews), [workItemNavViews]);
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
@@ -105,8 +109,6 @@ function AppShell() {
   const [pullRequestSearchRequest, setPullRequestSearchRequest] =
     useState<ExternalSearchRequest | null>(null);
   const [workItemSearchRequest, setWorkItemSearchRequest] =
-    useState<ExternalSearchRequest | null>(null);
-  const [commitSearchRequest, setCommitSearchRequest] =
     useState<ExternalSearchRequest | null>(null);
   const [myReviewsSelectRequest, setMyReviewsSelectRequest] =
     useState<MyReviewsSelectRequest | null>(null);
@@ -146,32 +148,10 @@ function AppShell() {
 
   // Sidebar count badges follow the active connection, matching the grids.
   const badgeOrganizationId = useActiveOrganizationId();
-  const myReviewsCountQuery = useQuery({
-    queryKey: ["myReviews", badgeOrganizationId],
-    queryFn: () => listMyReviewPullRequests({ organizationId: badgeOrganizationId }),
-    enabled: !!badgeOrganizationId,
-    staleTime: 5 * 60_000,
-  });
-  const myWorkItemsCountQuery = useQuery({
-    queryKey: ["myWorkItems", badgeOrganizationId],
-    queryFn: () => listMyWorkItems({ organizationId: badgeOrganizationId }),
-    enabled: !!badgeOrganizationId,
-    staleTime: 5 * 60_000,
-  });
-  // My Reviews badge counts PRs still awaiting my vote (the actionable inbox).
-  const myReviewsBadge = myReviewsCountQuery.data
-    ? myReviewsCountQuery.data.filter((pr) => pr.myVote === 0 && !pr.isDraft).length
-    : null;
-  const myWorkItemsBadge = myWorkItemsCountQuery.data?.length ?? null;
+  const { myReviewsBadge, myWorkItemsBadge, notificationsBadge } = useSidebarBadges(badgeOrganizationId);
 
-  // The notifications badge is cross-org, so it stays enabled independent of
-  // the active connection (unlike the badges above).
-  const notificationsUnreadQuery = useQuery({
-    queryKey: ["notifications", "unreadCount"],
-    queryFn: getUnreadNotificationsCount,
-    staleTime: 30_000,
-  });
-  const notificationsBadge = notificationsUnreadQuery.data ?? null;
+  // Open Inbox items, kept current by `action-inbox:updated`.
+  const inboxBadge = useInboxBadge();
 
   // Experimental: the cross-org summary only exists while its flag is on.
   // Falling back here (rather than only hiding the nav entry) keeps the app out
@@ -188,17 +168,17 @@ function AppShell() {
 
   useNotificationEvents(appSettingsQuery.data, (target) => setView(target));
 
+  const navigateFromPalette = usePaletteNavigation(setView, activeView);
+
   const {
     setPaletteSearchText,
     paletteSearchItems,
     paletteRecentItems,
-    paletteSearchEnabled,
-    searchAllQueryIsFetching,
+    searchAllQueryIsFetching, paletteSearchStatus, paletteSearchError,
   } = usePaletteSearch(commandPaletteOpen, organizations, {
     setWorkItemSearchRequest,
     setPullRequestSearchRequest,
-    setCommitSearchRequest,
-    setView,
+    setView: navigateFromPalette,
   });
 
   // Keep the palette's pipeline actions in sync with edits made in Settings.
@@ -273,6 +253,14 @@ function AppShell() {
     });
   }, [queryClient]);
 
+  // The Inbox (mentions / replies to handle) is a separate store from the
+  // notification history above; its sync pass emits its own event.
+  useEffect(() => {
+    return subscribeTauriEvent("action-inbox:updated", () => {
+      void queryClient.invalidateQueries({ queryKey: ["actionInbox"] });
+    });
+  }, [queryClient]);
+
   useEffect(() => {
     writeStoredString(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
@@ -298,6 +286,16 @@ function AppShell() {
       window.removeEventListener(THEME_CHANGED_EVENT, sync);
       unwatch?.();
     };
+  }, []);
+
+  useEffect(() => {
+    function onOpenHelpEvent(event: Event) {
+      setHelpSection((event as CustomEvent<{ section?: HelpSection }>).detail?.section);
+      helpReturnRef.current ??= document.activeElement as HTMLElement | null;
+      setHelpOpen(true);
+    }
+    window.addEventListener(OPEN_HELP_EVENT, onOpenHelpEvent);
+    return () => window.removeEventListener(OPEN_HELP_EVENT, onOpenHelpEvent);
   }, []);
 
   function restoreOverlayFocus(target: HTMLElement | null): void {
@@ -326,6 +324,7 @@ function AppShell() {
 
   function closeHelp(): void {
     setHelpOpen(false);
+    setHelpSection(undefined);
     restoreOverlayFocus(helpReturnRef.current);
     helpReturnRef.current = null;
   }
@@ -375,7 +374,7 @@ function AppShell() {
     syncPending: syncMutation.isPending,
     readOnlyMode,
     quickPipelines,
-    setView,
+    setView: navigateFromPalette,
     syncAll: () => syncMutation.mutate({ scope: "all", force: true }),
     refreshCurrentView,
     runQuickPipeline: (p) => { void runQuickPipeline(p); },
@@ -393,40 +392,34 @@ function AppShell() {
     openHelp,
     closeHelp,
     closeCommandPalette,
-    setView,
+    setView: navigateFromPalette,
     setSidebarCollapsed: setSidebarCollapsed as Dispatch<SetStateAction<boolean>>,
     refreshCurrentView,
     focusNavigation: () => sidebarRef.current?.focusNavigation(),
   });
 
-  // CommitSearch passes a PR query upward; resolve it as a PR search.
+  // Notifications pass a PR query upward; resolve it as a PR search.
   function openPullRequestSearch(query: string, organizationId?: string): void {
     setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
     setView("pullRequestSearch");
   }
-
-  // Code > History rows pass a commit id upward; resolve it as a commit search
-  // so the existing Commits diff infrastructure shows that commit.
-  function openCommitSearch(query: string, organizationId?: string): void {
-    setCommitSearchRequest({ query, requestId: Date.now(), organizationId });
-    setView("commits");
-  }
-
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <AppSidebar
         ref={sidebarRef}
         activeView={activeView}
         organizationsLength={organizations.length}
+        organizationId={badgeOrganizationId}
         capabilities={capabilities}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
         setSidebarWidth={setSidebarWidth}
-        workItemNavViews={workItemNavViews}
+        workItemNavViews={workItemNavViews} setWorkItemNavViews={setWorkItemNavViews}
         activeWorkItemViewId={activeWorkItemViewId}
         myReviewsBadge={myReviewsBadge}
         myWorkItemsBadge={myWorkItemsBadge}
         notificationsBadge={notificationsBadge}
+        inboxBadge={inboxBadge}
         crossOrgSummaryEnabled={crossOrgSummaryEnabled}
         onNavigate={setView}
         onOpenHelp={openHelp}
@@ -437,6 +430,7 @@ function AppShell() {
         className="flex h-screen flex-col lg:pl-[var(--sidebar-width)]"
         style={{ "--sidebar-width": `${sidebarCollapsed ? 0 : sidebarWidth}px` } as CSSProperties}
       >
+        <HeaderToolbarSlotProvider>
         <AppHeader
           activeView={activeView}
           sidebarCollapsed={sidebarCollapsed}
@@ -449,31 +443,35 @@ function AppShell() {
           onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
           onSync={() => syncMutation.mutate({ scope: "all", force: true })}
         />
+        <div className="flex min-h-0 flex-1">
+        {/* Settings scrolls the view pane itself, so the focus frame is painted here. */}
+        <div data-focus-frame className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppContent
           activeView={activeView}
           organizations={organizations}
           organizationsQuery={organizationsQuery}
           pullRequestSearchRequest={pullRequestSearchRequest}
           workItemSearchRequest={workItemSearchRequest}
-          commitSearchRequest={commitSearchRequest}
           myReviewsSelectRequest={myReviewsSelectRequest}
           selectedWorkItemViewRequestId={selectedWorkItemViewRequestId}
           onPullRequestSearchHandled={() => setPullRequestSearchRequest(null)}
           onWorkItemSearchHandled={() => setWorkItemSearchRequest(null)}
-          onCommitSearchHandled={() => setCommitSearchRequest(null)}
           onMyReviewsSelectHandled={() => setMyReviewsSelectRequest(null)}
           onSelectedViewChange={setActiveWorkItemViewId}
           onSelectedViewRequestHandled={() => setSelectedWorkItemViewRequestId(null)}
-          onWorkItemNavViewsChange={setWorkItemNavViews}
+          workItemNavViews={workItemNavViews} setWorkItemNavViews={setWorkItemNavViews}
           onOpenSettings={() => setView("settings")}
           onOpenPullRequest={openPullRequestSearch}
           onOpenView={setView}
-          onOpenCommit={openCommitSearch}
         />
+        </div>
+        <AgentPanelHost />
+        </div>
+        </HeaderToolbarSlotProvider>
       </main>
       <ToastHost />
       <WikiPreviewHost />
-      {helpOpen && <HelpDialog onClose={() => closeHelp()} />}
+      {helpOpen && <HelpDialog section={helpSection} onClose={() => closeHelp()} />}
       {commandPaletteOpen && (
         <CommandPalette
           actions={commandActions}
@@ -482,8 +480,9 @@ function AppShell() {
             organizations.length > 0
               ? {
                   items: [...paletteSearchItems, ...paletteRecentItems],
-                  pending: paletteSearchEnabled && searchAllQueryIsFetching,
+                  pending: searchAllQueryIsFetching,
                   onQueryChange: setPaletteSearchText,
+                  status: paletteSearchStatus, error: paletteSearchError,
                 }
               : undefined
           }

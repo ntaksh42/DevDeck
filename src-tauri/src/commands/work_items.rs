@@ -4,20 +4,19 @@ use crate::app_state::{ensure_write_enabled, run_blocking, AppState};
 use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
-    ClassificationNodesResult, CountWorkItemQueryHistoryInput, CreateWorkItemInput,
-    DeleteWorkItemCommentInput, FetchWorkItemImageInput, FollowWorkItemInput, GetSavedQueryInput,
-    GetWorkItemPreviewInput, ListClassificationNodesInput, ListFollowedWorkItemsInput,
-    ListMyWorkItemsInput, ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput,
-    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
-    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption,
-    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
+    ClassificationNodesResult, CreateWorkItemInput, DeleteWorkItemCommentInput,
+    FetchWorkItemImageInput, FollowWorkItemInput, GetSavedQueryInput, GetWorkItemPreviewInput,
+    ListClassificationNodesInput, ListFollowedWorkItemsInput, ListMyWorkItemsInput,
+    ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
+    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemTypesInput,
+    ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption, RecordAssigneeInteractionInput,
+    RecordMentionInteractionInput, RemoveWorkItemLinkInput, ResolveMentionIdentitiesInput,
     RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
     UnfollowWorkItemInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
     WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
-    WorkItemPreview, WorkItemProjectOption, WorkItemQueryCountPoint, WorkItemSummary,
-    WorkItemUpdateSummary,
+    WorkItemPreview, WorkItemProjectOption, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[tauri::command]
@@ -44,7 +43,10 @@ pub async fn list_work_item_projects(
     input: ListWorkItemProjectsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemProjectOption>> {
-    state.provider().await?.list_work_item_projects(input).await
+    super::query_deadline::with_query_deadline(async {
+        state.provider().await?.list_work_item_projects(input).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -53,7 +55,7 @@ pub async fn run_work_item_query(
     input: RunWorkItemQueryInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.run_query(input).await
+    super::query_deadline::with_query_deadline(state.work_items.run_query(input)).await
 }
 
 #[tauri::command]
@@ -62,16 +64,7 @@ pub async fn count_work_item_query(
     input: RunWorkItemQueryInput,
     state: State<'_, AppState>,
 ) -> Result<usize> {
-    state.work_items.count_query(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-pub async fn count_work_item_query_history(
-    input: CountWorkItemQueryHistoryInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemQueryCountPoint>> {
-    state.work_items.count_query_history(input).await
+    super::query_deadline::with_query_deadline(state.work_items.count_query(input)).await
 }
 
 #[tauri::command]
@@ -94,6 +87,15 @@ pub async fn search_work_item_mentions(
         .await?
         .search_work_item_mentions(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn resolve_mention_identities(
+    input: ResolveMentionIdentitiesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<MentionCandidate>> {
+    state.work_items.resolve_mention_identities(input).await
 }
 
 #[tauri::command]

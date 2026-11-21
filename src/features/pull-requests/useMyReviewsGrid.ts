@@ -16,6 +16,7 @@ import { useExperimentalFlags } from '@/features/settings/useExperimentalFlags';
 import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
+import { useSnoozedCount } from '@/lib/useSnoozedCount';
 import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { isTauriRuntime } from '@/lib/runtime';
 import {
@@ -25,13 +26,14 @@ import {
   toggleColumnFilterValue,
 } from '@/lib/columnFilters';
 import { activeArchivedKeys } from '@/lib/triage';
-import { reconcileReturns, seedDemoReturn } from './reviewReturnTracking';
+import { reconcileReturns, recordOwnVote, seedDemoReturn } from './reviewReturnTracking';
+import { changedSince } from '@/lib/lastSeen';
+import { reviewFingerprint } from './reviewFingerprint';
 import {
   compareReviewPrs,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   defaultSortDirection,
   loadMyReviewsGridViewState,
-  reviewSectionOf,
   reviewTriageKey,
   reviewTriageSnapshot,
   storeMyReviewsGridViewState,
@@ -46,15 +48,15 @@ import {
   PR_GRID_OVERSCAN,
   PR_GRID_REQUIRED_COLUMNS,
   PR_GRID_ROW_HEIGHT,
-  REVIEW_SECTION_LABELS,
-  REVIEW_SECTION_ORDER,
   type FilterableColumn,
   type MyReviewsSelectRequest,
-  type ReviewRow,
+  type ReviewGroupBy,
   type ReviewSection,
   type SortKey,
   type SortState,
 } from './myReviewsTypes';
+import { buildReviewRows, compareReviewGroups, reviewGroupKeyOf } from './myReviewsGrouping';
+import { useReviewGroupReorder } from './useReviewGroupReorder';
 import { useMyReviewsSelectionState } from './useMyReviewsSelectionState';
 
 export function useMyReviewsGrid({
@@ -77,6 +79,13 @@ export function useMyReviewsGrid({
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
     initialViewState.collapsedSections,
   );
+  const [groupOrder, setGroupOrder] = useState(initialViewState.groupOrder);
+  const [groupBy, setGroupBy] = useState<ReviewGroupBy>(initialViewState.groupBy);
+  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(
+    initialViewState.collapsedRepos,
+  );
+  const collapsedGroups: ReadonlySet<string> =
+    groupBy === 'repository' ? collapsedRepos : collapsedSections;
   const [showDrafts, setShowDrafts] = useState(initialViewState.showDrafts);
   const [sort, setSort] = useState<SortState>(initialViewState.sort);
   const [columnFilters, setColumnFilters] = useState<
@@ -109,6 +118,7 @@ export function useMyReviewsGrid({
   const staleThresholdDays =
     settingsQuery.data?.reviewStaleThresholdDays ?? DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
   const queryClient = useQueryClient();
+  const snoozedCount = useSnoozedCount('pull_request', organizationId);
   const experimental = useExperimentalFlags();
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
@@ -125,7 +135,7 @@ export function useMyReviewsGrid({
   });
 
   // ── Column hooks ───────────────────────────────────────────────────────────
-  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+  const { visibleColumns, toggleColumn, moveColumn, reorderColumn, resetColumns } = useColumnVisibility({
     keys: PR_GRID_KEYS,
     requiredColumns: PR_GRID_REQUIRED_COLUMNS,
     initialColumns: initialViewState.visibleColumns,
@@ -133,13 +143,15 @@ export function useMyReviewsGrid({
   const {
     template: COLS,
     minWidth: gridMinWidth,
+    autoWidths: autoColumnWidths,
     resetWidths: resetColumnWidths,
-    gridRef,
+    gridRef, shownColumns,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_GRID_KEYS,
     visibleColumns,
     flexibleKey: 'title',
+    autoHide: ['targetRefName', 'myIsRequired', 'creationDate', 'reviewAge'],
     defaults: DEFAULT_PR_GRID_COLUMN_WIDTHS,
     min: PR_GRID_COLUMN_MIN_WIDTHS,
     max: PR_GRID_COLUMN_MAX_WIDTHS,
@@ -178,6 +190,21 @@ export function useMyReviewsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voteSignature]);
 
+  // PRs whose observable state changed since the user last opened them.
+  const [updatedKeys, setUpdatedKeys] = useState<Set<string>>(new Set());
+  const fingerprintSignature = useMemo(
+    () => allPrs.map((pr) => `${reviewTriageKey(pr)}:${reviewFingerprint(pr)}`).join('|'),
+    [allPrs],
+  );
+  useEffect(() => {
+    setUpdatedKeys(
+      changedSince(
+        allPrs.map((pr) => ({ key: reviewTriageKey(pr), fingerprint: reviewFingerprint(pr) })),
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fingerprintSignature]);
+
   const triageScope = `myReviews:${organizationId}`;
   const archivedKeys = useMemo(() => {
     const snapshots = new Map(
@@ -194,7 +221,7 @@ export function useMyReviewsGrid({
       if (!showDrafts && pr.isDraft) return false;
       if (
         !matchesAllSearchTerms(terms, [
-          pr.pullRequestId,
+          `#${pr.pullRequestId}`, // as the row shows it; "77" still matches
           pr.repositoryName,
           pr.title,
           pr.createdBy,
@@ -216,59 +243,39 @@ export function useMyReviewsGrid({
     [baseFiltered, columnFilters],
   );
 
+  const groupRanks = useMemo(
+    () => new Map(groupOrder[groupBy].map((key, index) => [key, index])),
+    [groupOrder, groupBy],
+  );
   const sortedPrs = useMemo(
     () =>
       filtered
         .map((pr, index) => ({ pr, index }))
         .sort((a, b) => {
-          const sectionDelta =
-            REVIEW_SECTION_ORDER.indexOf(reviewSectionOf(a.pr)) -
-            REVIEW_SECTION_ORDER.indexOf(reviewSectionOf(b.pr));
-          if (sectionDelta !== 0) return sectionDelta;
+          const groupDelta = compareReviewGroups(a.pr, b.pr, groupBy, groupRanks);
+          if (groupDelta !== 0) return groupDelta;
           const result = compareReviewPrs(a.pr, b.pr, sort.key);
           const directed = sort.direction === 'asc' ? result : -result;
           return directed || a.index - b.index;
         })
         .map(({ pr }) => pr),
-    [filtered, sort],
+    [filtered, sort, groupBy, groupRanks],
   );
 
-  const { reviewRows, prFlatIndexes } = useMemo(() => {
-    const rows: ReviewRow[] = [];
-    const flatIndexes: number[] = [];
-    const sectionCounts = new Map<ReviewSection, number>();
-    for (const pr of sortedPrs) {
-      const section = reviewSectionOf(pr);
-      sectionCounts.set(section, (sectionCounts.get(section) ?? 0) + 1);
-    }
-    let currentSection: ReviewSection | null = null;
-    sortedPrs.forEach((pr, prIndex) => {
-      const section = reviewSectionOf(pr);
-      if (section !== currentSection) {
-        currentSection = section;
-        rows.push({
-          kind: 'header',
-          key: section,
-          label: REVIEW_SECTION_LABELS[section],
-          count: sectionCounts.get(section) ?? 0,
-        });
-      }
-      if (!collapsedSections.has(section)) {
-        flatIndexes[prIndex] = rows.length;
-        rows.push({ kind: 'pr', pr, prIndex });
-      }
-    });
-    return { reviewRows: rows, prFlatIndexes: flatIndexes };
-  }, [sortedPrs, collapsedSections]);
+  const { reviewRows, prFlatIndexes } = useMemo(
+    () => buildReviewRows(sortedPrs, groupBy, collapsedGroups),
+    [sortedPrs, groupBy, collapsedGroups],
+  );
 
   // Virtualizer — must come after reviewRows is computed.
   const {
-    scrollerRef,
-    scrollerEl,
+    scrollerRef, scrollerEl,
     firstRow: firstVirtualRow,
     lastRow: lastVirtualRow,
     topPadding: virtualTopPadding,
     bottomPadding: virtualBottomPadding,
+    totalHeight: virtualTotalHeight,
+    scrollRowIntoView,
   } = useGridVirtualizer({
     rowCount: reviewRows.length,
     rowHeight: PR_GRID_ROW_HEIGHT,
@@ -276,14 +283,17 @@ export function useMyReviewsGrid({
   });
 
   const virtualRows = reviewRows.slice(firstVirtualRow, lastVirtualRow);
+  const { groupReorderProps, hasGroupReorderFocus } = useReviewGroupReorder({
+    allPrs, groupBy, setGroupOrder, reviewRows, scrollerEl, scrollRowIntoView,
+  });
 
   const visibleSortedIndexes = useMemo(() => {
     const result: number[] = [];
     sortedPrs.forEach((pr, index) => {
-      if (!collapsedSections.has(reviewSectionOf(pr))) result.push(index);
+      if (!collapsedGroups.has(reviewGroupKeyOf(pr, groupBy))) result.push(index);
     });
     return result;
-  }, [sortedPrs, collapsedSections]);
+  }, [sortedPrs, groupBy, collapsedGroups]);
 
   const resultKeysSignature = useMemo(
     () =>
@@ -298,12 +308,14 @@ export function useMyReviewsGrid({
     sortedPrs,
     visibleSortedIndexes,
     prFlatIndexes,
-    scrollerEl,
+    scrollRowIntoView,
     containerRef,
     rowRefs,
     returnedKeys,
     setReturnedKeys,
+    setUpdatedKeys,
     resultKeysSignature,
+    hasGroupReorderFocus,
     organizationId,
     selectRequest,
     onSelectRequestHandled,
@@ -314,33 +326,37 @@ export function useMyReviewsGrid({
       setShowDone(false);
       setShowSnoozed(false);
       setCollapsedSections(new Set());
+      setCollapsedRepos(new Set());
     },
   });
 
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
     storeMyReviewsGridViewState({
-      collapsedSections,
+      groupOrder, collapsedSections, collapsedRepos,
       columnFilters,
+      groupBy,
       organizationId,
       showDrafts,
       sort,
       visibleColumns,
     });
-  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, visibleColumns]);
+  }, [groupOrder, collapsedSections, collapsedRepos, columnFilters, groupBy, organizationId, showDrafts, sort, visibleColumns]);
 
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  function toggleSection(section: ReviewSection) {
-    setCollapsedSections((prev) => {
+  function toggleSection(key: string) {
+    const toggle = <T extends string>(prev: Set<T>) => {
       const next = new Set(prev);
-      if (next.has(section)) next.delete(section);
-      else next.add(section);
+      if (next.has(key as T)) next.delete(key as T);
+      else next.add(key as T);
       return next;
-    });
+    };
+    if (groupBy === 'repository') setCollapsedRepos(toggle);
+    else setCollapsedSections(toggle);
   }
 
   function voteSelected(vote: -10 | -5 | 0 | 5 | 10, label: string) {
@@ -350,6 +366,7 @@ export function useMyReviewsGrid({
       { ...prLocator(pr), vote },
       {
         onSuccess: () => {
+          recordOwnVote(reviewTriageKey(pr), vote);
           recordUsage('votes', experimental.usageStats);
           setCopyToast(`Voted: ${label}`);
           setTimeout(() => setCopyToast(null), 1500);
@@ -367,6 +384,21 @@ export function useMyReviewsGrid({
         },
       },
     );
+  }
+
+  function applySnooze(snoozeUntil: string) {
+    const targets = snoozeTargetRef.current;
+    if (targets.length > 0) {
+      snoozeMutation.mutate(targets.map((target) => ({
+        organizationId,
+        itemType: 'pull_request',
+        itemKey: `${target.repositoryId}:${target.pullRequestId}`,
+        snoozeUntil,
+      })));
+      setCopyToast(`Snoozed ${targets.length} PR${targets.length === 1 ? '' : 's'}`);
+      setTimeout(() => setCopyToast(null), 1500);
+    }
+    setSnoozeAnchorRect(null);
   }
 
   function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
@@ -398,6 +430,13 @@ export function useMyReviewsGrid({
     setFilterAnchorRect(null);
   }
 
+  /** Back from the Done / Snoozed list to the open one, keeping keyboard focus in the grid. */
+  function leaveStateView() {
+    setShowDone(false);
+    setShowSnoozed(false);
+    window.setTimeout(() => selection.focusRow(selection.selectedIndex), 0);
+  }
+
   function applySort(column: SortKey) {
     setSort((current) => {
       if (current.key !== column) {
@@ -418,24 +457,25 @@ export function useMyReviewsGrid({
     // queries
     query, queryClient, staleThresholdDays, snoozeMutation,
     // grid layout
-    COLS, gridMinWidth, columnResizeProps, resetColumnWidths, gridRef, scrollerRef,
-    virtualTopPadding, virtualBottomPadding, virtualRows,
+    COLS, gridMinWidth, columnResizeProps, autoColumnWidths, resetColumnWidths, gridRef, scrollerRef,
+    virtualTopPadding, virtualBottomPadding, virtualTotalHeight, virtualRows,
     maximized, setMaximized,
     columnMenuRect, setColumnMenuRect,
     // filter / sort state
     organizationId,
     textFilter, setTextFilter,
     showDrafts, setShowDrafts,
-    sort, collapsedSections, columnFilters,
+    sort, collapsedGroups, columnFilters,
+    groupBy, setGroupBy,
     openFilterCol, setOpenFilterCol,
     filterAnchorRect, setFilterAnchorRect,
     filterButtonRef, filterInputRef,
-    showDone, setShowDone, showSnoozed, setShowSnoozed,
+    showDone, setShowDone, showSnoozed, setShowSnoozed, snoozedCount, leaveStateView,
     // columns
-    visibleColumns, toggleColumn, resetColumns,
+    visibleColumns, shownColumns, toggleColumn, moveColumn, reorderColumn, resetColumns,
     // data
     allPrs, sortedPrs, filterSuggestionPool, columnUniqueValues,
-    returnedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,
+    returnedKeys, updatedKeys, triageScope, triageVersion, setTriageVersion, archivedKeys, reviewRows,
     visibleSortedIndexes,
     // snooze
     snoozeTargetRef, snoozeAnchorRect, setSnoozeAnchorRect,
@@ -444,7 +484,7 @@ export function useMyReviewsGrid({
     // presentation
     visiblePrs, noVoteCount, activeFilterCount, isFiltered,
     // handlers
-    toggleSection, voteSelected, openFilter,
+    groupReorderProps, toggleSection, voteSelected, applySnooze, openFilter,
     toggleFilter, clearColumnFilter, uncheckAllColumnFilter, clearAllFilters, applySort,
     // selection (spread from sub-hook)
     ...selection,

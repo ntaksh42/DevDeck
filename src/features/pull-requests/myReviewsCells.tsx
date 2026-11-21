@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { ReviewPullRequestSummary } from '@/lib/azdoCommands';
 import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
+import { AgentResultMark } from '@/components/agent-notes/AgentResultMark';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { STALE_TEXT_CLASS } from '@/lib/gridRowState';
@@ -26,7 +27,7 @@ export function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
 
 export function RequiredBadge({ required }: { required: boolean }) {
   return required ? (
-    <span className="inline-flex items-center rounded border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+    <span className="inline-flex items-center rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs font-medium text-info">
       Required
     </span>
   ) : (
@@ -53,21 +54,21 @@ export function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
   if (status === 'succeeded') {
     icon = (
       <CheckCircle2
-        className="h-3.5 w-3.5 text-green-600 dark:text-green-400"
+        className="h-3.5 w-3.5 text-success"
         aria-hidden="true"
       />
     );
   } else if (status === 'failed') {
     icon = (
       <XCircle
-        className="h-3.5 w-3.5 text-red-600 dark:text-red-400"
+        className="h-3.5 w-3.5 text-destructive"
         aria-hidden="true"
       />
     );
   } else if (status === 'in_progress') {
     icon = (
       <Loader
-        className="h-3.5 w-3.5 animate-spin text-amber-500 dark:text-amber-400"
+        className="h-3.5 w-3.5 animate-spin text-warning"
         aria-hidden="true"
       />
     );
@@ -97,6 +98,7 @@ export function renderPrCell(
   pr: ReviewPullRequestSummary,
   isStale: boolean,
   returned: boolean,
+  updated = false,
 ): ReactNode {
   switch (key) {
     case 'pullRequestId':
@@ -108,7 +110,8 @@ export function renderPrCell(
             if (pr.webUrl) openExternalUrl(pr.webUrl);
           }}
           className="truncate text-left font-mono text-xs text-link hover:underline"
-          title={`PR #${pr.pullRequestId}`}
+          title={`PR #${pr.pullRequestId} (Ctrl+Enter)`}
+          tabIndex={-1}
         >
           #{pr.pullRequestId}
         </button>
@@ -122,12 +125,21 @@ export function renderPrCell(
     case 'title':
       return (
         <div className="flex min-w-0 items-center gap-1.5">
+          <AgentResultMark target="pull-request" itemId={pr.pullRequestId} />
           {returned ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-[11px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-2xs font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
               title="The author pushed new changes after your review — returned to you"
             >
               Returned
+            </span>
+          ) : null}
+          {updated && !returned ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-2xs font-medium text-info"
+              title="Changed since you last viewed this pull request"
+            >
+              Updated
             </span>
           ) : null}
           {pr.isDraft && (
@@ -140,7 +152,7 @@ export function renderPrCell(
           </span>
           {pr.mergeStatus === 'conflicts' ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+              className="inline-flex shrink-0 items-center rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-2xs font-medium text-destructive"
               title="This pull request has merge conflicts"
             >
               Conflicts

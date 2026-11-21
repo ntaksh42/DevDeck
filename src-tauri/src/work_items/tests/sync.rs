@@ -106,7 +106,7 @@ fn my_work_items_wiql_excludes_completed_and_removed_states() {
         SYNC_MY_WI_WIQL,
         "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
          AND [System.AssignedTo] = @Me \
-         AND [System.StateCategory] NOT IN ('Completed', 'Removed') \
+         AND [System.State] NOT IN ('Closed', 'Done', 'Completed', 'Removed') \
          ORDER BY [System.ChangedDate] DESC"
     );
 }

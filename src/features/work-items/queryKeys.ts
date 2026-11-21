@@ -119,6 +119,11 @@ export function invalidateWorkItemQueryViews(
   });
 }
 
+export function invalidateWorkItemSnoozeCaches(queryClient: QueryClient, organizationId: string): void {
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItems(organizationId) });
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.queryCountRoot(organizationId) });
+}
+
 export function invalidateWorkItemMutationCaches(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
   invalidateWorkItemQueryViews(queryClient);

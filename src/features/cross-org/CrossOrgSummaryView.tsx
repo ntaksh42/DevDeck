@@ -1,11 +1,12 @@
 import { useRef } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useMutation, useQueries } from '@tanstack/react-query';
 import { GitPullRequest, Layers, ListChecks } from 'lucide-react';
 import {
   listMyReviewPullRequests,
   listMyWorkItems,
   listOrganizations,
   setActiveOrganization,
+  commandErrorMessage,
   type Organization,
 } from '@/lib/azdoCommands';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -65,6 +66,14 @@ export function CrossOrgSummaryView({
     reviewQueries.some((q) => q.isLoading) ||
     workItemQueries.some((q) => q.isLoading);
 
+  const switchMutation = useMutation({
+    mutationFn: async ({ organizationId }: { organizationId: string; view: 'myReviews' | 'myWorkItems' }) => {
+      await setActiveOrganization(organizationId);
+      await queryClient.invalidateQueries();
+    },
+    onSuccess: (_, { view }) => onOpenView(view),
+  });
+
   // Opening a row switches the active connection first, so the destination view
   // shows that organization's data rather than whatever was active before.
   function openFor(organizationId: string, view: 'myReviews' | 'myWorkItems') {
@@ -73,10 +82,7 @@ export function CrossOrgSummaryView({
       onOpenView(view);
       return;
     }
-    setActiveOrganization(organizationId)
-      .then(() => queryClient.invalidateQueries())
-      .catch(() => undefined)
-      .finally(() => onOpenView(view));
+    switchMutation.mutate({ organizationId, view });
   }
 
   // Arrow keys move between cards; Enter/Space activate via native button
@@ -114,6 +120,12 @@ export function CrossOrgSummaryView({
           already synced.
         </p>
       </div>
+
+      {switchMutation.isError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {commandErrorMessage(switchMutation.error)}
+        </p>
+      ) : null}
 
       <dl className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border border-border bg-card p-3">
@@ -156,7 +168,8 @@ export function CrossOrgSummaryView({
               }}
               onKeyDown={(event) => onCardKeyDown(event, index * 2)}
               onClick={() => openFor(summary.organizationId, 'myReviews')}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+              disabled={switchMutation.isPending}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             >
               <GitPullRequest className="h-4 w-4" aria-hidden="true" />
               {summary.needsMyReview} to review
@@ -168,7 +181,8 @@ export function CrossOrgSummaryView({
               }}
               onKeyDown={(event) => onCardKeyDown(event, index * 2 + 1)}
               onClick={() => openFor(summary.organizationId, 'myWorkItems')}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+              disabled={switchMutation.isPending}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             >
               <ListChecks className="h-4 w-4" aria-hidden="true" />
               {summary.myWorkItems} work items

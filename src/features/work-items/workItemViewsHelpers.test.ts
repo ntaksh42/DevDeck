@@ -1,5 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { formatWiql, tokenizeWiql } from "./workItemViewsHelpers";
+import { formatWiql, tokenizeWiql, viewCardVerticalIndex } from "./workItemViewsHelpers";
+
+describe("viewCardVerticalIndex", () => {
+  // Two wrapped rows of uneven width (x ranges): [0: 0-60] [1: 64-120] [2: 124-300] / [3: 0-250] [4: 254-300]
+  function wrappedCards() {
+    const container = document.createElement("div");
+    container.style.display = "flex";
+    const layout = [
+      [0, 0, 60],
+      [0, 64, 56],
+      [0, 124, 176],
+      [30, 0, 250],
+      [30, 254, 46],
+    ];
+    for (const [top, left, width] of layout) {
+      const item = document.createElement("button");
+      Object.defineProperty(item, "offsetTop", { value: top });
+      Object.defineProperty(item, "offsetLeft", { value: left });
+      Object.defineProperty(item, "offsetWidth", { value: width });
+      container.append(item);
+    }
+    return container;
+  }
+
+  it("moves to the horizontally nearest card in the adjacent wrapped row", () => {
+    const container = wrappedCards();
+    expect(viewCardVerticalIndex(container, 0, 1)).toBe(3);
+    expect(viewCardVerticalIndex(container, 1, 1)).toBe(3);
+    expect(viewCardVerticalIndex(container, 2, 1)).toBe(4);
+    expect(viewCardVerticalIndex(container, 3, -1)).toBe(1);
+    expect(viewCardVerticalIndex(container, 4, -1)).toBe(2);
+  });
+
+  it("stays put when there is no row in that direction", () => {
+    const container = wrappedCards();
+    expect(viewCardVerticalIndex(container, 0, -1)).toBe(0);
+    expect(viewCardVerticalIndex(container, 3, 1)).toBe(3);
+  });
+});
 
 describe("tokenizeWiql", () => {
   it("reproduces the input exactly when the tokens are concatenated", () => {

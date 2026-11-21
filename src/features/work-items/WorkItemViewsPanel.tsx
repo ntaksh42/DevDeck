@@ -1,5 +1,6 @@
 import {
   type ChangeEvent,
+  type Dispatch, type SetStateAction,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useMemo,
@@ -23,14 +24,12 @@ import { WorkItemBoard } from './WorkItemBoard';
 import { toMatchTarget } from './workItemMatchTarget';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 import {
-  loadWorkItemQueryViews,
-  saveWorkItemQueryViews,
   loadWorkItemViewLayout,
   saveWorkItemViewLayout,
   type WorkItemQueryView,
   type WorkItemViewLayout,
 } from './workItemViewsStorage';
-import { firstCustomView, viewCardColumnCount } from './workItemViewsHelpers';
+import { firstCustomView, reorderWorkItemViews, viewCardVerticalIndex } from './workItemViewsHelpers';
 import {
   loadWorkItemViewsCardMode,
   loadWorkItemViewsCollapsed,
@@ -52,18 +51,18 @@ type WorkItemViewsPanelProps = {
   selectedViewRequestId?: string | null;
   onSelectedViewChange?: (viewId: string | null) => void;
   onSelectedViewRequestHandled?: () => void;
-  onViewsChange?: (views: WorkItemQueryView[]) => void;
+  views: WorkItemQueryView[];
+  setViews: Dispatch<SetStateAction<WorkItemQueryView[]>>;
 };
 
 export function WorkItemViewsPanel({
   selectedViewRequestId,
   onSelectedViewChange,
   onSelectedViewRequestHandled,
-  onViewsChange,
+  views, setViews,
 }: WorkItemViewsPanelProps) {
   const queryClient = useQueryClient();
   const selectedOrganizationId = useActiveOrganizationId();
-  const [views, setViews] = useState<WorkItemQueryView[]>(() => loadWorkItemQueryViews());
   const initialSelectedView = firstCustomView(views);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(initialSelectedView?.id ?? null);
   const [viewMessage, setViewMessage] = useState<string | null>(null);
@@ -84,6 +83,7 @@ export function WorkItemViewsPanel({
     queryFn: () => listWorkItemProjects({ organizationId: selectedOrganizationId }),
     enabled: !!selectedOrganizationId,
     staleTime: 5 * 60_000,
+    retry: false,
   });
   const projectOptions = projectsQuery.data ?? [];
 
@@ -96,11 +96,6 @@ export function WorkItemViewsPanel({
     projectsLoading: projectsQuery.isLoading,
     initialSelectedView,
   });
-
-  useEffect(() => {
-    saveWorkItemQueryViews(views);
-    onViewsChange?.(views);
-  }, [onViewsChange, views]);
 
   useEffect(() => {
     if (selectedViewId && views.some((view) => view.id === selectedViewId)) return;
@@ -147,6 +142,7 @@ export function WorkItemViewsPanel({
       !!selectedViewProjectId &&
       !!selectedView.wiql.trim(),
     staleTime: 5 * 60_000,
+    retry: false,
     // Adding/removing an extra column changes the key; keep the same view's
     // rows on screen so the grid (and its focus) isn't swapped for a spinner.
     placeholderData: (previous, previousQuery) =>
@@ -155,6 +151,7 @@ export function WorkItemViewsPanel({
       ? selectedView.refreshIntervalSec * 1000
       : false,
   });
+  const failedQuery = projectsQuery.isError ? projectsQuery : selectedQuery;
   const selectedResults = selectedQuery?.data ?? [];
   const filteredResults = useMemo(() => {
     const parsed = parseSearchQuery(filter);
@@ -199,7 +196,7 @@ export function WorkItemViewsPanel({
     if (index === null) return;
     restoreViewFocusIndexRef.current = null;
     window.setTimeout(() => viewButtonRefs.current[index]?.focus(), 0);
-  }, [selectedViewId]);
+  }, [selectedViewId, views]);
 
   useEffect(() => {
     const target = restoreFocusAfterCollapseRef.current;
@@ -255,18 +252,19 @@ export function WorkItemViewsPanel({
     });
   }
 
+  function reorderView(fromId: string, toId: string) {
+    setViews((current) => reorderWorkItemViews(current, fromId, toId));
+  }
+
   function moveSelectedView(delta: number) {
     if (!selectedView) return;
-    setViews((current) => {
-      const index = current.findIndex((view) => view.id === selectedView.id);
-      if (index < 0) return current;
-      const nextIndex = clamp(index + delta, 0, current.length - 1);
-      if (nextIndex === index) return current;
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
+    const nextIndex = selectedViewIndex + delta;
+    const target = views[nextIndex];
+    if (!target) return;
+    if (document.activeElement === viewButtonRefs.current[selectedViewIndex]) {
+      restoreViewFocusIndexRef.current = nextIndex;
+    }
+    reorderView(selectedView.id, target.id);
   }
 
   function selectViewAt(index: number) {
@@ -283,7 +281,9 @@ export function WorkItemViewsPanel({
     if (isEditableTarget(event.target) || views.length === 0) return;
     // Ctrl+B is handled by the panel wrapper so it also works from the grid.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const columnCount = viewCardColumnCount(event.currentTarget);
+    // The chip row is a single line, so Up/Down step like Left/Right.
+    const verticalIndex = (step: 1 | -1) =>
+      listCollapsed ? selectedViewIndex + step : viewCardVerticalIndex(event.currentTarget, selectedViewIndex, step);
     if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
       event.preventDefault();
       moveSelectedView(-1);
@@ -298,10 +298,10 @@ export function WorkItemViewsPanel({
       selectViewAt(selectedViewIndex - 1);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      selectViewAt(selectedViewIndex + columnCount);
+      selectViewAt(verticalIndex(1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      selectViewAt(selectedViewIndex - columnCount);
+      selectViewAt(verticalIndex(-1));
     } else if (event.key === "Home") {
       event.preventDefault();
       selectViewAt(0);
@@ -384,6 +384,7 @@ export function WorkItemViewsPanel({
         onPinToggle={toggleSelectedViewPinned}
         onMoveLeft={() => moveSelectedView(-1)}
         onMoveRight={() => moveSelectedView(1)}
+        onReorderView={reorderView}
         onPreviewToggle={() =>
           updateSelectedView({ previewVisible: selectedView?.previewVisible === false })
         }
@@ -404,15 +405,15 @@ export function WorkItemViewsPanel({
 
       {selectedView && !draft.dialogOpen ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          {selectedQuery?.isError ? (
+          {failedQuery.isError ? (
             <ErrorState
-              message={commandErrorMessage(selectedQuery.error)}
-              onRetry={() => void selectedQuery.refetch()}
+              message={commandErrorMessage(failedQuery.error)}
+              onRetry={() => void failedQuery.refetch()}
             />
           ) : null}
 
           {layout === "board" ? (
-          <div className="flex h-8 shrink-0 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+          <div className="flex h-7 shrink-0 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
             <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
               value={filter}
@@ -462,10 +463,14 @@ export function WorkItemViewsPanel({
               extraColumns={selectedViewExtraColumns}
               fieldColumnsSource={{
                 organizationId: selectedOrganizationId,
-                projectId: selectedViewProjectId,
               }}
               onExtraColumnsChange={(extraColumns) => updateSelectedView({ extraColumns })}
               snoozeOrganizationId={selectedOrganizationId}
+              agentList={{
+                id: `work-item-view:${selectedView.id}`,
+                title: `Work item view: ${selectedView.name}`,
+                notes: [`WIQL: ${selectedView.wiql}`, filter.trim() && `Text filter: ${filter.trim()}`],
+              }}
             />
           )}
         </div>

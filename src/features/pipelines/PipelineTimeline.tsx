@@ -143,10 +143,10 @@ export function PipelineTimeline({
             <RunBadge visual={visual} size="xs" />
             <span className="truncate">{node.name ?? "(unnamed)"}</span>
             {node.errorCount > 0 ? (
-              <span className="shrink-0 text-xs text-red-700 dark:text-red-400">{node.errorCount} err</span>
+              <span className="shrink-0 text-xs text-destructive">{node.errorCount} err</span>
             ) : null}
             {node.warningCount > 0 ? (
-              <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{node.warningCount} warn</span>
+              <span className="shrink-0 text-xs text-warning">{node.warningCount} warn</span>
             ) : null}
             <span className="ml-auto shrink-0 text-xs text-muted-foreground">
               {formatDuration(node.startTime, node.finishTime)}

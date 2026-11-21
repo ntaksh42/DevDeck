@@ -35,3 +35,21 @@ export function usePreviewZoom() {
     zoomOut,
   };
 }
+
+/**
+ * Ctrl/Cmd +, -, 0 zoom a preview, matching the zoom buttons' tooltips. Call it
+ * before any editable-target bailout so it also works while a text field has
+ * focus, like a browser's own zoom keys. Returns true when it handled the key.
+ */
+export function handlePreviewZoomKey(
+  event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; preventDefault: () => void },
+  zoom: { zoomIn: () => void; zoomOut: () => void; resetZoom: () => void },
+): boolean {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return false;
+  if (event.key === "=" || event.key === "+") zoom.zoomIn();
+  else if (event.key === "-" || event.key === "_") zoom.zoomOut();
+  else if (event.key === "0") zoom.resetZoom();
+  else return false;
+  event.preventDefault();
+  return true;
+}

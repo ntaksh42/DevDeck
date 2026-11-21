@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import {
   commandErrorMessage,
   listSyncStates,
@@ -8,6 +8,7 @@ import {
   type SyncScope,
   type SyncState,
 } from '@/lib/azdoCommands';
+import { SettingsRow } from './SettingsRow';
 
 export function SyncHealthSettings({ organizations }: { organizations: Organization[] }) {
   const queryClient = useQueryClient();
@@ -27,29 +28,17 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
   const orgNames = new Map(organizations.map((org) => [org.id, org.name]));
 
   function syncScope(state: SyncState): SyncScope {
-    if (state.scope.startsWith("prs:")) return "myReviews";
-    if (state.scope.startsWith("work_items:")) return "myWorkItems";
-    if (state.scope.startsWith("commits:")) return "commits";
+    if (state.scope.startsWith("prs:") || state.scope.startsWith("inbox_prs:")) return "myReviews";
+    if (state.scope.startsWith("work_items:") || state.scope.startsWith("inbox_wi:")) return "myWorkItems";
     return "all";
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Activity className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Sync health</h2>
-            <p className="text-sm text-muted-foreground">
-              Last successful background sync by cache scope.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-3">
+    <SettingsRow
+      title="Sync health"
+      description={<>Last successful background sync by cache scope.</>}
+    >
+      <div className="">
         {statesQuery.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -108,8 +97,8 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
                         hasError
                           ? "font-medium text-destructive"
                           : hasWarning
-                            ? "font-medium text-amber-700 dark:text-amber-400"
-                            : "font-medium text-green-700 dark:text-green-400"
+                            ? "font-medium text-warning"
+                            : "font-medium text-success"
                       }
                     >
                       {hasError ? `${state.errorCount} failed` : hasWarning ? "Limited" : "Healthy"}
@@ -126,7 +115,7 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
                     ) : null}
                     {!state.lastError && state.lastWarning ? (
                       <span
-                        className="max-w-52 truncate text-xs text-amber-700 dark:text-amber-400"
+                        className="max-w-52 truncate text-xs text-warning"
                         title={state.lastWarning}
                       >
                         {state.lastWarning}
@@ -157,14 +146,15 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
           </p>
         ) : null}
       </div>
-    </div>
+    </SettingsRow>
   );
 }
 
 function formatSyncScope(scope: string): string {
   if (scope.startsWith("prs:")) return "Pull requests / My Reviews";
   if (scope.startsWith("work_items:")) return "Work items / My Items";
-  if (scope.startsWith("commits:")) return "Commits";
+  if (scope.startsWith("inbox_prs:")) return "Inbox / PR comments";
+  if (scope.startsWith("inbox_wi:")) return "Inbox / Work item comments";
   return scope;
 }
 

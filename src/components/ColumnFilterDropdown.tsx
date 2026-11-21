@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isImeComposing } from "@/lib/utils";
 
 // Per-column value filter dropdown shared by the grids that support filtering a
 // column by its discrete values (My Reviews, PR search). The active selection is
@@ -36,6 +37,7 @@ export function ColumnFilterDropdown({
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (isImeComposing(e)) return;
       if (e.key === "Escape") {
         e.stopPropagation();
         onClose();
@@ -47,11 +49,17 @@ export function ColumnFilterDropdown({
 
   // On close, return focus to the filter button that opened the dropdown so
   // keyboard navigation resumes there instead of being stranded on <body>.
-  // Deferred a frame so it wins over any post-close re-render focus.
+  // Deferred a frame so it wins over any post-close re-render focus. Skipped
+  // while the popup's node is still attached: that is React StrictMode's
+  // simulated unmount/remount (dev), which must not pull focus off the popup.
   useEffect(() => {
     const restore = restoreFocusRef;
+    const dropdown = dropdownRef.current;
     return () => {
-      window.setTimeout(() => restore?.current?.focus(), 0);
+      window.setTimeout(() => {
+        if (dropdown?.isConnected) return;
+        restore?.current?.focus();
+      }, 0);
     };
   }, [restoreFocusRef]);
 
@@ -72,6 +80,7 @@ export function ColumnFilterDropdown({
   // grid behind it (the editable branch of its onKeyDown moves the row
   // selection) while the popup is open.
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (isImeComposing(e)) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       e.stopPropagation();

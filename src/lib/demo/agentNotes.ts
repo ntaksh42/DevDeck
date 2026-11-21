@@ -1,4 +1,5 @@
 import type {
+  AgentAsk,
   AgentNote,
   AgentNoteItem,
   AgentNoteSummary,
@@ -12,8 +13,7 @@ import { noteNeedsYou } from "@/lib/azdoCommands";
 // In-memory agent notes for browser demo mode, keyed by `${target}:${itemId}`.
 // Seeded against the demo result HTML for work item 123 and PR 101 (see
 // demoWorkItemResultPreview / demoReviewResultPreview).
-const FOLDER = "C:\\reports\\azdo-work-items\\.to-agent-msg";
-const PR_FOLDER = "C:\\reports\\azdo-reviews\\.to-agent-msg";
+const FOLDER = "C:\\Users\\demo\\AppData\\Roaming\\com.azdodeck.app\\agent-notes";
 
 function seed(note: Partial<AgentNote> & Pick<AgentNote, "id" | "status" | "createdAt" | "body" | "filePath">): AgentNote {
   return {
@@ -25,6 +25,8 @@ function seed(note: Partial<AgentNote> & Pick<AgentNote, "id" | "status" | "crea
     resultFile: null,
     resultHash: null,
     kind: null,
+    context: null,
+    contextFile: null,
     resolved: null,
     replies: [],
     ...note,
@@ -32,6 +34,27 @@ function seed(note: Partial<AgentNote> & Pick<AgentNote, "id" | "status" | "crea
 }
 
 const demoNotes = new Map<string, AgentNote[]>([
+  [
+    "ask:20261011090000",
+    [
+      seed({
+        id: "20261011-090000.md",
+        status: "open",
+        createdAt: "2026-10-11T09:00:00+09:00",
+        body: "Why did this run fail? Is it the flaky integration test again?",
+        kind: "investigate",
+        context: "Pipeline run 20260412.3 (CI-main, failed)",
+        replies: [
+          {
+            author: "claude",
+            createdAt: "2026-10-11T09:06:00+09:00",
+            body: "Not the flaky test: `PaymentsTests.Refund` fails on a culture-specific decimal format. Which culture should the test pin?",
+          },
+        ],
+        filePath: `${FOLDER}\\ask-20261011090000\\20261011-090000.md`,
+      }),
+    ],
+  ],
   [
     "work-item:123",
     [
@@ -89,8 +112,16 @@ const demoNotes = new Map<string, AgentNote[]>([
             createdAt: "2026-09-26T11:10:00+09:00",
             body: "Load-tested 50 rps with **200-request bursts**: the limiter holds, p99 +3 ms. Should I also cover `PUT /limits`?",
           },
+          {
+            author: "codex",
+            createdAt: "2026-09-26T11:12:00+09:00",
+            body: "This refresh runs on every render; consider memoizing it so a burst does not refetch the dashboard each time.",
+            kind: "post",
+            filePath: "/src/app/dashboard.ts",
+            line: 7,
+          },
         ],
-        filePath: `${PR_FOLDER}\\pr-101\\20260926-101500.md`,
+        filePath: `${FOLDER}\\pr-101\\20260926-101500.md`,
       }),
     ],
   ],
@@ -120,8 +151,12 @@ function replace(item: AgentNoteItem, note: AgentNote): AgentNote {
   return note;
 }
 
+function folderPrefix(target: AgentNoteTarget): string {
+  return target === "pull-request" ? "pr" : target === "ask" ? "ask" : "wi";
+}
+
 function pathFor(target: AgentNoteTarget, itemId: number, status: AgentNote["status"], id: string) {
-  const root = target === "pull-request" ? `${PR_FOLDER}\\pr-${itemId}` : `${FOLDER}\\wi-${itemId}`;
+  const root = `${FOLDER}\\${folderPrefix(target)}-${itemId}`;
   const sub = status === "done" ? "\\_done" : status === "draft" ? "\\_draft" : "";
   return `${root}${sub}\\${id}`;
 }
@@ -144,6 +179,10 @@ export function demoCreateAgentNote(input: CreateAgentNoteInput): AgentNote {
     resultFile: input.resultFile ?? null,
     resultHash: input.resultHash ?? null,
     kind: input.kind ?? null,
+    context: input.context?.trim() || null,
+    contextFile: input.contextDocument?.trim()
+      ? `${FOLDER}\\${folderPrefix(input.target)}-${input.itemId}\\_context\\${id}`
+      : null,
     filePath: pathFor(input.target, input.itemId, status, id),
   });
   save(input, [...demoListAgentNotes(input), note]);
@@ -176,6 +215,24 @@ export function demoReplyAgentNote(input: ReplyAgentNoteInput): AgentNote {
     filePath: pathFor(input.target, input.itemId, current.status === "draft" ? "draft" : "open", current.id),
     replies: [...current.replies, { author: "user", createdAt: now(), body }],
   });
+}
+
+/** Marks a proposed comment as posted, as the desktop app does after it posts it. */
+export function demoPostAgentComment(
+  input: AgentNoteItem & { noteId: string; replyIndex: number; auto?: boolean },
+): void {
+  if (input.target === "ask") throw new Error("agent comments can only be posted to a work item or pull request");
+  const current = find(input);
+  const reply = current.replies[input.replyIndex];
+  if (!reply || reply.kind !== "post") throw new Error("no proposed comment at that position");
+  if (reply.postedAt) throw new Error("this comment was already posted");
+  if (input.auto && (reply.filePath || reply.line != null)) throw new Error("a line comment needs your approval");
+  const replies = current.replies.map((r, i) =>
+    i === input.replyIndex
+      ? { ...r, postedAt: now(), postedRef: input.target === "pull-request" ? "thread-1" : "comment-1" }
+      : r,
+  );
+  replace(input, { ...current, modifiedAt: now(), replies });
 }
 
 export function demoUpdateAgentNote(input: UpdateAgentNoteInput): AgentNote {
@@ -236,9 +293,25 @@ export function demoSummarizeAgentNotes(target: AgentNoteTarget): AgentNoteSumma
       needsYou: notes.filter(noteNeedsYou).length,
       drafts: notes.filter((n) => n.status === "draft").length,
       done: notes.filter((n) => n.status === "done").length,
+      doneByAgent: notes.filter((n) => n.status === "done" && n.resolved !== "Resolved in DevDeck").length,
       lastAgentReplyAt: latest(agentReplies.map((r) => r.createdAt)),
       lastModifiedAt: latest(notes.map((n) => n.modifiedAt ?? n.createdAt)),
     });
   }
   return summaries.sort((a, b) => a.itemId - b.itemId);
+}
+
+export function demoListAgentAsks(): AgentAsk[] {
+  const asks: AgentAsk[] = [];
+  for (const [key, notes] of demoNotes) {
+    const [kind, id] = key.split(":");
+    const visible = notes.filter((n) => n.status !== "draft");
+    if (kind !== "ask" || !visible.length) continue;
+    asks.push({
+      itemId: Number(id),
+      lastModifiedAt: latest(visible.map((n) => n.modifiedAt ?? n.createdAt)),
+      notes: visible,
+    });
+  }
+  return asks.sort((a, b) => (b.lastModifiedAt ?? "").localeCompare(a.lastModifiedAt ?? ""));
 }

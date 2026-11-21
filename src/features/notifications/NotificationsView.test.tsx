@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AgentPanelHost } from "@/components/agent/AgentPanelHost";
+import { resetAgentPanelState } from "@/components/agent/agentPanelStore";
+import { useAgentSubject } from "@/components/agent/agentSubject";
 import { openExternalUrl } from "@/lib/openExternal";
+import * as commands from "@/lib/azdoCommands";
 import { NotificationsView } from "./NotificationsView";
 
 vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn() }));
@@ -29,6 +33,29 @@ function renderView(overrides?: {
 }
 
 describe("NotificationsView", () => {
+  it("leaves pagination keyboard events to the Load more button", async () => {
+    const page = await commands.listNotifications({ limit: 100 });
+    const list = vi.spyOn(commands, "listNotifications").mockResolvedValue({ ...page, hasMore: true });
+    try {
+      const { onOpenPullRequest, onOpenView } = renderView();
+      const button = await screen.findByRole("button", { name: "Load more" });
+      button.focus();
+      expect(fireEvent.keyDown(button, { key: "Enter" })).toBe(true);
+      expect(onOpenPullRequest).not.toHaveBeenCalled();
+      expect(onOpenView).not.toHaveBeenCalled();
+      const grid = screen.getByRole("grid", { name: "Notifications" });
+      fireEvent.keyDown(button, { key: "ArrowDown" });
+      expect(within(grid).getAllByRole("row")[0].getAttribute("aria-selected")).toBe("true");
+      expect(document.activeElement).toBe(button);
+      fireEvent.click(button);
+      await waitFor(() => expect(list).toHaveBeenCalledWith(
+        expect.objectContaining({ beforeId: page.items[page.items.length - 1]?.id }),
+      ));
+    } finally {
+      list.mockRestore();
+    }
+  });
+
   it("shows the seeded notification history", async () => {
     renderView();
     const grid = await screen.findByRole("grid", { name: "Notifications" });
@@ -80,6 +107,35 @@ describe("NotificationsView", () => {
     });
   });
 
+  it("keeps the selected notification when a new one arrives at the top", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <NotificationsView onOpenPullRequest={vi.fn()} onOpenView={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    const selectedText = () =>
+      within(grid).getAllByRole("row").find((row) => row.getAttribute("aria-selected") === "true")?.textContent;
+    const before = selectedText();
+    const original = commands.listNotifications;
+    const list = vi.spyOn(commands, "listNotifications").mockImplementation(async (input) => {
+      const page = await original(input);
+      const fresh = { ...page.items[0], id: 99_999, title: "Brand new", isRead: false };
+      return { ...page, items: [fresh, ...page.items] };
+    });
+    try {
+      await client.invalidateQueries({ queryKey: ["notifications"] });
+      await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(11));
+      expect(selectedText()).toBe(before);
+    } finally {
+      list.mockRestore();
+    }
+  });
+
   it("opens the row's webUrl externally on Ctrl+Enter regardless of jump kind", async () => {
     // The newest row resolves to an in-app pull request jump; Ctrl+Enter must
     // still use the row's own webUrl (grid convention), not the jump target.
@@ -125,5 +181,113 @@ describe("NotificationsView", () => {
     await waitFor(() => {
       expect(within(grid).getAllByRole("row")).toHaveLength(unreadCountBefore - 1);
     });
+  });
+});
+
+describe("NotificationsView toolbar and sections", () => {
+  it("shows category toggle buttons with counts and filters the list", async () => {
+    renderView();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+
+    const group = screen.getByRole("group", { name: "Filter by notification category" });
+    const buttons = within(group).getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      "All 10",
+      "PR 3",
+      "Work item 3",
+      "Pipeline 3",
+      "Sync 1",
+    ]);
+
+    fireEvent.click(within(group).getByRole("button", { name: /^Sync/ }));
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(1));
+    expect(within(group).getByRole("button", { name: /^Sync/ }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("moves between category buttons with the arrow keys and returns to the list", async () => {
+    renderView();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+    const group = screen.getByRole("group", { name: "Filter by notification category" });
+    const [all, pr] = within(group).getAllByRole("button");
+
+    all.focus();
+    fireEvent.keyDown(all, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(pr);
+    fireEvent.keyDown(pr, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(all);
+    fireEvent.keyDown(all, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(within(grid).getAllByRole("row")[0]);
+  });
+
+  it("groups rows under section headers that j/k navigation skips", async () => {
+    renderView();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+
+    const headers = screen.getAllByTestId("notification-section-header");
+    expect(headers.length).toBeGreaterThan(0);
+    expect(headers[0].textContent).toMatch(/^(Today|Earlier) · \d+$/);
+    // Headers are not rows, so selection never lands on one.
+    expect(within(grid).getAllByRole("row")).toHaveLength(10);
+    expect(within(grid).getAllByTestId("notification-category-icon")).toHaveLength(10);
+  });
+});
+
+describe("NotificationsView Agent context", () => {
+  function Probe() {
+    const subject = useAgentSubject();
+    return <output data-testid="subject">{subject ? JSON.stringify(subject) : ""}</output>;
+  }
+
+  function renderWithAgent() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+        <NotificationsView onOpenPullRequest={vi.fn()} onOpenView={vi.fn()} />
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+  }
+
+  afterEach(() => resetAgentPanelState());
+
+  it("follows the selected notification's PR or work item, and none for a pipeline notification", async () => {
+    renderWithAgent();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+    const subject = () => screen.getByTestId("subject").textContent ?? "";
+
+    // Newest row: review request for PR !42 (the demo payload names the project, not its id).
+    await waitFor(() =>
+      expect(JSON.parse(subject())).toMatchObject({
+        kind: "pull-request",
+        id: 42,
+        organizationId: "contoso",
+        projectId: "Platform",
+        repositoryId: "azdo-dashboard",
+        repositoryName: "azdo-dashboard",
+        // A free-text body has no title line, so the title comes from after the "kind: " prefix.
+        title: "Add pull request search dashboard",
+      }),
+    );
+    expect(document.body.textContent).toMatch(/10 items · \d+ unread/);
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    await waitFor(() => expect(JSON.parse(subject())).toMatchObject({ kind: "work-item", id: 123 }));
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    await waitFor(() => expect(subject()).toBe(""));
+  });
+
+  it("keeps the Agent drawer closed until the user opens it", async () => {
+    resetAgentPanelState();
+    renderWithAgent();
+    await screen.findByRole("grid", { name: "Notifications" });
+    expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull();
   });
 });

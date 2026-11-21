@@ -1,43 +1,263 @@
 //! Starts the user's agent command (Settings) for one item's notes, so a note
 //! can be handed over without switching to a terminal.
 
-use std::path::Path;
-use std::process::{Command, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+
+use serde::Deserialize;
 
 use super::{notes_dir, NoteTarget};
 use crate::error::{AppError, Result};
 
+#[cfg(windows)]
+mod job;
+
+/// A tracked process cannot outlive its controller on Windows: closing the
+/// non-inheritable job handle also terminates any descendants still running.
+pub(crate) struct TrackedChild {
+    #[cfg(windows)]
+    _job: Option<job::Job>,
+    child: Child,
+}
+
+impl TrackedChild {
+    pub(crate) fn new(mut child: Child) -> Result<Self> {
+        #[cfg(windows)]
+        let job = match job::Job::attach(&child) {
+            Ok(job) => Some(job),
+            Err(error) => {
+                // A tiny command may already have exited before assignment.
+                // Its status remains available to the normal wait path.
+                if child.try_wait()?.is_none() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error.into());
+                }
+                None
+            }
+        };
+        Ok(Self {
+            #[cfg(windows)]
+            _job: job,
+            child,
+        })
+    }
+}
+
+impl std::ops::Deref for TrackedChild {
+    type Target = Child;
+    fn deref(&self) -> &Self::Target {
+        &self.child
+    }
+}
+
+impl std::ops::DerefMut for TrackedChild {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.child
+    }
+}
+
+const GUIDE_FILE: &str = "AGENTS.md";
+/// Used when Settings has no Claude Code command, so the agent works out of the
+/// box: Claude Code in the background, allowed into the notes folder (outside
+/// the folder it starts in) and without permission prompts, which nobody could
+/// answer. The prompt comes before `--add-dir`, which takes several values.
+const DEFAULT_CLAUDE_COMMAND: &str = "claude -p \"Read {guide} and handle the open notes in {notes}\" --add-dir \"{notes}\" \"{results}\" --disallowedTools \"Bash(az:*)\" \"Bash(git push:*)\" --dangerously-skip-permissions";
+/// The same for Codex: non-interactive, also outside a git repository (the
+/// result folder), and sandboxed to writing only the folder it starts in and
+/// the notes and result folders. Azure CLI and `git push` are blocked by the environment
+/// below, as for Claude Code.
+const DEFAULT_CODEX_COMMAND: &str = "codex exec --skip-git-repo-check --sandbox workspace-write -c sandbox_workspace_write.network_access=true --add-dir \"{notes}\" --add-dir \"{results}\" \"Read {guide} and handle the open notes in {notes}\"";
+/// Empty Azure CLI config folder (under the notes root) the agent starts with,
+/// so `az` is signed out: the agent reads what DevDeck gathered instead of
+/// reaching Azure DevOps with the user's credentials.
+const ISOLATED_AZ_DIR: &str = ".az-signed-out";
+/// Variables through which Azure DevOps tooling picks up a token.
+/// Remote URL prefixes whose pushes are rewritten (`url.<x>.pushInsteadOf`)
+/// to a transport git does not have, so `git push` fails while fetching with
+/// the user's stored credentials still works for reading a clone.
+const BLOCKED_PUSH_PREFIXES: [&str; 3] = ["https://", "ssh://", "git@"];
+const BLOCKED_PUSH_URL: &str = "devdeck-push-blocked://";
+pub(crate) const AZURE_TOKEN_VARS: [&str; 3] = [
+    "AZURE_DEVOPS_EXT_PAT",
+    "SYSTEM_ACCESSTOKEN",
+    "AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY",
+];
+
+/// Which coding agent a request is handed to.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentKind {
+    #[default]
+    Claude,
+    Codex,
+}
+
+impl AgentKind {
+    /// The stored `default_agent` setting: `codex`, anything else Claude Code.
+    pub(crate) fn from_setting(value: Option<&str>) -> Self {
+        if value == Some("codex") {
+            Self::Codex
+        } else {
+            Self::Claude
+        }
+    }
+
+    fn default_command(self) -> &'static str {
+        match self {
+            Self::Claude => DEFAULT_CLAUDE_COMMAND,
+            Self::Codex => DEFAULT_CODEX_COMMAND,
+        }
+    }
+
+    fn model_flag(self) -> &'static str {
+        match self {
+            Self::Claude => "--model",
+            Self::Codex => "-m",
+        }
+    }
+}
+
+/// A model name is appended to a shell command, so only the characters model
+/// names use (`claude-opus-4-1`, `opus[1m]`, `gpt-5.1`, `org/model:tag`) pass.
+pub(crate) fn is_plain_model_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 100
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._:/[]-".contains(c))
+}
+
+/// Where the agent runs and what the command placeholders resolve to.
+pub(crate) struct AgentLaunch<'a> {
+    /// The result folder of the item's target (holds the guide).
+    pub result_folder: &'a Path,
+    /// Where every item's notes live (see [`super::notes_root`]).
+    pub notes_root: &'a Path,
+    /// The single folder holding repository clones, when configured.
+    pub workspace: Option<&'a Path>,
+    /// Model passed to the agent (`--model` / `-m`, appended to the command);
+    /// unset, the agent's own configured model.
+    pub model: Option<&'a str>,
+    /// Name of the pull request's repository, to pick its clone.
+    pub repository: Option<&'a str>,
+}
+
+impl AgentLaunch<'_> {
+    /// The clone of the repository inside the workspace when there is one, else
+    /// the workspace itself, else the result folder. Only an automatic review
+    /// checks out anything; the folder is only where the agent starts.
+    pub(crate) fn work_dir(&self) -> PathBuf {
+        let Some(workspace) = self.workspace else {
+            return self.result_folder.to_path_buf();
+        };
+        if let Some(clone) = self
+            .repository
+            .filter(|name| is_plain_folder_name(name))
+            .map(|name| workspace.join(name))
+            .filter(|candidate| candidate.is_dir())
+        {
+            return clone;
+        }
+        workspace.to_path_buf()
+    }
+}
+
+/// A repository name becomes a path segment, so it must not be able to leave
+/// the workspace (`..`, separators, drive prefixes).
+pub(crate) fn is_plain_folder_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\', ':'])
+        && !name.chars().any(char::is_control)
+}
+
 /// Placeholders in the command: `{target}` (`work-item` / `pull-request`),
-/// `{id}` (item id) and `{notes}` (the item's notes folder). The command runs
-/// through the system shell with the result folder as its working directory
-/// and is not waited on.
+/// `{id}` (item id), `{notes}` (the item's notes folder), `{workspace}` (the
+/// workspace folder, empty when unset), `{repo}` (the repository name, empty
+/// for work items), `{results}` (the result folder) and `{guide}` (its guide). The
+/// command runs through the system shell in [`AgentLaunch::work_dir`] and is
+/// not waited on by the caller.
 pub(crate) fn run_agent(
-    folder: &Path,
+    launch: &AgentLaunch<'_>,
+    agent: AgentKind,
     command: Option<&str>,
     target: NoteTarget,
     item_id: i64,
 ) -> Result<()> {
-    let command = expand(command, folder, target, item_id)?;
-    shell_command(&command)
-        .current_dir(folder)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
+    let mut child = spawn_agent(launch, agent, command, target, item_id, None)?;
+    // The command is not waited on by the request, but something has to reap it.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
     Ok(())
+}
+
+/// Starts the same protected command while leaving completion tracking to the
+/// caller. Automatic runs retain both output streams in their private log.
+pub(crate) fn spawn_agent(
+    launch: &AgentLaunch<'_>,
+    agent: AgentKind,
+    command: Option<&str>,
+    target: NoteTarget,
+    item_id: i64,
+    log_path: Option<&Path>,
+) -> Result<Child> {
+    let command = expand(agent, command, launch, target, item_id)?;
+    let work_dir = launch.work_dir();
+
+    let az_dir = launch.notes_root.join(ISOLATED_AZ_DIR);
+    std::fs::create_dir_all(&az_dir)?;
+    let mut cmd = shell_command(&command);
+    cmd.env("AZURE_CONFIG_DIR", &az_dir);
+    // Git config entries given to this process only (GIT_CONFIG_COUNT/KEY/VALUE).
+    // Plus `http.sslBackend=openssl`: git's default schannel cannot get
+    // credentials inside Codex's Windows sandbox, so every HTTPS fetch fails.
+    let count = BLOCKED_PUSH_PREFIXES.len();
+    cmd.env("GIT_CONFIG_COUNT", (count + 1).to_string());
+    cmd.env(format!("GIT_CONFIG_KEY_{count}"), "http.sslBackend");
+    cmd.env(format!("GIT_CONFIG_VALUE_{count}"), "openssl");
+    for (index, prefix) in BLOCKED_PUSH_PREFIXES.iter().enumerate() {
+        cmd.env(
+            format!("GIT_CONFIG_KEY_{index}"),
+            format!("url.{BLOCKED_PUSH_URL}.pushInsteadOf"),
+        );
+        cmd.env(format!("GIT_CONFIG_VALUE_{index}"), prefix);
+    }
+    for var in AZURE_TOKEN_VARS {
+        cmd.env_remove(var);
+    }
+    cmd.current_dir(&work_dir).stdin(Stdio::null());
+    match log_path {
+        Some(path) => {
+            let log = std::fs::File::create(path)?;
+            cmd.stdout(Stdio::from(log.try_clone()?))
+                .stderr(Stdio::from(log));
+        }
+        None => {
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+    }
+    Ok(cmd.spawn()?)
 }
 
 /// The system shell running `command`. On Windows the string is handed to
 /// `cmd` verbatim: `Command::arg` would re-escape its `"` as `\"`, which
 /// cmd.exe does not understand, so a quoted argument such as
 /// `claude -p "handle {id}"` would be split apart. `/S` plus the outer quotes
-/// makes cmd strip exactly that pair and keep the rest as written.
-fn shell_command(command: &str) -> Command {
+/// makes cmd strip exactly that pair and keep the rest as written. The agent
+/// runs in the background, so cmd (and any pwsh it starts, which inherits the
+/// hidden console) gets no console window of its own.
+pub(crate) fn shell_command(command: &str) -> Command {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let mut cmd = Command::new("cmd");
-        cmd.args(["/S", "/C"]).raw_arg(format!("\"{command}\""));
+        cmd.args(["/S", "/C"])
+            .raw_arg(format!("\"{command}\""))
+            .creation_flags(CREATE_NO_WINDOW);
         cmd
     }
     #[cfg(not(windows))]
@@ -49,53 +269,47 @@ fn shell_command(command: &str) -> Command {
 }
 
 fn expand(
+    agent: AgentKind,
     command: Option<&str>,
-    folder: &Path,
+    launch: &AgentLaunch<'_>,
     target: NoteTarget,
     item_id: i64,
 ) -> Result<String> {
     let command = command
         .map(str::trim)
         .filter(|c| !c.is_empty())
-        .ok_or_else(|| {
-            AppError::InvalidInput("Set an agent command in Settings to run the agent".to_string())
-        })?;
-    let notes = notes_dir(folder, target, item_id);
-    Ok(command
+        .unwrap_or(agent.default_command());
+    let notes = notes_dir(launch.notes_root, target, item_id);
+    let guide = launch.result_folder.join(GUIDE_FILE);
+    let workspace = launch
+        .workspace
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    // An unsafe repository name is dropped from the command as well as from
+    // the folder lookup, so it can never reach the shell.
+    let repo = launch
+        .repository
+        .filter(|name| is_plain_folder_name(name))
+        .unwrap_or_default();
+    let mut command = command
         .replace("{target}", target.as_str())
         .replace("{id}", &item_id.to_string())
-        .replace("{notes}", &notes.display().to_string()))
+        .replace("{notes}", &notes.display().to_string())
+        .replace("{results}", &launch.result_folder.display().to_string())
+        .replace("{workspace}", &workspace)
+        .replace("{repo}", repo)
+        .replace("{guide}", &guide.display().to_string());
+    if let Some(model) = launch.model {
+        if !is_plain_model_name(model) {
+            return Err(AppError::InvalidInput(format!(
+                "invalid model name: {model}"
+            )));
+        }
+        command = format!("{command} {} \"{model}\"", agent.model_flag());
+    }
+    Ok(command)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[cfg(windows)]
-    #[test]
-    fn shell_command_keeps_quoted_arguments_intact() {
-        let output = shell_command("echo \"handle 7 in C:\\dir\"")
-            .output()
-            .unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(&output.stdout).trim(),
-            "\"handle 7 in C:\\dir\""
-        );
-    }
-
-    #[test]
-    fn expands_placeholders_and_requires_a_command() {
-        let folder = Path::new("C:/r");
-        let cmd = expand(
-            Some(" claude -p \"handle {target} {id} in {notes}\" "),
-            folder,
-            NoteTarget::PullRequest,
-            7,
-        )
-        .unwrap();
-        assert!(cmd.starts_with("claude -p \"handle pull-request 7 in C:/r"));
-        assert!(cmd.contains("pr-7"));
-        assert!(expand(Some("  "), folder, NoteTarget::WorkItem, 1).is_err());
-        assert!(expand(None, folder, NoteTarget::WorkItem, 1).is_err());
-    }
-}
+#[path = "tests_launch.rs"]
+mod tests;

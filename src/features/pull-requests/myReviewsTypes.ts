@@ -8,8 +8,8 @@ export const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 export const MIN_REVIEW_PREVIEW_WIDTH = 280;
 export const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 export const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-export const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 68, 84, 76, 68, 84];
-export const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 68, 84, 68, 62, 84];
+export const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 240, 82, 68, 84, 76, 68, 88];
+export const PR_GRID_COLUMN_MIN_WIDTHS = [48, 36, 96, 240, 72, 68, 84, 68, 62, 88];
 export const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 120, 240, 180, 240];
 export const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY =
   'azdodeck:layout:myReviewsGridColumnWidths:v4';
@@ -44,8 +44,11 @@ export const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
   draft: 'Drafts',
 };
 
+/** How My Reviews groups its rows: by my vote status, or by repository. */
+export type ReviewGroupBy = 'status' | 'repository';
+
 export type ReviewRow =
-  | { kind: 'header'; key: ReviewSection; label: string; count: number }
+  | { kind: 'header'; key: string; label: string; count: number; preview: string }
   | { kind: 'pr'; pr: ReviewPullRequestSummary; prIndex: number };
 
 // ── Sort ────────────────────────────────────────────────────────────────────
@@ -116,8 +119,12 @@ export function isFilterableColumn(column: SortKey): column is FilterableColumn 
 
 // ── View state ──────────────────────────────────────────────────────────────
 export type MyReviewsGridViewState = {
+  groupOrder: Record<ReviewGroupBy, string[]>;
   collapsedSections: Set<ReviewSection>;
+  /** Collapsed repository groups (repositoryId) while grouping by repository. */
+  collapsedRepos: Set<string>;
   columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
+  groupBy: ReviewGroupBy;
   organizationId: string;
   showDrafts: boolean;
   sort: SortState;

@@ -1,10 +1,11 @@
 import type { MentionCandidate } from "@/lib/azdoCommands";
+import { FloatingOverlay } from "@/components/FloatingOverlay";
 import { CandidateAvatar, HighlightedText } from "./PreviewEditors";
 import { scrollMentionOptionIntoView } from "./workItemMentions";
 
-// Presentational @mention option list, positioned above the textarea it is
-// nested in (its parent must be `relative`). Shared by the new-comment composer
-// and the inline edit textarea; all state lives in useWorkItemMentionPicker.
+// Presentational @mention option list, floated above (or below, when there is
+// no room) the textarea it is nested in, outside any clipping preview pane.
+// Shared by the new-comment composer and the inline edit textarea; all state lives in useWorkItemMentionPicker.
 export function MentionPickerDropdown({
   options,
   activeIndex,
@@ -20,7 +21,7 @@ export function MentionPickerDropdown({
 }) {
   if (options.length > 0) {
     return (
-      <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 shadow-lg">
+      <FloatingOverlay className="rounded-md border border-border bg-popover py-1 shadow-lg">
         {options.map((candidate, index) => (
           <button
             key={candidate.id}
@@ -45,14 +46,14 @@ export function MentionPickerDropdown({
             </span>
           </button>
         ))}
-      </div>
+      </FloatingOverlay>
     );
   }
   if (errorMessage) {
     return (
-      <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive shadow-lg">
+      <FloatingOverlay className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-2xs text-destructive shadow-lg">
         Search failed: {errorMessage}
-      </div>
+      </FloatingOverlay>
     );
   }
   return null;

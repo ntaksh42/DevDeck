@@ -26,7 +26,7 @@ export class AppErrorBoundary extends Component<Props, State> {
       <div className="flex h-screen items-center justify-center bg-background p-6 text-foreground">
         <div
           role="alert"
-          className="max-w-xl rounded-md border border-destructive/30 bg-red-50 p-4 dark:bg-red-950/40"
+          className="max-w-xl rounded-md border border-destructive/30 bg-destructive/10 p-4"
         >
           <div className="flex gap-3">
             <AlertTriangle

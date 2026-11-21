@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
-import { isEditableTarget, focusPrimaryPreview, markdownLink } from '@/lib/utils';
+import { isEditableTarget, focusPrimaryPreview, markdownLink, hasTextSelectionWithin } from '@/lib/utils';
 import { readStoredJson, writeStoredJson } from '@/lib/storage';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { useDockFilter } from '@/components/DockFilterBar';
@@ -11,13 +10,16 @@ import { DockableWorkspace, type DockablePanelSpec } from '@/components/Dockable
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { SortHeaderButton } from '@/components/SortHeaderButton';
+import { useColumnDrag } from '@/lib/columnDrag';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { openExternalUrl } from '@/lib/openExternal';
-import { copyRowsAsTable } from '@/lib/clipboardTable';
-import { reviewCopyColumns } from './prCopyColumns';
+import { copyRowsAsLinks, copyRowsAsTable } from '@/lib/clipboardTable';
+import { prLinkTarget, reviewCopyColumns } from './prCopyColumns';
 import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
+import { myReviewsAgentList } from './prAgentList';
 import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsToggle } from './LinkedWorkItemsPanel';
+import { ReviewSectionHeader } from './ReviewSectionHeader';
 import { MemoReviewPrRow } from './MemoReviewPrRow';
 import { ReviewFilterBar } from './ReviewFilterBar';
 import { ReviewStatusBar } from './ReviewStatusBar';
@@ -34,7 +36,8 @@ import {
   sortLabels,
 } from './myReviewsTypes';
 import { useMyReviewsGrid } from './useMyReviewsGrid';
-import type { MyReviewsGridProps } from './myReviewsTypes';
+import { useBulkReviewRequest } from './useBulkReviewRequest';
+import type { MyReviewsGridProps, ReviewSection } from './myReviewsTypes';
 
 // Re-export for callers that imported from this path.
 export { reviewAgeDays } from './myReviewsHelpers';
@@ -47,6 +50,8 @@ export function MyReviewsGrid({
   onSelectRequestHandled,
 }: MyReviewsGridProps) {
   const g = useMyReviewsGrid({ selectRequest, onSelectRequestHandled });
+  const columnDrag = useColumnDrag(g.reorderColumn);
+  const bulkReview = useBulkReviewRequest(g.selectedPrs);
   // `key` is bumped on every request so re-activating the same tab still fires.
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number } | undefined>();
   // The linked Work Items dock starts folded to its tab strip so the review
@@ -78,10 +83,16 @@ export function MyReviewsGrid({
     onToggleMaximize: () => g.setMaximized((v) => !v),
     onOpenLinkedWorkItems: openLinkedWorkItems,
     resultCommentRequest,
+    agentList: myReviewsAgentList(g),
   });
 
   function handleKeyDown(e: React.KeyboardEvent) {
     const editable = isEditableTarget(e.target);
+    if (e.key === 'Escape' && !editable && !g.openFilterCol && (g.showDone || g.showSnoozed)) {
+      e.preventDefault();
+      g.leaveStateView();
+      return;
+    }
     const buttonTarget = (e.target instanceof HTMLElement ? e.target : null)?.closest('button');
 
     // The snoozed panel replaces the inbox grid, but this handler still sits on
@@ -94,7 +105,7 @@ export function MyReviewsGrid({
         e.preventDefault();
         g.setTextFilter('');
         (e.target as HTMLElement).blur();
-      } else if (e.key === 'ArrowDown' && g.visibleSortedIndexes.length > 0) {
+      } else if (e.key === 'ArrowDown' && !(e.target instanceof HTMLSelectElement) && g.visibleSortedIndexes.length > 0) {
         e.preventDefault();
         const position = g.visibleSortedIndexes.indexOf(g.selectedIndex);
         g.selectVisiblePosition(position < 0 ? 0 : position);
@@ -118,11 +129,12 @@ export function MyReviewsGrid({
         e.preventDefault();
         const pr = g.sortedPrs[g.selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
-      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'c' || e.key === 'C') && !hasTextSelectionWithin(e.target)) {
         // Copies the whole shift-selection as a table; `c` alone stays the
         // single-row URL copy.
         e.preventDefault();
-        void copyRowsAsTable(g.selectedPrs, reviewCopyColumns(g.visibleColumns), g.setCopyToast, 1500);
+        if (e.shiftKey) void copyRowsAsLinks(g.selectedPrs, prLinkTarget, g.setCopyToast, 1500);
+        else void copyRowsAsTable(g.selectedPrs, reviewCopyColumns(g.visibleColumns), g.setCopyToast, 1500);
       }
       return;
     }
@@ -137,6 +149,7 @@ export function MyReviewsGrid({
       g.setShowDrafts((v) => !v);
       return;
     }
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); g.setGroupBy((v) => (v === 'status' ? 'repository' : 'status')); return; }
     if (e.key === '\\') { e.preventDefault(); g.setMaximized((v) => !v); return; }
     if (e.key === 'o' || e.key === 'O') {
       e.preventDefault();
@@ -201,6 +214,7 @@ export function MyReviewsGrid({
       }
       return;
     }
+    if (e.key === 'i' || e.key === 'I') { e.preventDefault(); bulkReview.request(); return; }
     if (e.key === 'a' || e.key === 'A') { e.preventDefault(); g.voteSelected(10, 'Approve'); return; }
     if (e.key === 's' || e.key === 'S') { e.preventDefault(); g.voteSelected(5, 'Suggestions'); return; }
     if (e.key === 'w' || e.key === 'W') { e.preventDefault(); g.voteSelected(-5, 'Wait'); return; }
@@ -275,12 +289,15 @@ export function MyReviewsGrid({
             minWidth: 480,
             headerActions: (
               <ReviewFilterBar
+                stateView={g.showDone || g.showSnoozed ? { label: g.showSnoozed ? 'Snoozed' : 'Done', onClear: g.leaveStateView } : undefined}
                 textFilter={g.textFilter}
                 onTextFilterChange={(v) => { g.setTextFilter(v); }}
                 filterInputRef={g.filterInputRef}
                 showDrafts={g.showDrafts}
                 onShowDraftsChange={(checked) => { g.setShowDrafts(checked); }}
-                hiddenDraftCount={g.allPrs.filter((pr) => pr.isDraft).length}
+                groupBy={g.groupBy}
+                onGroupByChange={g.setGroupBy}
+                draftCount={g.allPrs.filter((pr) => pr.isDraft).length}
                 filterSuggestionPool={g.filterSuggestionPool}
                 open={filterBar.open}
                 onOpen={filterBar.onOpen}
@@ -288,7 +305,7 @@ export function MyReviewsGrid({
               />
             ),
             content: (
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+        <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
           {g.showSnoozed ? (
             <SnoozedItemsPanel
               organizationId={g.organizationId}
@@ -296,15 +313,15 @@ export function MyReviewsGrid({
               onUnsnoozed={() => g.queryClient.invalidateQueries({ queryKey: ['myReviews'] })}
             />
           ) : (
-            <div ref={g.scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            <div ref={g.scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto [overflow-anchor:none]">
               <div ref={g.gridRef} style={{ minWidth: g.gridMinWidth }}>
                 <div
                   role="row"
                   className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                   style={{ gridTemplateColumns: g.COLS }}
                 >
-                  {g.visibleColumns.map((col, i) => {
-                    const isLast = i === g.visibleColumns.length - 1;
+                  {g.shownColumns.map((col, i) => {
+                    const isLast = i === g.shownColumns.length - 1;
                     return (
                       <SortHeaderButton
                         key={col}
@@ -314,6 +331,7 @@ export function MyReviewsGrid({
                         onSort={g.applySort}
                         filterActive={isFilterableColumn(col) && g.columnFilters[col] !== undefined}
                         onFilterOpen={isFilterableColumn(col) ? (el) => g.openFilter(col, el) : undefined}
+                        dragProps={columnDrag(col)}
                         resizeHandle={isLast ? undefined : <ColumnResizeHandle {...g.columnResizeProps(col)} />}
                       />
                     );
@@ -333,23 +351,22 @@ export function MyReviewsGrid({
                     ) : null}
                   </div>
                 ) : (
-                  <div role="grid" aria-label="My review pull requests" data-primary-grid="true" tabIndex={-1}>
+                  <div role="grid" aria-label="My review pull requests" data-primary-grid="true" tabIndex={-1} style={{ minHeight: g.virtualTotalHeight }}>
                     {g.virtualTopPadding > 0 ? <div style={{ height: g.virtualTopPadding }} /> : null}
                     {g.virtualRows.map((row) => {
                       if (row.kind === 'header') {
-                        const collapsed = g.collapsedSections.has(row.key);
+                        const collapsed = g.collapsedGroups.has(row.key);
                         return (
-                          <button
+                          <ReviewSectionHeader
                             key={`header:${row.key}`}
-                            type="button"
-                            onClick={() => g.toggleSection(row.key)}
-                            aria-expanded={!collapsed}
-                            className="flex h-[29px] w-full items-center gap-1 border-b border-border bg-muted/60 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
-                          >
-                            {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-                            {row.label}
-                            <span className="font-normal normal-case">({row.count})</span>
-                          </button>
+                            label={row.label}
+                            count={row.count}
+                            collapsed={collapsed}
+                            preview={row.preview}
+                            section={g.groupBy === 'status' ? (row.key as ReviewSection) : undefined}
+                            onToggle={() => g.toggleSection(row.key)}
+                            {...g.groupReorderProps(row.key)}
+                          />
                         );
                       }
                       return (
@@ -361,7 +378,8 @@ export function MyReviewsGrid({
                           selected={row.prIndex === g.selectedIndex}
                           inMultiSelection={g.selectedKeys.has(reviewTriageKey(row.pr))}
                           returned={g.returnedKeys.has(reviewTriageKey(row.pr))}
-                          visibleColumns={g.visibleColumns}
+                          updated={g.updatedKeys.has(reviewTriageKey(row.pr))}
+                          visibleColumns={g.shownColumns}
                           staleThresholdDays={g.staleThresholdDays}
                           rowRefs={g.rowRefs}
                           setSelectedIndex={g.setSelectedIndex}
@@ -391,12 +409,14 @@ export function MyReviewsGrid({
             showDone={g.showDone}
             archivedKeys={g.archivedKeys}
             showSnoozed={g.showSnoozed}
+            snoozedCount={g.snoozedCount}
             activeFilterCount={g.activeFilterCount}
             sortedPrsCount={g.sortedPrs.length}
             onToggleOverlapPopup={() => g.setOverlapPopupOpen((v) => !v)}
             onToggleShowDone={() => { g.setShowDone((v) => !v); }}
             onToggleShowSnoozed={() => g.setShowSnoozed((v) => !v)}
             onClearAllFilters={g.clearAllFilters}
+            fitWidths={{ auto: g.autoColumnWidths, onFit: g.resetColumnWidths }}
             onOpenColumnMenu={(rect) => g.setColumnMenuRect(rect)}
             onSnoozeSelected={(rect) => {
               g.snoozeTargetRef.current = [...g.selectedPrs];
@@ -451,31 +471,19 @@ export function MyReviewsGrid({
           visibleColumns={g.visibleColumns}
           requiredColumns={PR_GRID_REQUIRED_COLUMNS}
           onToggle={g.toggleColumn}
+          onMove={g.moveColumn}
           onReset={g.resetColumns}
-          onAutoFitWidths={g.resetColumnWidths}
           onClose={() => g.setColumnMenuRect(null)}
         />
       ) : null}
       {g.snoozeAnchorRect ? (
         <SnoozeMenu
           anchorRect={g.snoozeAnchorRect}
-          onSnooze={(snoozeUntil) => {
-            const targets = g.snoozeTargetRef.current;
-            if (targets.length > 0) {
-              g.snoozeMutation.mutate(targets.map((target) => ({
-                organizationId: g.organizationId,
-                itemType: 'pull_request',
-                itemKey: `${target.repositoryId}:${target.pullRequestId}`,
-                snoozeUntil,
-              })));
-              g.setCopyToast(`Snoozed ${targets.length} PR${targets.length === 1 ? '' : 's'}`);
-              setTimeout(() => g.setCopyToast(null), 1500);
-            }
-            g.setSnoozeAnchorRect(null);
-          }}
+          onSnooze={g.applySnooze}
           onClose={() => g.setSnoozeAnchorRect(null)}
         />
       ) : null}
+      {bulkReview.dialog}
       {g.overlapPopupOpen && g.overlap.fileCount > 0 ? (
         <OverlapPopup
           anchorEl={g.overlapButtonRef.current}

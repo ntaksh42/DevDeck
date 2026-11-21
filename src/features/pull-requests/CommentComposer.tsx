@@ -1,5 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
+import type { CommentImageTarget } from "@/lib/commands/commentImages";
 import { CommentField } from "@/components/CommentField";
+import { FloatingOverlay } from "@/components/FloatingOverlay";
 import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
@@ -7,12 +9,15 @@ import {
   addSelectedMention,
   mentionTokenDeletionStart,
   renderAzureMentionMarkdown,
+  scrollMentionOptionIntoView,
   type SelectedMention,
 } from "@/features/work-items/workItemMentions";
 import {
   PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY,
   usePersistedTextareaHeight,
 } from "@/lib/usePersistedTextareaHeight";
+
+const NO_MENTIONS: SelectedMention[] = [];
 
 /**
  * Reusable comment editor with optional @mention autocomplete. Owns its own
@@ -23,25 +28,39 @@ export function CommentComposer({
   placeholder,
   submitLabel = "Comment",
   initialValue = "",
+  initialMentions = NO_MENTIONS,
   autoFocus = false,
   busy = false,
   onSubmit,
+  onAltSubmit,
+  altSubmitHint,
   onCancel,
   onSubmitted,
   mentionSearch,
   collapsible = false,
+  onCollapse,
+  imageTarget,
 }: {
   placeholder: string;
+  imageTarget?: CommentImageTarget;
   submitLabel?: string;
   initialValue?: string;
+  /** Mentions already present in `initialValue` (e.g. a reply addressed to someone). */
+  initialMentions?: SelectedMention[];
   autoFocus?: boolean;
   busy?: boolean;
   onSubmit: (content: string) => Promise<void>;
+  /** A second way to post, on Ctrl+Shift+Enter (e.g. reply and resolve). */
+  onAltSubmit?: (content: string) => Promise<void>;
+  /** Hint for `onAltSubmit`, appended to the shortcut line. */
+  altSubmitHint?: string;
   onCancel?: () => void;
   onSubmitted?: () => void;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
   /** Folds to a one-line button while empty and unfocused; Esc folds it back. */
   collapsible?: boolean;
+  /** Where focus goes after Esc folds it (default: the owning preview). */
+  onCollapse?: () => void;
 }) {
   const [text, setText] = useState(initialValue);
   const [expanded, setExpanded] = useState(!collapsible);
@@ -56,15 +75,15 @@ export function CommentComposer({
   // Mentions chosen from the picker, kept so their plain "@Name" text can be
   // converted back to the "@<guid>" markdown Azure DevOps needs to create a
   // real (notifying) mention instead of leaving inert text.
-  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>(initialMentions);
 
-  async function submit() {
+  async function submit(handler = onSubmit) {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
     const content = renderAzureMentionMarkdown(trimmed, selectedMentions);
     setSubmitting(true);
     try {
-      await onSubmit(content);
+      await handler(content);
       setText("");
       setMention(null);
       setSelectedMentions([]);
@@ -82,7 +101,13 @@ export function CommentComposer({
   // the picker.
   function refreshMention(value: string, caret: number) {
     if (!mentionSearch) return;
-    setMention(activeMentionAt(value, caret));
+    setMention(
+      activeMentionAt(
+        value,
+        caret,
+        selectedMentions.map((selected) => selected.displayName),
+      ),
+    );
   }
 
   const mentionQuery = mention?.query;
@@ -175,15 +200,20 @@ export function CommentComposer({
     }
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
-      void submit();
+      void submit(event.shiftKey && onAltSubmit ? onAltSubmit : onSubmit);
       return;
     }
     if (event.key === "Escape" && onCancel) {
       event.stopPropagation();
       onCancel();
-    } else if (event.key === "Escape" && collapsible && !text.trim()) {
+    } else if (event.key === "Escape" && collapsible) {
       event.stopPropagation();
-      setExpanded(false);
+      // A draft stays open (and kept); focus still leaves the box for its owner.
+      if (!text.trim()) setExpanded(false);
+      if (onCollapse) {
+        onCollapse();
+        return;
+      }
       // Back to this PR's own preview, not the first one on the page
       // (the linked work item preview can come earlier in the DOM).
       const preview = event.currentTarget
@@ -199,9 +229,10 @@ export function CommentComposer({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex h-7 w-full items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+        title={placeholder}
+        className="flex h-7 w-full min-w-0 items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        {placeholder}
+        <span className="min-w-0 truncate">{placeholder}</span>
       </button>
     );
   }
@@ -218,6 +249,11 @@ export function CommentComposer({
         textareaRef={textareaRef}
         autoFocus={autoFocus || (collapsible && expanded)}
         value={text}
+        imageTarget={busy || submitting ? undefined : imageTarget}
+        onImagePaste={(value) => {
+          setText(value);
+          setMention(null);
+        }}
         onChange={(event) => {
           setText(event.target.value);
           refreshMention(event.target.value, event.target.selectionStart ?? event.target.value.length);
@@ -227,33 +263,43 @@ export function CommentComposer({
           refreshMention(target.value, target.selectionStart ?? target.value.length);
         }}
         onKeyDown={handleKeyDown}
-        rows={3}
+        rows={4}
+        className="min-h-24"
         placeholder={placeholder}
         aria-label={placeholder}
-        hint={`Ctrl+Enter to ${submitLabel === "Save" ? "save" : "post"} · Esc to cancel`}
+        hint={`Ctrl+Enter to ${submitLabel === "Save" ? "save" : "post"}${altSubmitHint ? ` · ${altSubmitHint}` : ""} · Esc to cancel`}
         overlay={
           showMentions ? (
-            <ul className="absolute left-2 top-full z-20 max-h-40 w-64 overflow-auto rounded-md border border-border bg-popover shadow-lg">
-              {candidates.map((candidate, index) => (
-                <li key={candidate.id}>
-                  <button
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      insertMention(candidate);
-                    }}
-                    className={`flex w-full flex-col px-2 py-1 text-left text-xs ${
-                      index === activeIndex ? "bg-secondary" : "hover:bg-muted/50"
-                    }`}
-                  >
-                    <span className="font-medium">{candidate.displayName}</span>
-                    {candidate.uniqueName ? (
-                      <span className="text-[11px] text-muted-foreground">{candidate.uniqueName}</span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <FloatingOverlay
+              preferred="below"
+              maxHeight={160}
+              inset={8}
+              width={256}
+              className="rounded-md border border-border bg-popover shadow-lg"
+            >
+              <ul>
+                {candidates.map((candidate, index) => (
+                  <li key={candidate.id}>
+                    <button
+                      type="button"
+                      ref={index === activeIndex ? scrollMentionOptionIntoView : undefined}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        insertMention(candidate);
+                      }}
+                      className={`flex w-full flex-col px-2 py-1 text-left text-xs ${
+                        index === activeIndex ? "bg-secondary" : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <span className="font-medium">{candidate.displayName}</span>
+                      {candidate.uniqueName ? (
+                        <span className="text-2xs text-muted-foreground">{candidate.uniqueName}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </FloatingOverlay>
           ) : null
         }
         submitLabel={submitLabel}

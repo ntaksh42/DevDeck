@@ -1,393 +1,131 @@
-import {
-  type FormEvent,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { Info } from 'lucide-react';
-import {
-  searchPullRequests,
-  listCommitRepositories,
-  listRepoBranches,
-  commandErrorMessage,
-  type SearchPullRequestsInput,
-  type PullRequestSummary,
-} from '@/lib/azdoCommands';
-import { useActiveOrganizationId } from '@/lib/useActiveConnection';
-import { handleSearchInputEscape } from '@/lib/utils';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { SlidersHorizontal } from 'lucide-react';
+import { type PullRequestSummary } from '@/lib/azdoCommands';
+import { useActiveOrganization } from '@/lib/useActiveConnection';
+import { handleSearchInputEscape, isImeComposing } from '@/lib/utils';
+import { parsePrSearchQuery } from '@/lib/prSearchQuery';
 import { ErrorState } from '@/components/StateDisplay';
-import { MultiSelectFilter } from '@/components/MultiSelectFilter';
-import {
-  FilterField,
-  FiltersToggle,
-  NativeSelect,
-  SearchInput,
-  SearchSubmitButton,
-  filterInputClass,
-  searchBarRowClass,
-} from '@/components/SearchBar';
+import { SearchInput, SearchSubmitButton } from '@/components/SearchBar';
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
+import { useSearchHistory } from '@/lib/searchHistory';
 import { PullRequestResults } from './PrSearchResults';
-import {
-  PR_SEARCH_STATUS_OPTIONS,
-  PR_SEARCH_STATUS_STORAGE_KEY,
-  PR_SEARCH_DATE_BASIS_OPTIONS,
-  PR_SEARCH_DATE_BASIS_STORAGE_KEY,
-  PR_SEARCH_SORT_OPTIONS,
-  PR_SEARCH_SORT_STORAGE_KEY,
-  loadPrSearchStatuses,
-  loadPrSearchDateBasis,
-  loadPrSearchSortBy,
-  type PrSearchStatus,
-  type PrSearchDateBasis,
-  type PrSearchSortBy,
-} from './PrSearchTypes';
+import { PrSearchHistory } from './PrSearchHistory';
+import { PrSearchFiltersDialog } from './PrSearchFiltersDialog';
+import { PrSearchFilterChips } from './PrSearchFilterChips';
+import { normalizePrSearchFilters, type PrSearchFilters, summarizePrSearchFilters } from './prSearchHistoryHelpers';
+import { initialPrSearchFilters, prSearchInput, sortPrSearchRows } from './prSearchState';
+import { useProgressivePrSearch } from './useProgressivePrSearch';
+import { PR_SEARCH_STATUS_STORAGE_KEY, PR_SEARCH_DATE_BASIS_STORAGE_KEY, PR_SEARCH_SORT_STORAGE_KEY, type PrSearchSortBy } from './PrSearchTypes';
 
-// Shared empty fallback so `results` keeps a stable identity between renders
-// while no search has run; PrSearchResults resets its selection when the
-// results array changes.
-const NO_RESULTS: PullRequestSummary[] = [];
-
-const PR_SEARCH_NOTE =
-  "Active pull requests are served from the local cache. Completed and abandoned pull requests are fetched live from Azure DevOps, so those statuses may take a moment. Target branch and the date window narrow the live query server-side. Select a repository to get target-branch suggestions.";
-
-export function PullRequestSearch({
-  externalSearch,
-  onExternalSearchHandled,
-}: {
-  externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
+export function PullRequestSearch({ externalSearch, onExternalSearchHandled }: {
+  externalSearch?: { query: string; requestId: number; organizationId?: string; pullRequest?: PullRequestSummary } | null;
   onExternalSearchHandled?: () => void;
 }) {
-  const organizationId = useActiveOrganizationId();
-  // The search text intentionally resets when the view is left (remount on nav).
-  const [query, setQuery] = useState("");
-  const [statuses, setStatuses] = useState<PrSearchStatus[]>(loadPrSearchStatuses);
-  const [projectIds, setProjectIds] = useState<string[]>([]);
-  const [repositoryIds, setRepositoryIds] = useState<string[]>([]);
-  const [targetBranches, setTargetBranches] = useState<string[]>([]);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [dateBasis, setDateBasis] = useState<PrSearchDateBasis>(loadPrSearchDateBasis);
-  const [sortBy, setSortBy] = useState<PrSearchSortBy>(loadPrSearchSortBy);
-  const [excludeDrafts, setExcludeDrafts] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const organization = useActiveOrganization();
+  const organizationId = organization.data?.id ?? '';
+  const azure = organization.data?.providerKind !== 'github';
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState(initialPrSearchFilters);
+  const [filterAnchor, setFilterAnchor] = useState<DOMRect | null>(null);
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
+  const search = useProgressivePrSearch(organizationId, azure);
+  const searchHistory = useSearchHistory<PrSearchFilters>('prSearch');
+  const priorOrg = useRef(organizationId);
+  const dirty = query !== submittedQuery;
+  const results = useMemo(() => sortPrSearchRows(search.rows, filters.sortBy), [search.rows, filters.sortBy]);
 
-  const repositoriesQuery = useQuery({
-    queryKey: ["prRepositories", organizationId],
-    queryFn: () => listCommitRepositories({ organizationId }),
-    enabled: !!organizationId,
-    staleTime: 5 * 60_000,
-  });
-  const allRepositories = repositoriesQuery.data ?? [];
+  useEffect(() => {
+    if (!organizationId || priorOrg.current === organizationId) return;
+    const switched = !!priorOrg.current;
+    priorOrg.current = organizationId;
+    const next = initialPrSearchFilters();
+    if (!azure && !window.localStorage.getItem(PR_SEARCH_STATUS_STORAGE_KEY)) next.statuses = ['active'];
+    setFilters(next);
+    if (switched) { setQuery(''); setSubmittedQuery(''); }
+    setFilterAnchor(null); setValidationError(null); setSelectionEpoch((value) => value + 1);
+  }, [organizationId, azure]);
 
-  const projects = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const repo of allRepositories) seen.set(repo.projectId, repo.projectName);
-    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
-  }, [allRepositories]);
+  function saveFilters(next: PrSearchFilters) {
+    setFilters(next);
+    window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, JSON.stringify(next.statuses));
+    window.localStorage.setItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY, next.dateBasis);
+    window.localStorage.setItem(PR_SEARCH_SORT_STORAGE_KEY, next.sortBy);
+  }
 
-  const filteredRepositories = useMemo(
-    () =>
-      projectIds.length > 0
-        ? allRepositories.filter((r) => projectIds.includes(r.projectId))
-        : allRepositories,
-    [allRepositories, projectIds],
-  );
-
-  // Fetch branches for the selected repositories so the target-branch field can
-  // suggest real branch names. Scoped to the selected repos to avoid fanning out
-  // across every repository in the org when nothing is narrowed.
-  const selectedRepositories = useMemo(
-    () => allRepositories.filter((r) => repositoryIds.includes(r.repositoryId)),
-    [allRepositories, repositoryIds],
-  );
-  const branchQueries = useQueries({
-    queries: selectedRepositories.map((repo) => ({
-      queryKey: ["prBranchSuggestions", organizationId, repo.projectId, repo.repositoryId],
-      queryFn: () =>
-        listRepoBranches({
-          organizationId,
-          project: repo.projectId,
-          repository: repo.repositoryId,
-        }),
-      enabled: !!organizationId,
-      staleTime: 5 * 60_000,
-    })),
-  });
-  const branchSuggestions = Array.from(
-    new Set(branchQueries.flatMap((q) => (q.data ?? []).map((b) => b.name))),
-  );
-
-  // Changing the project scope drops repository selections that no longer
-  // belong to any selected project, so the two filters stay consistent.
-  function onProjectsChange(nextProjectIds: string[]) {
-    setProjectIds(nextProjectIds);
-    if (nextProjectIds.length > 0) {
-      const allowed = new Set(
-        allRepositories
-          .filter((r) => nextProjectIds.includes(r.projectId))
-          .map((r) => r.repositoryId),
-      );
-      setRepositoryIds((prev) => prev.filter((id) => allowed.has(id)));
+  function runSearch(text: string, nextFilters: PrSearchFilters) {
+    if (!organizationId) return;
+    const next = normalizePrSearchFilters(nextFilters);
+    if (azure) {
+      try { parsePrSearchQuery(text, next.excludeWords); }
+      catch (error) { setValidationError(error instanceof Error ? error.message : String(error)); return; }
     }
-  }
-
-  const mutation = useMutation({ mutationFn: searchPullRequests });
-  const results = mutation.data?.pullRequests ?? NO_RESULTS;
-  const truncated = mutation.data?.truncated ?? false;
-  const total = mutation.data?.total ?? 0;
-  const activeSearchFilterCount =
-    (query.trim() ? 1 : 0) +
-    (projectIds.length > 0 ? 1 : 0) +
-    (repositoryIds.length > 0 ? 1 : 0) +
-    (targetBranches.length > 0 ? 1 : 0) +
-    (fromDate ? 1 : 0) +
-    (toDate ? 1 : 0) +
-    (excludeDrafts ? 1 : 0);
-  const advancedFilterCount =
-    (targetBranches.length > 0 ? 1 : 0) +
-    (fromDate ? 1 : 0) +
-    (toDate ? 1 : 0) +
-    (excludeDrafts ? 1 : 0);
-
-  // Bundles the advanced filter state shared by every search trigger.
-  function advancedFilters(): Partial<SearchPullRequestsInput> {
-    return {
-      targetBranches: targetBranches.length > 0 ? targetBranches : undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined,
-      dateBasis,
-      excludeDrafts: excludeDrafts || undefined,
-      sortBy,
-    };
+    setValidationError(null); setQuery(text); setSubmittedQuery(text); saveFilters(next); setSelectionEpoch((value) => value + 1);
+    const input = prSearchInput(text, next);
+    if (!azure) { delete input.authorId; delete input.reviewerId; delete input.excludeWords; }
+    search.start(input);
+    searchHistory.record({ organizationId, query: text, filters: next, summary: summarizePrSearchFilters(next) });
   }
 
   useEffect(() => {
-    window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, JSON.stringify(statuses));
-  }, [statuses]);
-
-  useEffect(() => {
-    window.localStorage.setItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY, dateBasis);
-  }, [dateBasis]);
-
-  useEffect(() => {
-    window.localStorage.setItem(PR_SEARCH_SORT_STORAGE_KEY, sortBy);
-  }, [sortBy]);
-
-  useEffect(() => {
-    if (!externalSearch) return;
-    const targetOrganizationId = organizationId;
-    setQuery(externalSearch.query);
-    // The palette looks up active PRs, so reset the status and scope filters.
-    setStatuses(["active"]);
-    setProjectIds([]);
-    setRepositoryIds([]);
-    setTargetBranches([]);
-    setFromDate("");
-    setToDate("");
-    setExcludeDrafts(false);
-    mutation.mutate({
-      organizationId: targetOrganizationId,
-      query: externalSearch.query,
-      statuses: ["active"],
-      projectIds: undefined,
-      repositoryIds: undefined,
-    });
+    if (!externalSearch || !organizationId) return;
+    if (externalSearch.organizationId && externalSearch.organizationId !== organizationId) return;
+    const next = { ...initialPrSearchFilters(), statuses: ['active'] as PrSearchFilters['statuses'] };
+    setQuery(externalSearch.query); setSubmittedQuery(externalSearch.query); setFilters(next); setValidationError(null); setSelectionEpoch((value) => value + 1);
+    if (externalSearch.pullRequest) search.openSummary(externalSearch.pullRequest);
+    else search.start(prSearchInput(externalSearch.query, next));
     onExternalSearchHandled?.();
+    // The request id identifies a new palette navigation; callback identities do not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalSearch?.requestId]);
+  }, [externalSearch?.requestId, organizationId]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.mutate({
-      organizationId,
-      query,
-      statuses: statuses.length > 0 ? statuses : undefined,
-      projectIds: projectIds.length > 0 ? projectIds : undefined,
-      repositoryIds: repositoryIds.length > 0 ? repositoryIds : undefined,
-      ...advancedFilters(),
-    });
+    if (!search.pending) runSearch(query, filters);
   }
-
-  function clearSearchFilters() {
-    setQuery("");
-    setProjectIds([]);
-    setRepositoryIds([]);
-    setTargetBranches([]);
-    setFromDate("");
-    setToDate("");
-    setExcludeDrafts(false);
-    if (mutation.isSuccess) {
-      mutation.mutate({
-        organizationId,
-        query: "",
-        statuses: statuses.length > 0 ? statuses : undefined,
-        projectIds: undefined,
-        repositoryIds: undefined,
-        dateBasis,
-        sortBy,
-      });
-    }
+  function clearFilters() {
+    runSearch('', { ...initialPrSearchFilters(), statuses: filters.statuses, sortBy: filters.sortBy });
   }
+  const activeCount = (query.trim() ? 1 : 0) + (filters.author ? 1 : 0) + (filters.reviewer ? 1 : 0)
+    + (filters.projectIds.length ? 1 : 0) + (filters.repositoryIds.length ? 1 : 0) + (filters.targetBranches.length ? 1 : 0)
+    + (filters.fromDate ? 1 : 0) + (filters.toDate ? 1 : 0) + (filters.excludeDrafts ? 1 : 0) + (filters.excludeWords ? 1 : 0);
+  const progressive = search.result?.searchComplete !== undefined || (azure && search.pending);
+  const searchState = { progressive, scannedCount: search.result?.scannedCount ?? 0,
+    complete: search.result?.searchComplete ?? false, hasMore: search.result?.hasMore ?? false,
+    retryAvailable: (search.result?.failedScopes?.length ?? 0) > 0,
+    dirty, stopping: search.stopping,
+    onContinue: () => search.continueSearch(), onRetry: () => search.continueSearch(true), onStop: () => void search.stop() };
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <form className="grid shrink-0 gap-2" onSubmit={onSubmit}>
-        <div className={searchBarRowClass}>
-          <SearchInput
-            value={query}
-            onChange={setQuery}
-            onKeyDown={handleSearchInputEscape}
-            placeholder="title, author, branch…"
-            autoFocus
-          />
-          <div className="w-36">
-            <MultiSelectFilter
-              className="h-8"
-              options={PR_SEARCH_STATUS_OPTIONS}
-              selected={statuses}
-              onChange={(next) => setStatuses(next as PrSearchStatus[])}
-              placeholder="Active"
-              ariaLabel="Filter by status"
-              capitalize
-            />
-          </div>
-          <div className="w-44">
-            <MultiSelectFilter
-              className="h-8"
-              options={projects.map((p) => ({ value: p.id, label: p.name }))}
-              selected={projectIds}
-              onChange={onProjectsChange}
-              placeholder="All projects"
-              ariaLabel="Filter by project"
-              searchable
-              disabled={repositoriesQuery.isLoading}
-            />
-          </div>
-          <div className="w-52">
-            <MultiSelectFilter
-              className="h-8"
-              options={filteredRepositories.map((r) => ({
-                value: r.repositoryId,
-                label: r.repositoryName,
-              }))}
-              selected={repositoryIds}
-              onChange={setRepositoryIds}
-              placeholder="All repositories"
-              ariaLabel="Filter by repository"
-              searchable
-              disabled={repositoriesQuery.isLoading}
-            />
-          </div>
-          <FiltersToggle
-            open={filtersOpen}
-            onToggle={() => setFiltersOpen((open) => !open)}
-            count={advancedFilterCount}
-            controls="pr-search-advanced-filters"
-          />
-          <SearchSubmitButton pending={mutation.isPending} disabled={!organizationId} />
-          <span
-            className="text-muted-foreground"
-            title={PR_SEARCH_NOTE}
-            aria-describedby="pr-search-status-note"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-        </div>
-
-        {filtersOpen ? (
-          <div id="pr-search-advanced-filters" className="flex flex-wrap items-end gap-2">
-            <div className="grid w-64 gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Target branches</span>
-              <MultiSelectFilter
-                className="h-8"
-                options={branchSuggestions.map((branch) => ({ value: branch, label: branch }))}
-                selected={targetBranches}
-                onChange={setTargetBranches}
-                placeholder="All branches"
-                ariaLabel="Filter by target branch"
-                searchable
-                disabled={branchQueries.length === 0 || branchSuggestions.length === 0}
-              />
-            </div>
-            <FilterField label="From">
-              <input
-                type="date"
-                value={fromDate}
-                max={toDate || undefined}
-                onChange={(e) => setFromDate(e.target.value)}
-                className={filterInputClass}
-              />
-            </FilterField>
-            <FilterField label="To">
-              <input
-                type="date"
-                value={toDate}
-                min={fromDate || undefined}
-                onChange={(e) => setToDate(e.target.value)}
-                className={filterInputClass}
-              />
-            </FilterField>
-            <FilterField label="Date basis">
-              <NativeSelect
-                className="w-36"
-                value={dateBasis}
-                onChange={(e) => setDateBasis(e.target.value as PrSearchDateBasis)}
-                title={statuses.length === 0 || statuses.includes("active")
-                  ? "Active PRs have no close date, so the window uses the created date for them."
-                  : "Whether the date window filters by created or closed date."}
-              >
-                {PR_SEARCH_DATE_BASIS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </NativeSelect>
-            </FilterField>
-            <FilterField label="Sort by">
-              <NativeSelect
-                className="w-40"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as PrSearchSortBy)}
-              >
-                {PR_SEARCH_SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </NativeSelect>
-            </FilterField>
-            <label className="flex h-8 items-center gap-2">
-              <input
-                type="checkbox"
-                checked={excludeDrafts}
-                onChange={(e) => setExcludeDrafts(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span className="text-xs font-medium">Hide drafts</span>
-            </label>
-          </div>
-        ) : null}
-
-        {/* Kept for assistive tech; sighted users get it from the info icon's tooltip. */}
-        <p id="pr-search-status-note" className="sr-only">
-          {PR_SEARCH_NOTE}
-        </p>
+  return <div className="flex min-h-0 flex-1 flex-col gap-2">
+    {/* The search row lives in the header next to the breadcrumb, so the
+        list starts at the same height as every other view. */}
+    <HeaderToolbarPortal>
+      <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={submit}>
+        <SearchInput value={query} onChange={(value) => { setQuery(value); setValidationError(null); }} placeholder="Search pull requests…" autoFocus
+          onKeyDown={(event) => {
+            if (isImeComposing(event.nativeEvent) && event.key === 'Enter') { event.preventDefault(); return; }
+            handleSearchInputEscape(event);
+          }} />
+        <PrSearchFilterChips filters={filters} onOpen={(owner) => setFilterAnchor(owner.getBoundingClientRect())} onChange={(next) => runSearch(query, next)} />
+        {dirty && search.searched ? <span role="status" className="shrink-0 text-2xs text-warning">Press Enter to search</span> : null}
+        <button type="button" onClick={(event) => setFilterAnchor(event.currentTarget.getBoundingClientRect())} aria-expanded={!!filterAnchor}
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-input bg-card px-2.5 text-sm text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring">
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />Filters
+        </button>
+        <SearchSubmitButton pending={search.pending} disabled={!organizationId} />
       </form>
-
-      {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
-
-      {mutation.isSuccess && mutation.data.warnings.length > 0 && (
-        <p role="status" className="shrink-0 text-xs text-amber-600 dark:text-amber-400">
-          Could not fetch {mutation.data.warnings.length} project(s): {mutation.data.warnings.join(", ")}.
-        </p>
-      )}
-
-      <PullRequestResults
-        activeExternalFilterCount={activeSearchFilterCount}
-        loading={mutation.isPending}
-        onClearExternalFilters={clearSearchFilters}
-        results={results}
-        searched={mutation.isSuccess}
-        truncated={truncated}
-        total={total}
-      />
-    </div>
-  );
+    </HeaderToolbarPortal>
+    {validationError ? <p role="alert" className="text-xs text-destructive">{validationError}</p> : null}
+    {search.error ? <ErrorState message={search.error} /> : null}
+    {search.result?.warnings.length ? <p role="status" className="shrink-0 text-xs text-warning">Incomplete results: {search.result.warnings.join('; ')}</p> : null}
+    <PullRequestResults filterResetKey={selectionEpoch} activeExternalFilterCount={activeCount} loading={search.pending}
+      failed={!!search.error}
+      onClearExternalFilters={clearFilters} results={results} searched={search.searched}
+      truncated={search.result?.truncated ?? false} total={search.result?.total ?? 0}
+      progress={searchState} sortBy={filters.sortBy} onSortChange={(sortBy: PrSearchSortBy) => saveFilters({ ...filters, sortBy })}
+      emptyContent={<PrSearchHistory organizationId={organizationId} history={searchHistory} onRun={runSearch} />} />
+    {filterAnchor ? <PrSearchFiltersDialog key={organizationId} organizationId={organizationId} azure={azure} filters={filters} anchor={filterAnchor}
+      onClose={() => setFilterAnchor(null)} onApply={(next) => { setFilterAnchor(null); runSearch(query, next); }} /> : null}
+  </div>;
 }

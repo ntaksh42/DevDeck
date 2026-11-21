@@ -1,16 +1,18 @@
 use std::collections::HashMap;
 
-use azdo_client::{summarize_pr_ci, AdoClient, TeamProject};
+use azdo_client::{AdoClient, TeamProject};
 use chrono::Utc;
 use tokio::task::JoinSet;
 
 use super::*;
-use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
+use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization, PrReviewerCount};
 use crate::error::{AppError, Result};
 use crate::shared_cache::SharedReviewer;
 use crate::sync::SyncBudget;
 
 use super::group_reviews::{carry_forward_reviews, group_review_prs, member_group_ids};
+use super::group_reviews_capped::fetch_capped_group_reviews;
+use super::sync_ci::enrich_review_ci_status;
 
 // ── Cache sync ────────────────────────────────────────────────────────────────
 
@@ -70,19 +72,47 @@ pub async fn sync_prs_for_org(
     }
 }
 
+/// Approvals and reviewer total of each PR, for My Pull Requests.
+pub(super) fn reviewer_counts(
+    prs: &[CachedPr],
+    reviewers: &[SharedReviewer],
+) -> Vec<PrReviewerCount> {
+    let mut by_pr: std::collections::HashMap<(&str, i64), (i64, i64)> =
+        std::collections::HashMap::new();
+    for reviewer in reviewers {
+        let tally = by_pr
+            .entry((reviewer.repository_id.as_str(), reviewer.pull_request_id))
+            .or_default();
+        tally.0 += i64::from(reviewer.vote == 10);
+        tally.1 += 1;
+    }
+    prs.iter()
+        .map(|pr| {
+            let (approvals, reviewer_count) = by_pr
+                .get(&(pr.repository_id.as_str(), pr.pull_request_id))
+                .copied()
+                .unwrap_or_default();
+            PrReviewerCount {
+                repository_id: pr.repository_id.clone(),
+                pull_request_id: pr.pull_request_id,
+                approvals,
+                reviewer_count,
+            }
+        })
+        .collect()
+}
+
 #[derive(Default)]
 struct ActivePrsFetch {
     cached_prs: Vec<CachedPr>,
     synced_project_ids: Vec<String>,
     /// Projects whose result hit the query cap; their rows are merged, not replaced.
     capped: Vec<String>,
+    refreshed_creator_projects: Vec<String>,
+    creator_failures: Vec<String>,
     skipped: Vec<String>,
     last_skip_error: Option<AppError>,
     reviewers: Vec<SharedReviewer>,
-    /// Projects whose active list is incomplete, so group reviews cannot be fully
-    /// recomputed: capped ones map to the oldest fetched creation date (the list
-    /// is newest first), failed ones to `None`.
-    incomplete: HashMap<String, Option<String>>,
 }
 
 struct ReviewPrsFetch {
@@ -135,7 +165,17 @@ pub(crate) async fn do_sync_prs(
         .iter()
         .map(String::as_str)
         .collect();
-    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
+    db.replace_pull_request_snapshot(
+        &org.id,
+        &synced_ids,
+        review_user.as_deref(),
+        &active.refreshed_creator_projects,
+        &active.cached_prs,
+    )?;
+    db.save_pr_reviewer_counts(
+        &org.id,
+        &reviewer_counts(&active.cached_prs, &active.reviewers),
+    )?;
 
     let mut warning_parts: Vec<String> = Vec::new();
     warning_parts.extend(groups.as_ref().and_then(|groups| groups.warning.clone()));
@@ -154,12 +194,32 @@ pub(crate) async fn do_sync_prs(
         ));
     }
 
+    if !active.creator_failures.is_empty() {
+        warning_parts.push(format!(
+            "My Pull Requests may be incomplete for: {}.",
+            active.creator_failures.join(", ")
+        ));
+    }
+
     match review {
-        Some(review) => {
-            let mut review = review?;
-            let synced = std::mem::take(&mut review.synced_project_ids);
+        // The active list is already written above, so a failed review query is
+        // reported as a warning (previous review rows are kept) instead of
+        // failing the whole pass and counting a refreshed cache as an error.
+        Some(Err(e)) => {
+            tracing::warn!(org = %org.name, error = ?e, "sync: review PR sync failed");
+            warning_parts.push(format!(
+                "My Reviews was not refreshed; previous rows were kept: {e}."
+            ));
+        }
+        Some(Ok(mut review)) => {
+            let mut synced = std::mem::take(&mut review.synced_project_ids);
             let groups = groups.as_ref().expect("review pass implies a known user");
+            let review_synced: std::collections::HashSet<String> = synced.iter().cloned().collect();
             if !groups.ids.is_empty() {
+                // Group reviews come from the active list, so a project is only
+                // replaced when that list was complete for it too; otherwise its
+                // previous rows (including group reviews) are kept.
+                synced.retain(|id| active.synced_project_ids.contains(id));
                 let extra = group_review_prs(
                     &active.cached_prs,
                     &active.reviewers,
@@ -172,21 +232,76 @@ pub(crate) async fn do_sync_prs(
                         .into_iter()
                         .filter(|pr| synced.contains(&pr.project_id)),
                 );
+                // The active list is truncated in a capped project, so its group
+                // reviews are queried per group instead.
+                let capped_projects: Vec<TeamProject> = projects
+                    .iter()
+                    .filter(|p| active.capped.contains(&p.name))
+                    .cloned()
+                    .collect();
+                if !capped_projects.is_empty() {
+                    let capped = match fetch_capped_group_reviews(
+                        client,
+                        org,
+                        &capped_projects,
+                        &groups.ids,
+                        review_user.as_deref().unwrap_or_default(),
+                        budget,
+                    )
+                    .await
+                    {
+                        Ok(capped) => Some(capped),
+                        Err(e) => {
+                            tracing::warn!(org = %org.name, error = ?e, "sync: capped group review query failed");
+                            warning_parts.push(format!(
+                                "Group/team reviews of capped project(s) were not refreshed: {e}."
+                            ));
+                            None
+                        }
+                    };
+                    if let Some(capped) = capped {
+                        // A project whose direct review query failed was not marked
+                        // synced above and must keep its previous rows.
+                        let direct_ok = &review_synced;
+                        let known: std::collections::HashSet<(String, i64)> = review
+                            .cached_reviews
+                            .iter()
+                            .map(|pr| (pr.repository_id.clone(), pr.pull_request_id))
+                            .collect();
+                        review
+                            .cached_reviews
+                            .extend(capped.reviews.into_iter().filter(|pr| {
+                                !known.contains(&(pr.repository_id.clone(), pr.pull_request_id))
+                            }));
+                        synced.extend(
+                            capped
+                                .synced_project_ids
+                                .into_iter()
+                                .filter(|id| direct_ok.contains(id)),
+                        );
+                        if !capped.failed_projects.is_empty() {
+                            warning_parts.push(format!(
+                                "Group/team reviews were not refreshed for project(s) whose query failed: {}.",
+                                capped.failed_projects.join(", ")
+                            ));
+                        }
+                    } else {
+                        // The truncated active list lacks their group reviews, so
+                        // keep the previous rows of those projects.
+                        synced.retain(|id| !capped_projects.iter().any(|p| &p.id == id));
+                    }
+                }
             }
-            // Where group reviews could not be fully recomputed, keep previous
-            // rows that may still be group reviews, so they neither vanish for a
-            // pass nor re-notify as new requests when they come back.
-            let incomplete: HashMap<String, Option<String>> = if !groups.known {
-                synced.iter().map(|id| (id.clone(), None)).collect()
-            } else if groups.ids.is_empty() {
-                HashMap::new()
-            } else {
-                active.incomplete.clone()
-            };
-            if !incomplete.is_empty() {
+            // Without any group membership result, group reviews cannot be told
+            // apart from stale rows, so keep previous rows the direct query did not
+            // return; they neither vanish for a pass nor re-notify as new requests
+            // when the lookup recovers.
+            if !groups.known {
+                let unknown: HashMap<String, Option<String>> =
+                    synced.iter().map(|id| (id.clone(), None)).collect();
                 let previous = db.list_review_pull_requests(&org.id)?;
                 let carried =
-                    carry_forward_reviews(previous, &review.cached_reviews, &synced, &incomplete);
+                    carry_forward_reviews(previous, &review.cached_reviews, &synced, &unknown);
                 review.cached_reviews.extend(carried);
             }
             if !review.failed_projects.is_empty() {
@@ -235,7 +350,7 @@ async fn fetch_all_active_prs(
     budget: &SyncBudget,
     force_refresh: bool,
 ) -> Result<ActivePrsFetch> {
-    let mut tasks: JoinSet<PrProjectFetch> = JoinSet::new();
+    let mut tasks = JoinSet::new();
     for project in projects {
         let client = client.clone();
         let org = org.clone();
@@ -243,19 +358,27 @@ async fn fetch_all_active_prs(
         let budget = budget.clone();
         tasks.spawn(async move {
             let _permit = budget.acquire_owned().await;
-            fetch_active_prs_for_project(client, org, project, force_refresh).await
+            super::sync_fetch::fetch_active_with_authored(client, org, project, force_refresh).await
         });
     }
 
     let mut out = ActivePrsFetch::default();
     while let Some(joined) = tasks.join_next().await {
-        let fetch =
+        let (fetch, authored) =
             joined.map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?;
         match fetch.result {
             Ok(prs) => {
+                match authored {
+                    Ok(true) => out
+                        .refreshed_creator_projects
+                        .push(fetch.project_id.clone()),
+                    Err(error) => {
+                        tracing::warn!(project = %fetch.label, %error, "authored PR sync failed");
+                        out.creator_failures.push(fetch.label.clone());
+                    }
+                    Ok(false) => {}
+                }
                 if fetch.capped {
-                    let oldest = prs.iter().map(|pr| pr.creation_date.clone()).min();
-                    out.incomplete.insert(fetch.project_id.clone(), oldest);
                     out.capped.push(fetch.label);
                 } else {
                     out.synced_project_ids.push(fetch.project_id);
@@ -270,7 +393,6 @@ async fn fetch_all_active_prs(
                     error = %e,
                     "PR sync failed for project, preserving cached data"
                 );
-                out.incomplete.insert(fetch.project_id, None);
                 out.skipped.push(fetch.label);
                 out.last_skip_error = Some(e);
             }
@@ -326,86 +448,6 @@ async fn fetch_all_review_prs(
         failed_projects,
         synced_project_ids,
     })
-}
-
-// CI status is fetched per-PR, so it is capped to keep sync cost bounded on
-// large review lists. The most recently created PRs are the ones a reviewer
-// acts on first, so they get the live CI verdict; older ones render as unknown.
-const CI_STATUS_SCAN_LIMIT: usize = 50;
-
-// (status, context_name, check_count) for one PR; `None` when the fetch failed.
-type CiFetchResult = (usize, Option<(String, Option<String>, i64)>);
-
-/// Fills in the CI verdict for the most recent review PRs by querying each PR's
-/// status checks. A failed fetch leaves the PR's CI fields unset (rendered as
-/// "unknown"), never failing the sync. Per-PR fetches are bounded by the shared
-/// budget.
-async fn enrich_review_ci_status(
-    client: &AdoClient,
-    reviews: &mut [CachedReviewPr],
-    budget: &SyncBudget,
-) {
-    // Pick the newest PRs by creation date; creation_date is an RFC3339 string
-    // so lexicographic comparison matches chronological order.
-    let mut indices: Vec<usize> = (0..reviews.len()).collect();
-    indices.sort_by(|&a, &b| reviews[b].creation_date.cmp(&reviews[a].creation_date));
-    indices.truncate(CI_STATUS_SCAN_LIMIT);
-
-    let mut results: std::collections::HashMap<usize, (String, Option<String>, i64)> =
-        std::collections::HashMap::new();
-    let mut tasks: JoinSet<CiFetchResult> = JoinSet::new();
-
-    for &index in &indices {
-        let pr = &reviews[index];
-        let client = client.clone();
-        let project_id = pr.project_id.clone();
-        let repository_id = pr.repository_id.clone();
-        let pull_request_id = pr.pull_request_id;
-        let budget = budget.clone();
-        tasks.spawn(async move {
-            let _permit = budget.acquire_owned().await;
-            let outcome = client
-                .list_pull_request_statuses(&project_id, &repository_id, pull_request_id)
-                .await;
-            let value = match outcome {
-                Ok(checks) => {
-                    let summary = summarize_pr_ci(&checks);
-                    Some((
-                        summary.state.as_str().to_string(),
-                        summary.context_name,
-                        summary.check_count as i64,
-                    ))
-                }
-                Err(e) => {
-                    tracing::warn!(pr = pull_request_id, error = %e, "failed to fetch PR CI status");
-                    None
-                }
-            };
-            (index, value)
-        });
-    }
-    while !tasks.is_empty() {
-        if let Some((idx, Some(value))) = join_ci_task(&mut tasks).await {
-            results.insert(idx, value);
-        }
-    }
-
-    for (index, (status, context, count)) in results {
-        reviews[index].ci_status = Some(status);
-        reviews[index].ci_context = context;
-        reviews[index].ci_check_count = count;
-    }
-}
-
-async fn join_ci_task(tasks: &mut JoinSet<CiFetchResult>) -> Option<CiFetchResult> {
-    match tasks.join_next().await {
-        Some(Ok(result)) => Some(result),
-        Some(Err(e)) => {
-            tracing::warn!(error = %e, "PR CI status task failed");
-            None
-        }
-        None => None,
-    }
 }
 
 fn collect_review_fetch(

@@ -265,28 +265,6 @@ export async function setPullRequestReviewerRequired(input: {
   await invokeCommand("set_pull_request_reviewer_required", { input });
 }
 
-const createdPullRequestSchema = z.object({
-  pullRequestId: z.number(),
-  title: z.string(),
-  webUrl: z.string(),
-});
-export type CreatedPullRequest = z.infer<typeof createdPullRequestSchema>;
-
-// Opens a pull request from sourceBranch into targetBranch (short branch names).
-export async function createPullRequest(input: {
-  organizationId?: string;
-  projectId: string;
-  repositoryId: string;
-  sourceBranch: string;
-  targetBranch: string;
-  title: string;
-  description?: string;
-  isDraft?: boolean;
-}): Promise<CreatedPullRequest> {
-  const result = await invokeCommand("create_pull_request", { input });
-  return createdPullRequestSchema.parse(result);
-}
-
 // Adds a label (tag) to a pull request; the label definition is created if new.
 export async function addPullRequestLabel(input: {
   organizationId?: string;

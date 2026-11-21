@@ -36,6 +36,10 @@ impl SyncRunner {
         let mut consecutive_failures: u32 = 0;
         // Suppress repeat notifications within a single failure streak.
         let mut failure_notified = false;
+        // Consecutive passes in which any part failed, even if another part
+        // succeeded. Drives the notification only; backoff still needs a pass
+        // with no success so a healthy part keeps its normal cadence.
+        let mut failing_streak: u32 = 0;
         loop {
             let mut waiters = Vec::new();
             tokio::select! {
@@ -61,11 +65,22 @@ impl SyncRunner {
                     Duration::from_secs(retry_in),
                 );
                 interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-                if consecutive_failures >= FAILURE_NOTIFY_THRESHOLD && !failure_notified {
+            } else if outcome.succeeded && consecutive_failures > 0 {
+                // Recovered: drop back to the base cadence.
+                consecutive_failures = 0;
+                interval = interval_at(
+                    Instant::now() + Duration::from_secs(BASE_INTERVAL_SECS),
+                    Duration::from_secs(BASE_INTERVAL_SECS),
+                );
+                interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            }
+            if outcome.failed {
+                failing_streak = failing_streak.saturating_add(1);
+                if failing_streak >= FAILURE_NOTIFY_THRESHOLD && !failure_notified {
                     failure_notified = true;
                     let event = SyncFailedEvent {
-                        consecutive_failures,
-                        retry_in_secs: retry_in,
+                        consecutive_failures: failing_streak,
+                        retry_in_secs: backoff_secs(consecutive_failures),
                         last_error: self.latest_sync_error(),
                     };
                     let record = sync_failed_notification_record(&event);
@@ -81,16 +96,9 @@ impl SyncRunner {
                     }
                 }
             } else if outcome.succeeded {
-                // Recovered: drop back to the base cadence and re-arm notifications.
-                if consecutive_failures > 0 {
-                    consecutive_failures = 0;
-                    failure_notified = false;
-                    interval = interval_at(
-                        Instant::now() + Duration::from_secs(BASE_INTERVAL_SECS),
-                        Duration::from_secs(BASE_INTERVAL_SECS),
-                    );
-                    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-                }
+                // A pass with no failure at all re-arms the notification.
+                failing_streak = 0;
+                failure_notified = false;
             }
             if matches!(scope, SyncScope::All) {
                 if let Err(e) = handle.emit(
@@ -156,7 +164,15 @@ impl SyncRunner {
         let active = match self.db.resolve_organization(None) {
             Ok(org) => org,
             // No connection configured yet: nothing to sync, not a failure.
-            Err(_) => return SyncPassOutcome::default(),
+            Err(crate::error::AppError::InvalidInput(_)) => return SyncPassOutcome::default(),
+            // Anything else (e.g. a database error) is a real failure; don't
+            // let it pass as "nothing to sync".
+            Err(e) => {
+                tracing::error!(error = ?e, "sync: failed to resolve active organization");
+                let mut outcome = SyncPassOutcome::default();
+                outcome.record_failure();
+                return outcome;
+            }
         };
         if active.provider_kind != "azdo" {
             return SyncPassOutcome::default();
@@ -164,7 +180,7 @@ impl SyncRunner {
         let orgs = vec![active];
         let now = chrono::Utc::now().to_rfc3339();
 
-        // The active org's PR/work-item/commit passes run concurrently. The
+        // The active org's PR and work-item passes run concurrently. The
         // shared budget caps total in-flight requests.
         let mut tasks: JoinSet<SyncPassOutcome> = JoinSet::new();
         for org in orgs {

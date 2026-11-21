@@ -2,7 +2,9 @@ import { useEffect, useRef } from "react";
 import {
   showWorkItemNotificationEvent,
   showPullRequestNotificationEvent,
+  showReplyReminderNotificationEvent,
   showSyncFailedNotificationEvent,
+  type ReplyReminderDueEvent,
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
   type SyncFailedEvent,
@@ -10,7 +12,12 @@ import {
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import type { AppSettings } from "@/lib/azdoCommands";
 
-export type NotificationListView = "myReviews" | "myWorkItems";
+export type NotificationListView =
+  | "myReviews"
+  | "myWorkItems"
+  | "myPullRequests"
+  | "notifications"
+  | "inbox";
 
 // `onOpenView` lets a clicked summary notification ("5 pull request updates")
 // open the matching list in the app instead of a single item in the browser.
@@ -22,12 +29,17 @@ export function useNotificationEvents(
   onOpenViewRef.current = onOpenView;
   const openListFor = (view: NotificationListView) =>
     onOpenViewRef.current ? () => onOpenViewRef.current?.(view) : undefined;
+  const openPrListFor = (event: PullRequestNotificationEvent) => openListFor(
+    event.items.every((item) => item.kind === "readyToMerge") ? "myPullRequests"
+      : event.items.some((item) => item.kind === "readyToMerge") ? "notifications" : "myReviews",
+  );
   const appSettingsRef = useRef<AppSettings | null>(null);
   // Notification events that arrived before settings finished loading. They are
   // replayed once settings are available so the first events are not dropped.
   const pendingWorkItemEventsRef = useRef<WorkItemNotificationEvent[]>([]);
   const pendingPullRequestEventsRef = useRef<PullRequestNotificationEvent[]>([]);
   const pendingSyncFailedEventsRef = useRef<SyncFailedEvent[]>([]);
+  const pendingReplyReminderEventsRef = useRef<ReplyReminderDueEvent[]>([]);
 
   useEffect(() => {
     const settings = appSettings ?? null;
@@ -40,14 +52,19 @@ export function useNotificationEvents(
     pendingWorkItemEventsRef.current = [];
     pendingPullRequestEventsRef.current = [];
     pendingSyncFailedEventsRef.current = [];
+    const replyReminderEvents = pendingReplyReminderEventsRef.current;
+    pendingReplyReminderEventsRef.current = [];
     for (const event of workItemEvents) {
       void showWorkItemNotificationEvent(event, settings, openListFor("myWorkItems"));
     }
     for (const event of pullRequestEvents) {
-      void showPullRequestNotificationEvent(event, settings, openListFor("myReviews"));
+      void showPullRequestNotificationEvent(event, settings, openPrListFor(event));
     }
     for (const event of syncFailedEvents) {
       void showSyncFailedNotificationEvent(event, settings);
+    }
+    for (const event of replyReminderEvents) {
+      void showReplyReminderNotificationEvent(event, settings, openListFor("inbox"));
     }
   }, [appSettings]);
 
@@ -74,7 +91,7 @@ export function useNotificationEvents(
           pendingPullRequestEventsRef.current.push(payload);
           return;
         }
-        void showPullRequestNotificationEvent(payload, settings, openListFor("myReviews"));
+        void showPullRequestNotificationEvent(payload, settings, openPrListFor(payload));
       },
     );
   }, []);
@@ -89,6 +106,20 @@ export function useNotificationEvents(
           return;
         }
         void showSyncFailedNotificationEvent(payload, settings);
+      },
+    );
+  }, []);
+
+  useEffect(() => {
+    return subscribeTauriEvent<ReplyReminderDueEvent>(
+      "inbox:reply-reminders-due",
+      (payload) => {
+        const settings = appSettingsRef.current;
+        if (!settings) {
+          pendingReplyReminderEventsRef.current.push(payload);
+          return;
+        }
+        void showReplyReminderNotificationEvent(payload, settings, openListFor("inbox"));
       },
     );
   }, []);

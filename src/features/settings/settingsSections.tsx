@@ -9,6 +9,7 @@ import { QuickPipelinesSettings } from './QuickPipelinesSettings';
 import { SyncHealthSettings } from './SyncHealthSettings';
 import { ThemeSettings } from './ThemeSettings';
 import { DataCacheSettings } from './DataCacheSettings';
+import { SettingsTransferSettings } from './SettingsTransferSettings';
 import { ValidationModeSettings } from './ValidationModeSettings';
 import { ExperimentalSettings } from './ExperimentalSettings';
 import { ExperimentalUsageStats } from './ExperimentalUsageStats';
@@ -18,6 +19,7 @@ import { NotificationRulesSettings } from './NotificationRulesSettings';
 import { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
 import { WorkItemResultFolderSettings } from './WorkItemResultFolderSettings';
 import { AgentCommandSettings } from './AgentCommandSettings';
+import { HomeBotSettingsPanel } from './HomeBotSettings';
 import { ReviewStaleThresholdSettings, WorkItemStaleThresholdSettings } from './StaleThresholdSettings';
 import { ShowWindowHotkeySettings } from './ShowWindowHotkeySettings';
 import { KeyboardShortcutSettings } from './KeyboardShortcutSettings';
@@ -55,7 +57,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         id: "add-connection",
         title: "Add connection",
         keywords: "connect organization azure devops github pat personal access token azure cli login",
-        render: () => <SetupPanel compact />,
+        render: (organizations) => (
+          <SetupPanel compact hasConnections={organizations.length > 0} />
+        ),
       },
     ],
   },
@@ -66,7 +70,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       {
         id: "appearance",
         title: "Appearance",
-        keywords: "theme dark light system color",
+        keywords: "theme dark light system color zoom scale size",
         render: () => <ThemeSettings />,
       },
       {
@@ -124,6 +128,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         render: () => <AgentCommandSettings />,
       },
       {
+        id: "home-bot",
+        title: "Home Bot",
+        keywords: "home look around suggestions orchestrator chat claude codex bot",
+        render: () => <HomeBotSettingsPanel />,
+      },
+      {
         id: "quick-pipelines",
         title: "Quick Pipelines",
         keywords: "pipeline run command palette build",
@@ -176,6 +186,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Data cache",
         keywords: "clear cached responses reset storage",
         render: () => <DataCacheSettings />,
+      },
+      {
+        id: "settings-transfer",
+        title: "Export / import settings",
+        keywords: "backup restore migrate profile json transfer layout views keybindings",
+        render: () => <SettingsTransferSettings />,
       },
       {
         id: "software-update",

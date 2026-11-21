@@ -30,8 +30,8 @@ export const GRID_KEYS: SortKey[] = [
   "approvals",
 ];
 export const REQUIRED_COLUMNS: SortKey[] = ["pullRequestId", "title"];
-export const DEFAULT_COLUMN_WIDTHS = [52, 130, 220, 90, 120, 76];
-export const COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 72, 60];
+export const DEFAULT_COLUMN_WIDTHS = [52, 130, 240, 90, 120, 76];
+export const COLUMN_MIN_WIDTHS = [48, 96, 240, 72, 72, 60];
 export const COLUMN_MAX_WIDTHS = [120, 520, 960, 160, 240, 160];
 export const COLUMN_WIDTHS_STORAGE_KEY =
   "azdodeck:layout:myPullRequestsGridColumnWidths:v1";

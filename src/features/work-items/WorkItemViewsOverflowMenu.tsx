@@ -1,7 +1,41 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Copy, Download, MoreHorizontal, Trash2, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  Play,
+  Trash2,
+  Upload,
+} from "lucide-react";
+
+/**
+ * Per-view actions that live as toolbar buttons in the card display but have
+ * no room in the one-row chip display, so the menu offers them instead.
+ */
+export type ViewMenuActions = {
+  pinned: boolean;
+  previewVisible: boolean;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
+  onPinToggle: () => void;
+  onPreviewToggle: () => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  /** Edit and Run sit in the menu in the chip display so the header row stays short. */
+  canRun: boolean;
+  onEdit: () => void;
+  onRun: () => void;
+};
 
 type WorkItemViewsOverflowMenuProps = {
+  viewActions?: ViewMenuActions;
   hasSelectedView: boolean;
   hasViews: boolean;
   importInputRef: React.RefObject<HTMLInputElement | null>;
@@ -12,11 +46,13 @@ type WorkItemViewsOverflowMenuProps = {
 };
 
 // Low-frequency view actions (share/export/import/delete) collapsed behind a
-// "⋯" trigger so the toolbar leads with the controls used every time (layout,
-// pin, move, preview, edit, run, add). Keyboard-operable end to end: opens
+// "⋯" trigger so the toolbar leads with the controls used every time. In the
+// chip display Edit and Run join them (E / R still work from the list) so the
+// header row keeps only the chips, layout and Add. Keyboard-operable end to end: opens
 // focused on the first item, arrows move between items, Enter/Space activate,
 // Esc closes, and focus returns to the trigger on close.
 export function WorkItemViewsOverflowMenu({
+  viewActions,
   hasSelectedView,
   hasViews,
   importInputRef,
@@ -59,6 +95,7 @@ export function WorkItemViewsOverflowMenu({
           triggerRef={triggerRef}
           anchorRect={triggerRef.current?.getBoundingClientRect() ?? null}
           onClose={closeMenu}
+          viewActions={viewActions}
           hasSelectedView={hasSelectedView}
           hasViews={hasViews}
           importInputRef={importInputRef}
@@ -75,6 +112,7 @@ function OverflowMenuPopup({
   anchorRect,
   triggerRef,
   onClose,
+  viewActions,
   hasSelectedView,
   hasViews,
   importInputRef,
@@ -85,6 +123,7 @@ function OverflowMenuPopup({
   anchorRect: DOMRect | null;
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
+  viewActions?: ViewMenuActions;
   hasSelectedView: boolean;
   hasViews: boolean;
   importInputRef: React.RefObject<HTMLInputElement | null>;
@@ -173,7 +212,7 @@ function OverflowMenuPopup({
     "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
   const bottom = anchorRect ? anchorRect.bottom + 2 : 40;
   const right = anchorRect ? anchorRect.right : 240;
-  const top = Math.min(bottom, window.innerHeight - 180);
+  const top = Math.min(bottom, window.innerHeight - (viewActions ? 380 : 180));
   const left = Math.max(8, Math.min(right - 224, window.innerWidth - 232));
 
   return (
@@ -185,6 +224,88 @@ function OverflowMenuPopup({
       className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
       style={{ top, left }}
     >
+      {viewActions ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!hasSelectedView}
+            aria-keyshortcuts="E"
+            onClick={() => runAndClose(viewActions.onEdit)}
+            className={itemClass}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            Edit view (E)
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!viewActions.canRun}
+            aria-keyshortcuts="R"
+            onClick={() => runAndClose(viewActions.onRun)}
+            className={itemClass}
+          >
+            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            Run all views (R)
+          </button>
+          <div className="my-1 border-t border-border" />
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!hasSelectedView}
+            onClick={() => runAndClose(viewActions.onPinToggle)}
+            className={itemClass}
+          >
+            {viewActions.pinned ? (
+              <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {viewActions.pinned ? "Unpin view" : "Pin view"}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!hasSelectedView}
+            onClick={() => runAndClose(viewActions.onPreviewToggle)}
+            className={itemClass}
+          >
+            {viewActions.previewVisible ? (
+              <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {viewActions.previewVisible ? "Hide preview" : "Show preview"}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!viewActions.canMoveLeft}
+            onClick={() => runAndClose(viewActions.onMoveLeft)}
+            className={itemClass}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Move view left (Shift+←)
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-menu-item="true"
+            disabled={!viewActions.canMoveRight}
+            onClick={() => runAndClose(viewActions.onMoveRight)}
+            className={itemClass}
+          >
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            Move view right (Shift+→)
+          </button>
+          <div className="my-1 border-t border-border" />
+        </>
+      ) : null}
       <button
         type="button"
         role="menuitem"

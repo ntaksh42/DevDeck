@@ -1,7 +1,7 @@
 use crate::auth::client_for_organization;
-use crate::commits::encode_path_segment;
 use crate::error::Result;
 use crate::prs::{short_ref, vote_label};
+use crate::repos::encode_path_segment;
 use crate::work_items::{summarize_mention_candidate, MentionCandidate};
 
 use super::helpers::{fetch_side, map_threads, ChangeFlags};

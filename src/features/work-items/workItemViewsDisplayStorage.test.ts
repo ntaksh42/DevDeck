@@ -16,8 +16,8 @@ describe("views panel display preferences", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to expanded card mode", () => {
-    expect(loadWorkItemViewsCollapsed()).toBe(false);
+  it("defaults to the one-row chip display (collapsed) with card density", () => {
+    expect(loadWorkItemViewsCollapsed()).toBe(true);
     expect(loadWorkItemViewsCardMode()).toBe("card");
   });
 

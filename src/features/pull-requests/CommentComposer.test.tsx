@@ -117,4 +117,22 @@ describe("CommentComposer collapsible", () => {
     fireEvent.blur(textarea);
     expect(screen.getByRole("textbox", { name: "Add a comment…" })).toBeTruthy();
   });
+
+  it("hands focus to its owner on Escape with a draft, keeps the draft and stops the key", () => {
+    const onCollapse = vi.fn();
+    const outer = vi.fn();
+    render(
+      <div onKeyDown={outer}>
+        <CommentComposer collapsible placeholder="Add a comment…" onCollapse={onCollapse} onSubmit={async () => {}} />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a comment…" }));
+    const textarea = screen.getByRole("textbox", { name: "Add a comment…" }) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "draft" } });
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+    expect((screen.getByRole("textbox", { name: "Add a comment…" }) as HTMLTextAreaElement).value).toBe("draft");
+  });
 });

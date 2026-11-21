@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- report-sheet -->
+<title>自動調査のノートを成功時に残さない</title>
+<style>
+:root{
+  --ag-ink:var(--foreground,#212529);--ag-muted:var(--muted-foreground,#64707C);
+  --ag-line:var(--border,#DEE2E6);--ag-paper:var(--background,#FFFFFF);
+  --ag-dim:var(--muted,#F6F8FA);--ag-link:var(--primary,#2563EB);--ag-red:#DC2626;--ag-amber:#B45309}
+*{box-sizing:border-box}
+body{background:var(--ag-paper);color:var(--ag-ink);font-family:'IBM Plex Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic UI','Meiryo',sans-serif;font-size:15px;line-height:1.75;margin:0;padding:12px 20px 24px}
+main{max-width:1000px;margin:0 auto}
+h1{font-size:22px;line-height:1.45;margin:4px 0 10px}
+h2{font-size:17px;line-height:1.45;margin:22px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--ag-line)}
+p{margin:6px 0}
+.concl{border:1px solid var(--ag-line);border-left:3px solid var(--ag-red);border-radius:8px;padding:10px 16px}
+.mono,.evidence-line{font-family:'IBM Plex Mono',Consolas,Menlo,monospace;font-size:13px;color:var(--ag-muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.6;margin:6px 0}
+th,td{border-bottom:1px solid var(--ag-line);padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+thead th{font-size:12px;color:var(--ag-muted);font-weight:500}
+tbody th{font-size:14px;font-weight:700}
+td p{margin:0}
+.evidence-line{display:block;font-size:12px;line-height:1.6;margin-top:6px}
+.decision{background:var(--ag-dim);border-radius:8px;padding:12px 16px;margin:18px 0 6px}
+.decision h2{border:0;margin:0 0 6px;padding:0}
+.choice{display:grid;grid-template-columns:3em 1fr;gap:8px;margin:4px 0;font-size:14px}
+.choice b{font-size:12px;padding-top:2px}
+.choice p{margin:0}
+.choice.alt{color:var(--ag-muted)}
+.warn{border-left:3px solid var(--ag-muted);padding:4px 12px;margin:6px 0}
+</style></head>
+<body><main>
+
+<h1>自動調査は成功したらノートを消す</h1>
+<div class="concl"><b>結論:</b> 正常完了した自動調査のノートと資料を削除し、Agent パネルに残らないようにした。</div>
+
+<table>
+<colgroup><col style="width:18%"><col style="width:46%"><col style="width:36%"></colgroup>
+<thead><tr><th>項目</th><th>確認したこと・根拠</th><th>対応案</th></tr></thead>
+<tbody>
+<tr><th scope="row">変更内容</th><td><p>成功時のみノートと資料を削除。結果 HTML は残る</p><code class="evidence-line">runner.rs: execute_attempt 末尾 / automation.rs: discard</code></td><td>対応済み</td></tr>
+<tr><th scope="row">失敗・資料不足</th><td><p>原因が分かるようノートと状態返信を従来どおり残す</p><code class="evidence-line">runner.rs: append_status の分岐は変更なし</code></td><td>変更なし</td></tr>
+<tr><th scope="row">テスト</th><td><p>auto_agent の 38 件が通過</p><code class="evidence-line">cargo test --package azdo-dashboard auto_agent</code></td><td>fmt・clippy は未実行</td></tr>
+<tr><th scope="row">スペック</th><td><p>docs/spec-overview.md は未更新</p></td><td>同じ変更で更新する</td></tr>
+</tbody>
+</table>
+
+<section class="decision">
+<h2>要判断: 残りの作業を進めてよいか</h2>
+<div class="choice"><b>推奨</b><p>進める — 仕様書を更新し、fmt・clippy を実行し、worktree へ移して終える</p></div>
+<div class="choice alt"><b>他案</b><p>このまま — 利点: 手間なし / 代償: スペックとの差異、main 直接編集</p></div>
+</section>
+
+<h2>注意点</h2>
+<div class="warn">main の作業ツリーで直接編集している。コミットはしていない。</div>
+
+</main></body></html>

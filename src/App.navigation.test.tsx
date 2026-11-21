@@ -86,12 +86,31 @@ describe("App — Navigation", () => {
     fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
     expect(await main.findByRole("heading", { name: "Work Items Search" })).toBeTruthy();
 
-    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
-    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Agent Work" }));
+    expect(await main.findByRole("heading", { name: "Agent Work" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
   });
+
+  it.each(["Go to My Reviews", "Go to Work Item Search", "Go to Pull Request Search"])(
+    "focuses the list when the palette executes %s",
+    async (command) => {
+      delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+      renderApp();
+      await screen.findByRole("heading", { name: "Pull Requests My Reviews" });
+      const origin = screen.getByRole("button", { name: "Settings" });
+      origin.focus();
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      const input = await screen.findByPlaceholderText("Type a command or search…");
+      fireEvent.change(input, { target: { value: command } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => {
+        const target = document.activeElement as HTMLElement;
+        expect(target.closest("[data-primary-grid='true'], [data-grid-focus-fallback='true'], [data-focus-pane='grid']")).toBeTruthy();
+      });
+    },
+  );
 
   it("returns focus to the original element after Ctrl+K is pressed twice", async () => {
     invokeMock.mockImplementation((command: string) => {
@@ -151,10 +170,10 @@ describe("App — Navigation", () => {
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
-    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
-    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Agent Work" }));
+    expect(await main.findByRole("heading", { name: "Agent Work" })).toBeTruthy();
 
-    // Back: Commits -> Work Item Views -> My Reviews.
+    // Back: Agent Work -> Work Item Views -> My Reviews.
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
@@ -191,9 +210,6 @@ describe("App — Navigation", () => {
       if (command === "list_my_work_items") {
         return Promise.resolve([]);
       }
-      if (command === "list_commit_repositories") {
-        return Promise.resolve([]);
-      }
       if (command === "list_work_item_projects") {
         return Promise.resolve([]);
       }
@@ -209,8 +225,8 @@ describe("App — Navigation", () => {
     expect(await main.findByRole("heading", { name: "Work Items My Items" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
-    fireEvent.keyDown(window, { key: "c" });
-    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "a" });
+    expect(await main.findByRole("heading", { name: "Agent Work" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "r" });
@@ -226,9 +242,6 @@ describe("App — Navigation", () => {
         return Promise.resolve(organization);
       }
       if (command === "list_my_review_pull_requests") {
-        return Promise.resolve([]);
-      }
-      if (command === "list_commit_repositories") {
         return Promise.resolve([]);
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
@@ -287,8 +300,6 @@ describe("App — Navigation", () => {
       "pullRequests",
       "workItems",
       "pipelines",
-      "codeSearch",
-      "analyze",
     ]);
 
     // Alt+ArrowUp on Pipelines swaps it above Work Items.
@@ -297,7 +308,7 @@ describe("App — Navigation", () => {
       altKey: true,
     });
 
-    const expected = ["pullRequests", "pipelines", "workItems", "codeSearch", "analyze"];
+    const expected = ["pullRequests", "pipelines", "workItems"];
     await waitFor(() => expect(order()).toEqual(expected));
     expect(
       JSON.parse(window.localStorage.getItem("azdodeck:layout:navOrder") ?? "null"),
@@ -307,7 +318,7 @@ describe("App — Navigation", () => {
   it("restores a saved nav order from localStorage", async () => {
     window.localStorage.setItem(
       "azdodeck:layout:navOrder",
-      JSON.stringify(["codeSearch", "pipelines", "workItems", "pullRequests"]),
+      JSON.stringify(["pipelines", "analyze", "workItems", "pullRequests"]),
     );
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
@@ -333,8 +344,7 @@ describe("App — Navigation", () => {
       Array.from(nav.querySelectorAll("[data-nav-entry]")).map((el) =>
         el.getAttribute("data-nav-entry"),
       ),
-      // "analyze" is absent from the stored order (saved before it existed) and
-      // is appended rather than discarding the rest.
-    ).toEqual(["codeSearch", "pipelines", "workItems", "pullRequests", "analyze"]);
+      // Retired entries are dropped without disturbing the remaining order.
+    ).toEqual(["pipelines", "workItems", "pullRequests"]);
   });
 });

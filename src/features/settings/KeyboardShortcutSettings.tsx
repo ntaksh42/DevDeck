@@ -11,6 +11,7 @@ import {
   type KeybindingId,
   type KeybindingMap,
 } from "@/lib/keybindings";
+import { SettingsRow } from './SettingsRow';
 
 export function KeyboardShortcutSettings() {
   const defaults = defaultKeybindingMap();
@@ -56,7 +57,10 @@ export function KeyboardShortcutSettings() {
       (event.target as HTMLButtonElement).blur();
       return;
     }
-    const combo = comboFromEvent(event);
+    // A "go to view" key is a plain letter after the leader (the chain ignores
+    // Shift-modified keys), so capturing Shift+K there stores "K".
+    const isGoto = KEYBINDINGS.some((binding) => binding.id === id && binding.scope === "goto");
+    const combo = comboFromEvent(isGoto ? { ...pickKeyFields(event), shiftKey: false } : event);
     if (!combo) return; // modifier-only press: keep waiting
     event.preventDefault();
     setCombo(id, combo);
@@ -99,22 +103,11 @@ export function KeyboardShortcutSettings() {
   const bindingById = new Map(KEYBINDINGS.map((b) => [b.id, b]));
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Keyboard className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Keyboard shortcuts</h2>
-            <p className="text-sm text-muted-foreground">
-              Reassign app-level shortcuts. Focus a shortcut and press the new key combination.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-3">
+    <SettingsRow
+      title="Keyboard shortcuts"
+      description={<>Reassign app-level shortcuts. Focus a shortcut and press the new key combination.</>}
+    >
+      <div className="grid gap-3">
         {groups.map(({ group, ids }) => (
           <div key={group} className="grid gap-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -174,7 +167,7 @@ export function KeyboardShortcutSettings() {
           </p>
         ) : null}
         {saved ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Keyboard shortcuts saved.</p>
+          <p className="text-sm text-success">Keyboard shortcuts saved.</p>
         ) : null}
 
         <div className="flex items-center gap-2">
@@ -196,6 +189,11 @@ export function KeyboardShortcutSettings() {
           </button>
         </div>
       </div>
-    </div>
+    </SettingsRow>
   );
+}
+
+function pickKeyFields(event: ReactKeyboardEvent<HTMLButtonElement>) {
+  const { key, ctrlKey, altKey, shiftKey, metaKey } = event;
+  return { key, ctrlKey, altKey, shiftKey, metaKey };
 }

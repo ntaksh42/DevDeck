@@ -57,10 +57,19 @@ export function FilterableSelect({
     return options.filter((option) => option.label.toLowerCase().includes(needle));
   }, [options, query]);
 
-  // Reset the active option to the top whenever the filtered set changes, so a
-  // new query never leaves the highlight on an unrelated option.
+  // Reset the active option whenever the filtered set changes, so a new query
+  // never leaves the highlight on an unrelated option. An option that matches
+  // the typed text exactly wins over the first partial match: typing "release"
+  // must not pick "release/1.0" just because it is listed first.
   useEffect(() => {
-    setActiveIndex(0);
+    const needle = query.trim().toLowerCase();
+    const exact = needle
+      ? filtered.findIndex(
+          (option) => option.label.toLowerCase() === needle || option.value.toLowerCase() === needle,
+        )
+      : -1;
+    setActiveIndex(Math.max(exact, 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered]);
 
   // Close when a click lands outside the widget. Routed through a ref so the
@@ -143,7 +152,7 @@ export function FilterableSelect({
 
   return (
     <div ref={containerRef} className="relative min-w-0 flex-1" onBlur={handleBlur}>
-      <div className="relative">
+      <div className="frame-surface relative">
         <input
           type="text"
           role="combobox"
@@ -167,7 +176,7 @@ export function FilterableSelect({
             if (!open) setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="h-8 w-full rounded-md border border-input bg-background pl-3 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-7 w-full rounded-md border border-input bg-background pl-3 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         />
         <ChevronDown
           className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"

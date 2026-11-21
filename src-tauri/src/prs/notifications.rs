@@ -1,11 +1,14 @@
 use azdo_client::{AdoClient, GitThread};
 use tokio::task::JoinSet;
 
-use crate::db::{AppDatabase, CachedReviewPr, Organization};
+use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::sync::{PrNotificationItem, PrNotificationKind, SyncBudget};
 
 // Threads are only fetched for the most recently created review PRs each sync.
-pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 50;
+pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 100;
+// ...and for the user's own most recent active PRs (Inbox only), so replies to
+// the user's PRs show up without listing them live on every sync.
+pub(crate) const AUTHORED_PR_SCAN_LIMIT: usize = 60;
 // Concurrent thread fetches, mirroring CI_FETCH_CONCURRENCY so the comment scan
 // does not serialize up to 50 network round-trips and block the sync loop.
 const PR_COMMENT_FETCH_CONCURRENCY: usize = 6;
@@ -13,6 +16,57 @@ const PR_COMMENT_FETCH_CONCURRENCY: usize = 6;
 pub(crate) struct CommentHit {
     pub author: Option<String>,
     pub snippet: Option<String>,
+}
+
+/// The few fields a comment scan needs from a cached PR, whichever cache it
+/// came from (review PRs or the user's own PRs).
+#[derive(Debug, Clone)]
+pub(crate) struct PrScanTarget {
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub web_url: Option<String>,
+}
+
+impl From<CachedReviewPr> for PrScanTarget {
+    fn from(pr: CachedReviewPr) -> Self {
+        Self {
+            project_id: pr.project_id,
+            project_name: pr.project_name,
+            repository_id: pr.repository_id,
+            repository_name: pr.repository_name,
+            pull_request_id: pr.pull_request_id,
+            title: pr.title,
+            web_url: pr.web_url,
+        }
+    }
+}
+
+impl From<CachedPr> for PrScanTarget {
+    fn from(pr: CachedPr) -> Self {
+        Self {
+            project_id: pr.project_id,
+            project_name: pr.project_name,
+            repository_id: pr.repository_id,
+            repository_name: pr.repository_name,
+            pull_request_id: pr.pull_request_id,
+            title: pr.title,
+            web_url: pr.web_url,
+        }
+    }
+}
+
+/// A PR together with its fetched comment threads. One fetch feeds both the
+/// notification pass and the Inbox pass so the API is hit once per sync.
+pub(crate) struct ScannedPr {
+    pub pr: PrScanTarget,
+    /// The user wrote this PR (as opposed to being asked to review it). Any new
+    /// comment from someone else matters there, not only replies and mentions.
+    pub authored: bool,
+    pub threads: Vec<GitThread>,
 }
 
 // Azure DevOps stores mentions in comment content as `@<GUID>`. Matching the
@@ -84,7 +138,8 @@ pub(crate) fn pr_comment_notification_items(
                 continue;
             }
             let content = comment.content.as_deref().unwrap_or("");
-            if i_am_in_thread || mentions_user(content, me) {
+            let mentions_me = mentions_user(content, me);
+            if i_am_in_thread || mentions_me {
                 hits.push(CommentHit {
                     author: comment.author.as_ref().and_then(|a| a.display_name.clone()),
                     snippet: Some(truncate_snippet(content, 90)),
@@ -95,24 +150,86 @@ pub(crate) fn pr_comment_notification_items(
     (hits, max_id)
 }
 
-/// Fetches threads for the most recent review PRs, detects new reply/mention
-/// comments, advances the per-PR seen cursor, and returns notification items.
-/// A failure for one PR is logged and skipped so other PRs still get processed.
-pub(crate) async fn collect_pr_comment_notifications(
+/// The PRs whose threads one sync scanned, and a warning when a scan cap left
+/// some PRs out (shown as "Limited" in Sync health).
+pub(crate) struct PrThreadScan {
+    pub prs: Vec<ScannedPr>,
+    pub warning: Option<String>,
+}
+
+/// What the scan caps left out, as a Sync health message.
+pub(crate) fn scan_limit_warning(skipped_reviews: usize, skipped_own: usize) -> Option<String> {
+    let mut parts = Vec::new();
+    if skipped_reviews > 0 {
+        parts.push(format!(
+            "{skipped_reviews} older review PR(s) beyond the newest {PR_COMMENT_SCAN_LIMIT}"
+        ));
+    }
+    if skipped_own > 0 {
+        parts.push(format!(
+            "{skipped_own} older PR(s) of yours beyond the newest {AUTHORED_PR_SCAN_LIMIT}"
+        ));
+    }
+    (!parts.is_empty()).then(|| {
+        format!(
+            "Inbox did not read the comments of {}.",
+            parts.join(" and ")
+        )
+    })
+}
+
+/// Review PRs plus the user's own active PRs, newest first and capped, each
+/// flagged with whether the user authored it, and the cap warning.
+fn scan_targets(
     db: &AppDatabase,
-    client: &AdoClient,
     org: &Organization,
-    budget: &SyncBudget,
-) -> Vec<PrNotificationItem> {
+) -> (Vec<(PrScanTarget, bool)>, Option<String>) {
     let reviews = match db.list_review_pull_requests(&org.id) {
         Ok(reviews) => reviews,
         Err(e) => {
             tracing::warn!(org = %org.name, error = ?e, "pr-notify: failed to list review PRs");
-            return Vec::new();
+            return (Vec::new(), None);
         }
     };
-    let me = org.authenticated_user_id.clone();
-    let scanned: Vec<CachedReviewPr> = reviews.into_iter().take(PR_COMMENT_SCAN_LIMIT).collect();
+    let skipped_reviews = reviews.len().saturating_sub(PR_COMMENT_SCAN_LIMIT);
+    let mut skipped_own = 0;
+    let mut targets: Vec<(PrScanTarget, bool)> = reviews
+        .into_iter()
+        .take(PR_COMMENT_SCAN_LIMIT)
+        .map(|pr| (PrScanTarget::from(pr), false))
+        .collect();
+
+    if let Some(me) = org.authenticated_user_id.as_deref() {
+        let mut own: Vec<CachedPr> = db
+            .search_pull_requests(&org.id, None, None, Some("active"))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|pr| pr.created_by_id.as_deref() == Some(me))
+            .collect();
+        own.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        skipped_own = own.len().saturating_sub(AUTHORED_PR_SCAN_LIMIT);
+        for pr in own.into_iter().take(AUTHORED_PR_SCAN_LIMIT) {
+            let already_scanned = targets.iter().any(|(target, _)| {
+                target.repository_id == pr.repository_id
+                    && target.pull_request_id == pr.pull_request_id
+            });
+            if !already_scanned {
+                targets.push((PrScanTarget::from(pr), true));
+            }
+        }
+    }
+    (targets, scan_limit_warning(skipped_reviews, skipped_own))
+}
+
+/// Fetches the comment threads of the PRs to scan. A failure for one PR is
+/// logged and that PR is left out, so the others still get processed.
+pub(crate) async fn fetch_pr_threads(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+    budget: &SyncBudget,
+) -> PrThreadScan {
+    let (scanned, warning) = scan_targets(db, org);
 
     // Fetch each PR's threads concurrently (the network round-trip is the slow
     // part); keep results by index so PRs are still processed in their original
@@ -120,7 +237,7 @@ pub(crate) async fn collect_pr_comment_notifications(
     let mut threads_by_index: std::collections::HashMap<usize, Vec<GitThread>> =
         std::collections::HashMap::new();
     let mut tasks: JoinSet<(usize, Option<Vec<GitThread>>)> = JoinSet::new();
-    for (index, pr) in scanned.iter().enumerate() {
+    for (index, (pr, _)) in scanned.iter().enumerate() {
         let client = client.clone();
         let org_name = org.name.clone();
         let project_id = pr.project_id.clone();
@@ -154,13 +271,33 @@ pub(crate) async fn collect_pr_comment_notifications(
         }
     }
 
-    // Detect new comments and advance the seen cursor serially, in PR order, so
-    // DB access stays single-threaded and notifications keep a stable order.
+    let prs = scanned
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, (pr, authored))| {
+            threads_by_index.remove(&index).map(|threads| ScannedPr {
+                pr,
+                authored,
+                threads,
+            })
+        })
+        .collect();
+    PrThreadScan { prs, warning }
+}
+
+/// Detects new reply/mention comments in the fetched threads, advances the
+/// per-PR seen cursor, and returns notification items. Serial, in PR order, so
+/// DB access stays single-threaded and notifications keep a stable order.
+pub(crate) fn pr_comment_notifications_from(
+    db: &AppDatabase,
+    org: &Organization,
+    scanned: &[ScannedPr],
+) -> Vec<PrNotificationItem> {
+    let me = org.authenticated_user_id.clone();
     let mut items = Vec::new();
-    for (index, pr) in scanned.iter().enumerate() {
-        let Some(threads) = threads_by_index.get(&index) else {
-            continue;
-        };
+    // Replies to the user's own PRs are an Inbox feature; notifications keep
+    // covering review PRs only.
+    for ScannedPr { pr, threads, .. } in scanned.iter().filter(|scanned| !scanned.authored) {
         let last_seen = db
             .get_pr_comment_seen(&org.id, &pr.repository_id, pr.pull_request_id)
             .unwrap_or(None);

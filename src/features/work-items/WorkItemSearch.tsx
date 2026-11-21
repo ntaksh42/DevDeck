@@ -1,8 +1,10 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Info, Loader2, Search } from "lucide-react";
 import {
   searchWorkItems,
+  type WorkItemSummary,
   listWorkItemProjects,
   commandErrorMessage,
 } from "@/lib/azdoCommands";
@@ -15,6 +17,8 @@ import { WorkItemsGrid } from "./WorkItemsGrid";
 import { WorkItemFilterBar } from "./WorkItemFilterBar";
 import { toMatchTarget } from "./workItemMatchTarget";
 import { workItemQueryKeys } from "./queryKeys";
+import { WiSearchHistory, summarizeWiSearchFilters, type WiSearchFilters } from "./WiSearchHistory";
+import { useSearchHistory } from "@/lib/searchHistory";
 
 const WORK_ITEM_STATE_OPTIONS = ["New", "Active", "Resolved", "Closed"].map(
   (value) => ({ value, label: value }),
@@ -32,7 +36,7 @@ export function WorkItemSearch({
   externalSearch,
   onExternalSearchHandled,
 }: {
-  externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
+  externalSearch?: { query: string; requestId: number; organizationId?: string; workItem?: WorkItemSummary } | null;
   onExternalSearchHandled?: () => void;
 }) {
   const organizationId = useActiveOrganizationId();
@@ -52,7 +56,9 @@ export function WorkItemSearch({
   const [resultFilter, setResultFilter] = useState("");
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
-  const results = mutation.data ?? [];
+  const searchHistory = useSearchHistory<WiSearchFilters>("workItemSearch");
+  const [openedItem, setOpenedItem] = useState<WorkItemSummary | null>(null);
+  const results = useMemo(() => openedItem ? [openedItem] : mutation.data ?? [], [openedItem, mutation.data]);
   // Client-side smart filtering over the server results, matching My Work Items
   // (#1234, p:1, @user, s:active, t:bug). Empty filter keeps every row.
   const filteredResults = useMemo(() => {
@@ -68,7 +74,10 @@ export function WorkItemSearch({
     setStates([]);
     setWorkItemTypes([]);
     setProjectIds([]);
-    mutation.mutate({
+    setResultFilter("");
+    setOpenedItem(externalSearch.workItem ?? null);
+    mutation.reset();
+    if (!externalSearch.workItem) mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
       states: undefined,
@@ -79,100 +88,132 @@ export function WorkItemSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSearch?.requestId]);
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  // Runs a search; `record: false` is for opening a recently viewed item, which
+  // is a lookup by id rather than a search worth remembering.
+  function runSearch(text: string, filters: WiSearchFilters, record = true) {
+    setOpenedItem(null);
     mutation.mutate({
       organizationId,
-      query,
-      states: states.length > 0 ? states : undefined,
-      workItemTypes: workItemTypes.length > 0 ? workItemTypes : undefined,
-      projectIds: projectIds.length > 0 ? projectIds : undefined,
+      query: text,
+      states: filters.states.length > 0 ? filters.states : undefined,
+      workItemTypes: filters.workItemTypes.length > 0 ? filters.workItemTypes : undefined,
+      projectIds: filters.projectIds.length > 0 ? filters.projectIds : undefined,
     });
+    if (record) {
+      searchHistory.record({ organizationId, query: text, filters, summary: summarizeWiSearchFilters(filters) });
+    }
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    runSearch(query, { states, workItemTypes, projectIds });
+  }
+
+  function applyAndRun(text: string, filters: WiSearchFilters, record = true) {
+    setQuery(text);
+    setStates(filters.states);
+    setWorkItemTypes(filters.workItemTypes);
+    setProjectIds(filters.projectIds);
+    runSearch(text, filters, record);
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <form className="flex shrink-0 flex-wrap items-center gap-2" onSubmit={onSubmit}>
-        <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
-          <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={handleSearchInputEscape}
-            placeholder="Search work items…"
-            aria-label="Search"
-            autoFocus
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-          />
-        </div>
-        <div className="w-44">
-          <MultiSelectFilter
-            options={projects.map((p) => ({ value: p.projectId, label: p.projectName }))}
-            selected={projectIds}
-            onChange={setProjectIds}
-            placeholder="All projects"
-            ariaLabel="Filter by project"
-            searchable
-            disabled={projectsQuery.isLoading}
-            className="h-8"
-          />
-        </div>
-        <div className="w-36">
-          <MultiSelectFilter
-            options={WORK_ITEM_STATE_OPTIONS}
-            selected={states}
-            onChange={setStates}
-            placeholder="All states"
-            ariaLabel="Filter by state"
-            className="h-8"
-          />
-        </div>
-        <div className="w-36">
-          <MultiSelectFilter
-            options={WORK_ITEM_TYPE_OPTIONS}
-            selected={workItemTypes}
-            onChange={setWorkItemTypes}
-            placeholder="Any type"
-            ariaLabel="Filter by type"
-            className="h-8"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={mutation.isPending || !organizationId}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {mutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <Search className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          Search
-        </button>
-        <span
-          className="text-muted-foreground"
-          title="Showing locally synced data — refreshed automatically every 5 minutes."
-          aria-label="Showing locally synced data — refreshed automatically every 5 minutes."
-          role="note"
-        >
-          <Info className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-      </form>
+      {/* The search row lives in the header next to the breadcrumb. */}
+      <HeaderToolbarPortal>
+        <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={onSubmit}>
+          <div className="flex h-7 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+            <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchInputEscape}
+              placeholder="Search work items…"
+              aria-label="Search"
+              autoFocus
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </div>
+          <div className="w-44 shrink-0">
+            <MultiSelectFilter
+              options={projects.map((p) => ({ value: p.projectId, label: p.projectName }))}
+              selected={projectIds}
+              onChange={setProjectIds}
+              placeholder="All projects"
+              ariaLabel="Filter by project"
+              searchable
+              disabled={projectsQuery.isLoading}
+              className="h-7"
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <MultiSelectFilter
+              options={WORK_ITEM_STATE_OPTIONS}
+              selected={states}
+              onChange={setStates}
+              placeholder="All states"
+              ariaLabel="Filter by state"
+              className="h-7"
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <MultiSelectFilter
+              options={WORK_ITEM_TYPE_OPTIONS}
+              selected={workItemTypes}
+              onChange={setWorkItemTypes}
+              placeholder="Any type"
+              ariaLabel="Filter by type"
+              className="h-7"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={mutation.isPending || !organizationId}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Search
+          </button>
+          <span
+            className="shrink-0 text-muted-foreground"
+            title={openedItem ? "Opened from live Azure DevOps search. Use Ctrl+K to search all accessible projects." : "Showing locally synced data — refreshed automatically every 5 minutes."}
+            aria-label={openedItem ? "Opened from live Azure DevOps search" : "Showing locally synced data — refreshed automatically every 5 minutes."}
+            role="note"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </form>
+      </HeaderToolbarPortal>
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
       <WorkItemsGrid
+        filterResetKey={externalSearch?.requestId}
         loading={mutation.isPending}
         results={filteredResults}
-        searched={mutation.isSuccess}
+        searched={openedItem !== null || mutation.isSuccess}
+        emptyContent={
+          <WiSearchHistory
+            organizationId={organizationId}
+            history={searchHistory}
+            onRun={applyAndRun}
+            // Searching by id shows the item selected in the preview.
+            onOpenItem={(item) => applyAndRun(String(item.id), { states: [], workItemTypes: [], projectIds: [] }, false)}
+          />
+        }
         filterBar={
           mutation.isSuccess ? (
             <WorkItemFilterBar value={resultFilter} onChange={setResultFilter} ariaLabel="Filter results" />
           ) : undefined
         }
         snoozeOrganizationId={organizationId}
+        agentList={{ id: 'work-item-search', title: 'Work item search results', notes: [resultFilter.trim() && `Result filter: ${resultFilter.trim()}`] }}
       />
     </div>
   );

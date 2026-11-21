@@ -1,11 +1,26 @@
 import { useEffect, useState } from 'react';
-import { Monitor, Moon, Palette, Sun } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import {
   loadThemePreference,
   setThemePreference,
   THEME_CHANGED_EVENT,
   type ThemePreference,
 } from "@/lib/theme";
+import {
+  loadUiScale,
+  setUiScale,
+  UI_SCALE_CHANGED_EVENT,
+  UI_SCALE_LEVELS,
+  type UiScale,
+} from "@/lib/uiScale";
+import {
+  FRAME_COLORS,
+  loadFrameColor,
+  setFrameColor,
+  type FrameColor,
+} from "@/lib/frameColor";
+import { loadUiFont, setUiFont, UI_FONTS, type UiFont } from "@/lib/uiFont";
+import { SettingsRow } from './SettingsRow';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -25,32 +40,44 @@ export function ThemeSettings() {
     return () => window.removeEventListener(THEME_CHANGED_EVENT, onThemeChanged);
   }, []);
 
+  const [scale, setScale] = useState<UiScale>(loadUiScale);
+
+  // The zoom shortcuts change the scale outside this panel.
+  useEffect(() => {
+    function onScaleChanged() {
+      setScale(loadUiScale());
+    }
+    window.addEventListener(UI_SCALE_CHANGED_EVENT, onScaleChanged);
+    return () => window.removeEventListener(UI_SCALE_CHANGED_EVENT, onScaleChanged);
+  }, []);
+
+  const [frame, setFrame] = useState<FrameColor>(loadFrameColor);
+  function selectFrame(next: FrameColor) {
+    setFrame(next);
+    setFrameColor(next);
+  }
+
+  const [font, setFont] = useState<UiFont>(loadUiFont);
+  function selectFont(next: UiFont) {
+    setFont(next);
+    setUiFont(next);
+  }
+
   function selectTheme(next: ThemePreference) {
     setPreference(next);
     setThemePreference(next);
   }
 
   return (
-    <div className="rounded-md border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
-            <Palette className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold">Appearance</h2>
-            <p className="text-sm text-muted-foreground">
-              Choose a theme. System follows your operating system setting.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-3">
+    <SettingsRow
+      title="Appearance"
+      description={<>Choose a theme, font, and the app zoom. System follows your operating system setting.</>}
+    >
+      <div>
         <div
           role="radiogroup"
           aria-label="Theme"
-          className="inline-flex gap-1 rounded-md border border-border bg-muted p-0.5"
+          className="flex w-fit gap-1 rounded-md border border-border bg-muted p-0.5"
         >
           {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
             const selected = preference === value;
@@ -61,7 +88,7 @@ export function ThemeSettings() {
                 role="radio"
                 aria-checked={selected}
                 onClick={() => selectTheme(value)}
-                className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium ${
+                className={`inline-flex h-8 items-center gap-1.5 rounded px-3 text-sm font-medium ${
                   selected
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -73,7 +100,91 @@ export function ThemeSettings() {
             );
           })}
         </div>
+
+        <div
+          role="radiogroup"
+          aria-label="Navigation color"
+          className="mt-3 flex w-fit gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {FRAME_COLORS.map(({ value, label, swatch }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={frame === value}
+              onClick={() => selectFrame(value)}
+              className={`inline-flex h-8 items-center gap-1.5 rounded px-3 text-sm font-medium ${
+                frame === value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className="h-3.5 w-3.5 rounded-sm border border-border"
+                style={{ backgroundColor: swatch }}
+              />
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Navigation color: sidebar and header.
+        </p>
+
+        <div
+          role="radiogroup"
+          aria-label="Font"
+          className="mt-3 flex w-fit flex-wrap gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {UI_FONTS.map(({ value, label, family }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={font === value}
+              onClick={() => selectFont(value)}
+              style={{ fontFamily: `${family}, system-ui, sans-serif` }}
+              className={`inline-flex h-8 items-center rounded px-3 text-sm font-medium ${
+                font === value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Font: text across the app. Code and IDs keep the monospace font.
+        </p>
+
+        <div
+          role="radiogroup"
+          aria-label="UI scale"
+          className="mt-3 flex w-fit gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {UI_SCALE_LEVELS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              role="radio"
+              aria-checked={scale === level}
+              onClick={() => setUiScale(level)}
+              className={`inline-flex h-8 items-center rounded px-3 text-sm font-medium ${
+                scale === level
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {level}%
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ctrl+= / Ctrl+- zoom, Ctrl+0 resets.
+        </p>
       </div>
-    </div>
+    </SettingsRow>
   );
 }

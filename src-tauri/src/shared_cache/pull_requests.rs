@@ -89,6 +89,7 @@ pub fn read_reviewers(
 /// Replaces every PR/reviewer row for `(organization, project)` with `rows` /
 /// `reviewers`. Both tables are scoped by project, so a caller that only
 /// fetched a subset of an org's projects does not clobber the others.
+#[cfg(test)]
 pub fn write_pull_requests(
     conn: &mut Connection,
     organization: &str,
@@ -97,6 +98,18 @@ pub fn write_pull_requests(
     reviewers: &[SharedReviewer],
 ) -> Result<()> {
     let tx = conn.transaction()?;
+    replace_rows(&tx, organization, project, rows, reviewers)?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub(super) fn replace_rows(
+    tx: &Connection,
+    organization: &str,
+    project: &str,
+    rows: &[SharedPullRequest],
+    reviewers: &[SharedReviewer],
+) -> Result<()> {
     tx.execute(
         "DELETE FROM pull_requests WHERE organization = ?1 AND project = ?2",
         params![organization, project],
@@ -150,7 +163,6 @@ pub fn write_pull_requests(
             ])?;
         }
     }
-    tx.commit()?;
     Ok(())
 }
 

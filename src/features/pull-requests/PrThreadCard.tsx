@@ -4,12 +4,23 @@ import { type MentionCandidate, type PrThread } from "@/lib/azdoCommands";
 import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { MarkdownView } from "@/lib/markdown";
+import { useMentionIdentityNames } from "@/lib/useMentionIdentityNames";
+import type { CommentImageTarget } from "@/lib/commands/commentImages";
 import { CommentComposer } from "./CommentComposer";
+import { markdownMentionsToEditable } from "@/features/work-items/mentionEditDraft";
+
+function editDraftProps(
+  content: string | null | undefined,
+  names: ReadonlyMap<string, string>,
+) {
+  const draft = markdownMentionsToEditable(content ?? "", names);
+  return { initialValue: draft.text, initialMentions: draft.mentions };
+}
 
 const AVATAR_PALETTE = [
-  "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-  "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-  "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  "bg-info/10 text-info",
+  "bg-success/10 text-success",
+  "bg-warning/10 text-warning",
   "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
   "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
   "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300",
@@ -25,14 +36,14 @@ function authorInitials(name: string | null | undefined): string {
 
 /** Initials avatar; background color is picked from a small fixed palette by
  * hashing the author's name, so the same person always gets the same color. */
-function CommentAvatar({ name }: { name: string | null | undefined }) {
+export function CommentAvatar({ name }: { name: string | null | undefined }) {
   let hash = 0;
   for (const char of name ?? "?") hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
   const colorClass = AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${colorClass}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold ${colorClass}`}
     >
       {authorInitials(name)}
     </span>
@@ -73,10 +84,10 @@ function ThreadStatusDropdown({
         aria-expanded={open}
         disabled={busy}
         onClick={() => setOpen((value) => !value)}
-        className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-[11px] font-medium disabled:opacity-50 ${
+        className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-2xs font-medium disabled:opacity-50 ${
           resolved
             ? "border-border bg-muted text-muted-foreground"
-            : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
+            : "border-info/30 bg-info/10 text-info"
         }`}
       >
         {resolved ? "Resolved" : "Active"}
@@ -223,25 +234,35 @@ export function PrThreadCard({
   thread,
   busy,
   showFilePath = true,
+  showReply = true,
   onReply,
   onToggleStatus,
   onEditComment,
   onDeleteComment,
   mentionSearch,
   resolveImageSource,
+  imageTarget,
   baseUrl,
+  organizationId,
 }: {
   thread: PrThread;
   busy: boolean;
   showFilePath?: boolean;
+  showReply?: boolean;
   onReply: (content: string) => Promise<void>;
   onToggleStatus: () => void;
   onEditComment?: (commentId: number, content: string) => Promise<void>;
   onDeleteComment?: (commentId: number) => Promise<void>;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  imageTarget?: CommentImageTarget;
   resolveImageSource?: (url: string) => Promise<string | null>;
   baseUrl?: string | null;
+  organizationId?: string;
 }) {
+  const mentionDisplayNames = useMentionIdentityNames(
+    organizationId,
+    thread.comments.map((comment) => comment.content),
+  );
   const [replying, setReplying] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   // Resolved threads start folded to one line so open discussions stand out.
@@ -262,7 +283,7 @@ export function PrThreadCard({
         <span className="truncate font-medium text-foreground">{comment.author ?? "Unknown"}</span>
         {comment.publishedDate ? (
           <span
-            className="shrink-0 text-[11px] text-muted-foreground"
+            className="shrink-0 text-2xs text-muted-foreground"
             title={formatDate(comment.publishedDate)}
           >
             {formatRelativeDate(comment.publishedDate)}
@@ -276,7 +297,7 @@ export function PrThreadCard({
               <button
                 type="button"
                 onClick={() => setEditingId(comment.id)}
-                className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="rounded px-1 py-px text-2xs text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 Edit
               </button>
@@ -294,7 +315,7 @@ export function PrThreadCard({
                     onConfirm: () => void onDeleteComment(comment.id),
                   })
                 }
-                className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                className="rounded px-1 py-px text-2xs text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
               >
                 Delete
               </button>
@@ -310,13 +331,13 @@ export function PrThreadCard({
       className={`rounded-md border px-2 py-1.5 ${
         resolved
           ? "border-border bg-muted/60"
-          : "border-border border-l-[3px] border-l-amber-400 bg-card dark:border-l-amber-500"
+          : "border-border border-l-[3px] border-l-warning bg-card"
       }`}
     >
       <div className="group/comment flex min-w-0 items-center gap-1.5 text-xs">
         {filePath ? (
           <span
-            className="min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground"
+            className="min-w-0 shrink truncate font-mono text-2xs text-muted-foreground"
             title={`${filePath}${thread.rightLine ? `:${thread.rightLine}` : ""}`}
           >
             {/* Folded to one line, the file name leaves room for the comment. */}
@@ -335,7 +356,7 @@ export function PrThreadCard({
             </span>
             {visibleComments.length > 1 ? (
               <span
-                className="shrink-0 text-[11px] text-muted-foreground"
+                className="shrink-0 text-2xs text-muted-foreground"
                 title={`${visibleComments.length} comments`}
               >
                 {visibleComments.length}
@@ -377,10 +398,13 @@ export function PrThreadCard({
                     <CommentComposer
                       placeholder="Edit comment…"
                       submitLabel="Save"
-                      initialValue={comment.content ?? ""}
+                      // Show existing mentions as @Name; they turn back into
+                      // @<guid> on save.
+                      {...editDraftProps(comment.content, mentionDisplayNames)}
                       autoFocus
                       busy={busy}
                       mentionSearch={mentionSearch}
+                imageTarget={imageTarget}
                       onSubmit={(content) => onEditComment(comment.id, content)}
                       onCancel={() => {
                         setEditingId(null);
@@ -399,13 +423,14 @@ export function PrThreadCard({
                       className="text-foreground"
                       resolveImageSource={resolveImageSource}
                       baseUrl={baseUrl}
+                      mentionDisplayNames={mentionDisplayNames}
                     />
                   </div>
                 )}
               </div>
             ))}
           </div>
-          <div className="mt-1">
+          <div className="mt-1" data-thread-reply-area="true">
             {replying ? (
               <CommentComposer
                 placeholder="Reply…"
@@ -413,6 +438,7 @@ export function PrThreadCard({
                 autoFocus
                 busy={busy}
                 mentionSearch={mentionSearch}
+                imageTarget={imageTarget}
                 onSubmit={onReply}
                 onCancel={() => {
                   setReplying(false);
@@ -425,13 +451,16 @@ export function PrThreadCard({
               />
             ) : (
               <div className="flex items-center gap-3 pl-[26px]">
-                <button
-                  type="button"
-                  onClick={() => setReplying(true)}
-                  className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  Reply
-                </button>
+                {showReply ? (
+                  <button
+                    type="button"
+                    data-thread-reply="true"
+                    onClick={() => setReplying(true)}
+                    className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    Reply
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={busy}

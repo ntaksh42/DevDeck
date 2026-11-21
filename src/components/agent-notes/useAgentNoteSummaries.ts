@@ -9,6 +9,7 @@ import {
 import { navigateToPullRequest, navigateToWorkItem } from "@/lib/crossLinks";
 import { showAgentNoteNotification } from "@/lib/desktopNotifications";
 import { SEEN_CHANGED_EVENT } from "./noteSeen";
+import { openAgentPanel } from "@/components/agent/agentSubject";
 
 // Per-item note counts for one result folder. The files change outside
 // DevDeck (the agent edits them), so the summary is polled; it is a cheap
@@ -19,7 +20,7 @@ const POLL_MS = 5_000;
 
 export const agentNoteSummariesKey = (target: AgentNoteTarget) => ["agentNoteSummaries", target];
 
-function useSummaries(target: AgentNoteTarget) {
+export function useSummaries(target: AgentNoteTarget) {
   return useQuery({
     queryKey: agentNoteSummariesKey(target),
     queryFn: () => summarizeAgentNotes({ target }),
@@ -61,6 +62,7 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
   const queryClient = useQueryClient();
   const workItems = useSummaries("work-item");
   const pullRequests = useSummaries("pull-request");
+  const asks = useSummaries("ask");
   const previous = useRef(new Map<string, AgentNoteSummary>());
   const baselined = useRef(new Set<AgentNoteTarget>());
   const notify = !!settings?.desktopNotificationsEnabled;
@@ -69,6 +71,7 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
     for (const [target, data] of [
       ["work-item", workItems.data],
       ["pull-request", pullRequests.data],
+      ["ask", asks.data],
     ] as const) {
       if (!data) continue;
       const first = !baselined.current.has(target);
@@ -77,15 +80,29 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
         const key = `${target}:${summary.itemId}`;
         const before = previous.current.get(key);
         previous.current.set(key, summary);
-        if (before && before.lastModifiedAt !== summary.lastModifiedAt) {
+        const changed =
+          !first && (!before ||
+            before.lastModifiedAt !== summary.lastModifiedAt ||
+            before.lastAgentReplyAt !== summary.lastAgentReplyAt ||
+            before.open !== summary.open || before.done !== summary.done ||
+            before.needsYou !== summary.needsYou || before.drafts !== summary.drafts);
+        if (changed) {
           void queryClient.invalidateQueries({ queryKey: ["agentNotes", target, summary.itemId] });
+          if (target === "ask") {
+            void queryClient.invalidateQueries({ queryKey: ["agentAsks"] });
+          } else {
+            const resultKey = target === "pull-request" ? "reviewResultPreview" : "workItemResultPreview";
+            void queryClient.invalidateQueries({ queryKey: [resultKey, summary.itemId] });
+          }
         }
-        if (first || !notify) continue;
+        if (first || !notify || !settings) continue;
         const replied =
           !!summary.lastAgentReplyAt && summary.lastAgentReplyAt !== (before?.lastAgentReplyAt ?? null);
-        const finished = summary.done > (before?.done ?? 0);
+        // Only notes the agent finished; resolving one yourself is not news.
+        const finished = summary.doneByAgent > (before?.doneByAgent ?? 0);
         if (!replied && !finished) continue;
-        const label = target === "pull-request" ? `PR !${summary.itemId}` : `#${summary.itemId}`;
+        const label =
+          target === "pull-request" ? `PR !${summary.itemId}` : target === "ask" ? "your request" : `#${summary.itemId}`;
         void showAgentNoteNotification({
           title: replied ? `Agent replied on ${label}` : `Agent finished a note on ${label}`,
           body: summary.needsYou
@@ -94,9 +111,11 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
           onClick: () =>
             target === "pull-request"
               ? navigateToPullRequest({ pullRequestId: summary.itemId })
-              : navigateToWorkItem({ workItemId: summary.itemId }),
-        });
+              : target === "ask"
+                ? openAgentPanel({ subject: null, askId: summary.itemId })
+                : navigateToWorkItem({ workItemId: summary.itemId }),
+        }, settings);
       }
     }
-  }, [workItems.data, pullRequests.data, notify, queryClient]);
+  }, [workItems.data, pullRequests.data, asks.data, notify, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 }

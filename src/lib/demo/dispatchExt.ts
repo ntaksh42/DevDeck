@@ -1,17 +1,21 @@
-// Pipeline, commit, code-browser, and repo dispatch cases extracted from
+// Pipeline, repo, notification, and agent-note dispatch cases extracted from
 // demoInvoke to keep the main file within the 500-line limit.
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
   AgentNoteItem,
+  AgentWorkTarget,
+  AutoQueueTarget,
   CreateAgentNoteInput,
-  CommitActivityInput,
+  ListInboxItemsInput,
   ListNotificationsInput,
+  SetInboxItemStateInput,
+  SetReplyReminderInput,
   RecordNotificationInput,
   ReplyAgentNoteInput,
   AgentNoteTarget,
   UpdateAgentNoteInput,
-  SearchCommitsInput,
 } from "@/lib/azdoCommands";
+import { dispatchHomeBot } from "@/lib/demo/homeBot";
 import {
   demoPipelineApprovals,
   demoPipelineDefinitionDetail,
@@ -20,31 +24,14 @@ import {
   demoPipelineLogTail,
   demoPipelineRunDetail,
   demoPipelineTestResults,
+  demoFlakyTests,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
 } from "@/lib/demo/pipelines";
-import { demoBranchPolicies } from "@/lib/demo/branchPolicies";
 import { demoProjectTeams, demoServiceConnections, demoServiceHooks } from "@/lib/demo/projectInfo";
-import { demoRepoTagOverview } from "@/lib/demo/repoTags";
 import { demoGetWikiPage, demoSearchWiki } from "@/lib/demo/wiki";
-import {
-  demoCommitActivity,
-  demoCommitChanges,
-  demoCommitPullRequests,
-  demoCommitRepositories,
-  demoCommits,
-  demoGetCodeSearchContext,
-  demoBranchOverview,
-  demoRepoBranches,
-  demoRepoTags,
-  demoRevisionComparison,
-  demoRepoFile,
-  demoRepoHistory,
-  demoRepoPaths,
-  demoRepoTree,
-  demoSearchCode,
-} from "@/lib/demo/commits";
+import { demoRepoBranches, demoRepositories } from "@/lib/demo/repos";
 import {
   demoListNotifications,
   demoMarkAllNotificationsRead,
@@ -53,18 +40,37 @@ import {
   demoUnreadNotificationsCount,
 } from "@/lib/demo/notifications";
 import {
+  demoClearReplyReminder,
+  demoInboxCounts,
+  demoListInboxItems,
+  demoListReplyReminders,
+  demoSetInboxItemState,
+  demoSetReplyReminder,
+} from "@/lib/demo/actionInbox";
+import { demoAutoQueuePreview, demoListAutoQueue, demoRunAssignedWorkItems, demoRunAutoQueue } from "@/lib/demo/autoQueue";
+import {
+  demoListAgentWork,
+  demoReadAgentWorkLog,
+  demoRetryAgentWork,
+  demoSetAgentWorkExcluded,
+} from "@/lib/demo/agentWork";
+import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
+  demoListAgentAsks,
   demoListAgentNotes,
   demoReplyAgentNote,
   demoRestoreAgentNote,
   demoSetAgentNoteStatus,
   demoSubmitAgentNoteDrafts,
   demoSummarizeAgentNotes,
+  demoPostAgentComment,
   demoUpdateAgentNote,
 } from "@/lib/demo/agentNotes";
 
 export function dispatchExt(command: string, args: unknown): unknown {
+  const home = dispatchHomeBot(command, args);
+  if (home !== undefined) return home;
   switch (command) {
     // ── Pipelines ──────────────────────────────────────────────────────────
     case "list_pipeline_projects":
@@ -101,6 +107,9 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "list_pipeline_test_results": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineTestResults(input?.buildId ?? 1001);
+    }
+    case "list_flaky_tests": {
+      return demoFlakyTests();
     }
     case "get_pipeline_definition": {
       const input = (args as { input?: { definitionId?: number } } | undefined)?.input;
@@ -148,14 +157,6 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
     }
-    case "create_pull_request": {
-      const input = (args as { input?: { title?: string } } | undefined)?.input;
-      return {
-        pullRequestId: 9001,
-        title: input?.title ?? "New pull request",
-        webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/9001",
-      };
-    }
     case "add_pull_request_label": {
       const input = (args as { input?: { name?: string } } | undefined)?.input;
       return { id: `demo-label-${input?.name ?? "new"}`, name: input?.name ?? "" };
@@ -173,59 +174,6 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineApprovals()[0];
       return [{ ...approval, status: input?.status ?? "approved" }];
     }
-    // ── Commits ────────────────────────────────────────────────────────────
-    case "search_commits": {
-      const input = (args as { input?: SearchCommitsInput } | undefined)?.input;
-      const all = demoCommits(input);
-      const offset = input?.offset ?? 0;
-      const limit = 100;
-      const page = all.slice(offset, offset + limit);
-      return { commits: page, total: all.length, truncated: (offset + limit) < all.length };
-    }
-    case "commit_activity": {
-      const input = (args as { input?: CommitActivityInput } | undefined)?.input;
-      return demoCommitActivity(input);
-    }
-    case "list_commit_repositories":
-      return demoCommitRepositories();
-    case "get_commit_changes": {
-      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return demoCommitChanges(input?.commitId);
-    }
-    case "get_commit_file_diff": {
-      const input = (args as { input?: { filePath?: string } } | undefined)?.input;
-      return {
-        filePath: input?.filePath ?? "/src/app.ts",
-        baseContent: "const x = 1;\nconst y = 2;\n",
-        targetContent: "const x = 1;\nconst y = 3;\nconst z = 4;\n",
-        baseUnavailableReason: null,
-        targetUnavailableReason: null,
-      };
-    }
-    case "get_commit_pull_requests": {
-      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return demoCommitPullRequests(input?.commitId);
-    }
-    case "get_commit_pull_requests_batch": {
-      const input = (args as { input?: { commitIds?: string[] } } | undefined)?.input;
-      return Object.fromEntries(
-        (input?.commitIds ?? []).map((id) => [id, demoCommitPullRequests(id)]),
-      );
-    }
-    case "list_commit_work_items": {
-      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return input?.commitId?.startsWith("abcdef") ? [1234] : [];
-    }
-    case "get_commit_containing_refs":
-      return { branches: ["main", "release/1.x"], tags: ["v1.1.0"], checked: 5, total: 5 };
-    case "cancel_operation":
-      // Demo searches resolve instantly, so there is nothing to cancel.
-      return null;
-    // ── Code / repo browser ────────────────────────────────────────────────
-    case "search_code": {
-      const input = (args as { input?: { query?: string } } | undefined)?.input;
-      return demoSearchCode(input?.query?.trim() ?? "");
-    }
     case "list_project_teams":
       return demoProjectTeams();
     case "list_service_connections":
@@ -240,38 +188,11 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { pagePath?: string } } | undefined)?.input;
       return demoGetWikiPage(input?.pagePath ?? "/");
     }
-    case "get_code_search_context": {
-      const input = (args as { input?: { query?: string } } | undefined)?.input;
-      return demoGetCodeSearchContext(input?.query?.trim() || "searchCode");
-    }
+    // ── Repositories ──────────────────────────────────────────────────────
+    case "list_repositories":
+      return demoRepositories();
     case "list_repo_branches":
       return demoRepoBranches();
-    case "list_repo_branch_overview":
-      return demoBranchOverview();
-    case "list_branch_policies":
-      return demoBranchPolicies();
-    case "list_repo_tag_overview":
-      return demoRepoTagOverview();
-    case "list_repo_tags":
-      return demoRepoTags();
-    case "compare_repo_revisions":
-      return demoRevisionComparison();
-    case "list_repo_tree": {
-      const input = (
-        args as { input?: { path?: string; includeLastCommit?: boolean } } | undefined
-      )?.input;
-      return demoRepoTree(input?.path, input?.includeLastCommit);
-    }
-    case "get_repo_file": {
-      const input = (args as { input?: { path?: string } } | undefined)?.input;
-      return demoRepoFile(input?.path ?? "/README.md");
-    }
-    case "list_repo_history": {
-      const input = (args as { input?: { path?: string } } | undefined)?.input;
-      return demoRepoHistory(input?.path ?? "/");
-    }
-    case "list_repo_paths":
-      return demoRepoPaths();
     // ── Notification history ──────────────────────────────────────────────
     case "list_notifications": {
       const input = (args as { input?: ListNotificationsInput } | undefined)?.input;
@@ -290,6 +211,35 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "record_notification": {
       const input = (args as { input?: RecordNotificationInput } | undefined)?.input;
       if (input) demoRecordNotification(input);
+      return null;
+    }
+    // ── Action inbox ──────────────────────────────────────────────────────
+    case "list_action_inbox_items": {
+      const input = (args as { input?: ListInboxItemsInput } | undefined)?.input;
+      return demoListInboxItems(input);
+    }
+    case "get_action_inbox_counts": {
+      const organizationId = (args as { organizationId?: string | null } | undefined)
+        ?.organizationId;
+      return demoInboxCounts(organizationId ?? undefined);
+    }
+    case "set_action_inbox_item_state": {
+      const input = (args as { input?: SetInboxItemStateInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoSetInboxItemState(input);
+    }
+    case "generate_action_inbox_insight":
+      return null;
+    case "set_reply_reminder": {
+      const input = (args as { input?: SetReplyReminderInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoSetReplyReminder(input);
+    }
+    case "list_reply_reminders":
+      return demoListReplyReminders();
+    case "clear_reply_reminder": {
+      const id = (args as { id?: number } | undefined)?.id;
+      if (id !== undefined) demoClearReplyReminder(id);
       return null;
     }
     // ── Agent notes ───────────────────────────────────────────────────────
@@ -311,6 +261,12 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: ReplyAgentNoteInput } | undefined)?.input;
       if (!input) throw new Error("missing input");
       return demoReplyAgentNote(input);
+    }
+    case "post_agent_comment": {
+      const input = (args as { input?: AgentNoteItem & { noteId: string; replyIndex: number } } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      demoPostAgentComment(input);
+      return null;
     }
     case "update_agent_note": {
       const input = (args as { input?: UpdateAgentNoteInput } | undefined)?.input;
@@ -335,6 +291,30 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { target: AgentNoteTarget } } | undefined)?.input;
       return input ? demoSummarizeAgentNotes(input.target) : [];
     }
+    case "list_agent_asks":
+      return demoListAgentAsks();
+    case "list_auto_queue":
+      return demoListAutoQueue();
+    case "get_auto_queue_preview":
+      return demoAutoQueuePreview((args as { input: AutoQueueTarget }).input);
+    case "run_assigned_work_item_investigations":
+      return demoRunAssignedWorkItems();
+    case "run_work_item_investigations":
+      return ((args as { input?: unknown[] } | undefined)?.input ?? []).length;
+    case "run_auto_queue":
+      return demoRunAutoQueue((args as { input: AutoQueueTarget[] }).input);
+    case "start_pipeline_investigation":
+      return false;
+    case "list_agent_work":
+      return demoListAgentWork();
+    case "read_agent_work_log":
+      return demoReadAgentWorkLog((args as { input: AgentWorkTarget }).input);
+    case "retry_agent_work":
+      demoRetryAgentWork((args as { input: AgentWorkTarget }).input);
+      return null;
+    case "set_agent_work_excluded":
+      demoSetAgentWorkExcluded((args as { input: Parameters<typeof demoSetAgentWorkExcluded>[0] }).input);
+      return null;
     case "run_agent":
       throw new Error("Running an agent is only available in the desktop app");
     default:

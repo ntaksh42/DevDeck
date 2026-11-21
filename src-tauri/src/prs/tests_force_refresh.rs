@@ -1,5 +1,6 @@
 //! An explicit user refresh must not be satisfied from a shared cache that the
-//! other app wrote moments ago (#648); automatic syncs still may be.
+//! another writer updated moments ago (#648); automatic syncs can reuse a
+//! compatible snapshot.
 
 use std::sync::Arc;
 
@@ -38,7 +39,7 @@ fn project() -> TeamProject {
     }
 }
 
-fn seed_fresh_shared_cache(org: &Organization, project: &TeamProject) {
+fn seed_fresh_shared_cache(org: &Organization, project: &TeamProject, compatible: bool) {
     let mut conn = shared_cache::open().unwrap();
     let stale = SharedPullRequest {
         repository_id: "repo-1".to_string(),
@@ -68,22 +69,35 @@ fn seed_fresh_shared_cache(org: &Organization, project: &TeamProject) {
         vote: 0,
         is_required: true,
     };
-    shared_cache::write_pull_requests(
-        &mut conn,
-        &org.name,
-        &project.name,
-        &[stale, completed],
-        &[reviewer],
-    )
-    .unwrap();
-    shared_cache::mark_synced(
-        &conn,
-        &org.name,
-        &project.name,
-        shared_cache::KIND_PULL_REQUESTS,
-        "waypoint",
-    )
-    .unwrap();
+    if compatible {
+        let scope = shared_cache::ActivePrScope {
+            organization: &org.name,
+            project: &project.name,
+            base_url: &org.base_url,
+            project_id: &project.id,
+            principal_id: org.authenticated_user_id.as_deref(),
+            limit: super::util::PROJECT_PR_SYNC_TOP,
+        };
+        shared_cache::write_active_pr_snapshot(
+            &mut conn,
+            &scope,
+            &[stale, completed],
+            &[reviewer],
+            false,
+        )
+        .unwrap();
+    } else {
+        shared_cache::write_pull_requests(&mut conn, &org.name, &project.name, &[stale], &[])
+            .unwrap();
+        shared_cache::mark_synced(
+            &conn,
+            &org.name,
+            &project.name,
+            shared_cache::KIND_PULL_REQUESTS,
+            "waypoint",
+        )
+        .unwrap();
+    }
 }
 
 async fn client_with_live_pr(server: &MockServer) -> AdoClient {
@@ -128,7 +142,7 @@ async fn automatic_sync_reuses_a_fresh_shared_cache() {
     let server = MockServer::start().await;
     let client = client_with_live_pr(&server).await;
     let (org, project) = (org(), project());
-    seed_fresh_shared_cache(&org, &project);
+    seed_fresh_shared_cache(&org, &project, true);
 
     let fetch = fetch_active_prs_for_project(client, org, project, false).await;
 
@@ -148,9 +162,61 @@ async fn forced_refresh_ignores_a_fresh_shared_cache() {
     let server = MockServer::start().await;
     let client = client_with_live_pr(&server).await;
     let (org, project) = (org(), project());
-    seed_fresh_shared_cache(&org, &project);
+    seed_fresh_shared_cache(&org, &project, true);
 
     let fetch = fetch_active_prs_for_project(client, org, project, true).await;
+
+    assert_eq!(titles(fetch), vec!["Live PR"]);
+}
+
+#[tokio::test]
+async fn shared_prs_normalize_branches_and_rebuild_missing_web_links() {
+    let server = MockServer::start().await;
+    let client = client_with_live_pr(&server).await;
+    let (org, mut project) = (org(), project());
+    project.name = "Platform & Ops".to_string();
+    seed_fresh_shared_cache(&org, &project, true);
+
+    let fetch = fetch_active_prs_for_project(client, org, project, false).await;
+    let rows = fetch.result.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source_ref_name, "feature");
+    assert_eq!(rows[0].target_ref_name, "main");
+    assert_eq!(
+        rows[0].web_url.as_deref(),
+        Some("https://dev.azure.com/contoso/Platform%20%26%20Ops/_git/Repo/pullrequest/7")
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn legacy_writer_invalidates_the_previous_snapshot_scope() {
+    let server = MockServer::start().await;
+    let client = client_with_live_pr(&server).await;
+    let (org, project) = (org(), project());
+    seed_fresh_shared_cache(&org, &project, true);
+    seed_fresh_shared_cache(&org, &project, false);
+
+    let fetch = fetch_active_prs_for_project(client, org, project, false).await;
+
+    assert_eq!(titles(fetch), vec!["Live PR"]);
+}
+
+#[tokio::test]
+async fn automatic_sync_rejects_a_snapshot_for_another_project_id() {
+    let server = MockServer::start().await;
+    let client = client_with_live_pr(&server).await;
+    let (org, project) = (org(), project());
+    seed_fresh_shared_cache(
+        &org,
+        &TeamProject {
+            id: "previous-project".into(),
+            name: project.name.clone(),
+        },
+        true,
+    );
+
+    let fetch = fetch_active_prs_for_project(client, org, project, false).await;
 
     assert_eq!(titles(fetch), vec!["Live PR"]);
 }

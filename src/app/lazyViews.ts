@@ -2,14 +2,8 @@ import { lazy } from "react";
 
 // Only the default view (My Reviews) loads eagerly; the other views are
 // code-split so app startup does not pay for panels that may never open.
-export const CommitSearch = lazy(() =>
-  import("@/features/commits/CommitSearch").then((m) => ({ default: m.CommitSearch })),
-);
 export const PipelinesView = lazy(() =>
   import("@/features/pipelines/PipelinesView").then((m) => ({ default: m.PipelinesView })),
-);
-export const CodeBrowseView = lazy(() =>
-  import("@/features/code/CodeBrowseView").then((m) => ({ default: m.CodeBrowseView })),
 );
 export const WorkItemSearch = lazy(() =>
   import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
@@ -47,9 +41,19 @@ export const CrossOrgSummaryView = lazy(() =>
     default: m.CrossOrgSummaryView,
   })),
 );
-export const AnalyzeView = lazy(() =>
-  import("@/features/analyze/AnalyzeView").then((m) => ({
-    default: m.AnalyzeView,
+export const HomeView = lazy(() =>
+  import("@/features/home/HomeView").then((m) => ({
+    default: m.HomeView,
+  })),
+);
+export const InboxView = lazy(() =>
+  import("@/features/inbox/InboxView").then((m) => ({
+    default: m.InboxView,
+  })),
+);
+export const AgentWorkView = lazy(() =>
+  import("@/features/auto-queue/AgentWorkView").then((m) => ({
+    default: m.AgentWorkView,
   })),
 );
 export const NotificationsView = lazy(() =>

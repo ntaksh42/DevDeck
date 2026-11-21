@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, Zap } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { useCloseOnOutsidePointer } from './PreviewEditors';
 import { MAX_FIELD_PRESETS, type WorkItemFieldPreset } from './fieldPresetsStorage';
+import { isImeComposing } from '@/lib/utils';
 
+// Popover half of the "Field presets…" View options item: no trigger of its
+// own, the toolbar's menu opens it and gets focus back on `onClose`.
 export function PresetMenu({
+  open,
+  onClose,
   canSave,
   onApply,
   onDelete,
@@ -12,6 +17,8 @@ export function PresetMenu({
   presets,
   stagedCount,
 }: {
+  open: boolean;
+  onClose: () => void;
   canSave: boolean;
   onApply: (preset: WorkItemFieldPreset) => void;
   onDelete: (id: string) => void;
@@ -19,21 +26,12 @@ export function PresetMenu({
   presets: WorkItemFieldPreset[];
   stagedCount: number;
 }) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () => setOpen(false));
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, onClose);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const wasOpenRef = useRef(false);
-  // Open onto the first control; on close return focus to the trigger so
-  // keyboard users resume from the preview header, not <body>.
+  // Open onto the first control.
   useEffect(() => {
-    if (open && !wasOpenRef.current) {
-      popoverRef.current?.querySelector<HTMLElement>("button, input")?.focus();
-    } else if (!open && wasOpenRef.current) {
-      triggerRef.current?.focus();
-    }
-    wasOpenRef.current = open;
+    if (open) popoverRef.current?.querySelector<HTMLElement>("button, input")?.focus();
   }, [open]);
 
   return (
@@ -41,30 +39,20 @@ export function PresetMenu({
       ref={menuRef}
       className="relative"
       onKeyDown={(event) => {
+        if (isImeComposing(event)) return;
         if (event.key === "Escape" && open) {
           event.preventDefault();
           event.stopPropagation();
-          setOpen(false);
+          onClose();
         }
       }}
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-expanded={open}
-        aria-label="Field presets"
-        title="Field presets — press 1-9 to apply"
-        onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-      >
-        <Zap className="h-3 w-3" aria-hidden="true" />
-      </button>
       {open ? (
         <div
           ref={popoverRef}
           className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg"
         >
-          <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+          <div className="px-2 py-1 text-2xs font-semibold text-muted-foreground">
             Field presets
           </div>
           {presets.length > 0 ? (
@@ -77,7 +65,7 @@ export function PresetMenu({
                   type="button"
                   onClick={() => {
                     onApply(preset);
-                    setOpen(false);
+                    onClose();
                   }}
                   title={preset.fields
                     .map((field) => `${field.label}: ${field.value}`)
@@ -98,7 +86,7 @@ export function PresetMenu({
               </div>
             ))
           ) : (
-            <p className="px-2 py-1 text-[11px] text-muted-foreground">No presets yet.</p>
+            <p className="px-2 py-1 text-2xs text-muted-foreground">No presets yet.</p>
           )}
           <div className="mt-1 border-t border-border px-2 py-1.5">
             {canSave ? (
@@ -128,12 +116,12 @@ export function PresetMenu({
                 </button>
               </form>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 Stage changes (state, reason, …), then save them here as a preset.
               </p>
             )}
             {presets.length >= MAX_FIELD_PRESETS ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-2xs text-muted-foreground">
                 Up to {MAX_FIELD_PRESETS} presets.
               </p>
             ) : null}

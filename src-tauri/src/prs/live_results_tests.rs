@@ -111,18 +111,8 @@ async fn live_fetches_skip_http_errors_and_keep_other_project_results() {
             })))
             .mount(&server)
             .await;
-        let client = AdoClient::new("org", Arc::new(PatProvider::new("test-pat")))
-            .unwrap()
-            .with_base_url(Url::parse(&format!("{}/", server.uri())).unwrap());
-        let mut created = JoinSet::new();
         let mut search = JoinSet::new();
         for project in ["restricted", "visible"] {
-            let client = client.clone();
-            created.spawn(async move {
-                let result =
-                    fetch_created_prs_for_project(&client, &organization(), project, "user").await;
-                (project.to_string(), result)
-            });
             let client = client_for_test(&server);
             search.spawn(async move {
                 let result = fetch_status_prs_for_project(
@@ -140,14 +130,6 @@ async fn live_fetches_skip_http_errors_and_keep_other_project_results() {
                 (project.to_string(), result)
             });
         }
-        let (rows, warnings) = collect_project_prs(created)
-            .await
-            .unwrap()
-            .finish()
-            .unwrap();
-        assert_eq!(rows.len(), 1, "HTTP {status}");
-        assert_eq!(rows[0].pull_request_id, 42);
-        assert_eq!(warnings, ["restricted"]);
         let (rows, warnings) = collect_project_prs(search).await.unwrap().finish().unwrap();
         assert_eq!(rows.len(), 1, "HTTP {status}");
         assert_eq!(rows[0].pull_request_id, 42);

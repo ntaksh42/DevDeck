@@ -17,12 +17,13 @@ pub(super) const SYNC_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
      ORDER BY [System.ChangedDate] DESC";
 
-// StateCategory (not State) so custom process states are covered. Completed
-// items are excluded so they neither fill the TOP cap nor inflate the badge.
+// Completed items are excluded so they neither fill the TOP cap nor inflate the
+// badge. `[System.StateCategory]` is not a queryable WIQL field (TF51005), so
+// match the built-in Agile/Scrum/CMMI/Basic terminal state names instead.
 pub(super) const SYNC_MY_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
      AND [System.AssignedTo] = @Me \
-     AND [System.StateCategory] NOT IN ('Completed', 'Removed') \
+     AND [System.State] NOT IN ('Closed', 'Done', 'Completed', 'Removed') \
      ORDER BY [System.ChangedDate] DESC";
 const SYNC_WORK_ITEM_BATCH_SIZE: usize = 200;
 // Between full syncs, only items whose ChangedDate moved past the last sync
@@ -97,8 +98,8 @@ struct ProjectWorkItemFetch {
 ///
 /// `was_full_sync` decides how the "all" result is written to the shared
 /// cache (`shared_cache` module, read by waypoint): a full result replaces
-/// that project's rows outright, while a delta result only carries items
-/// that changed and must be upserted rather than replacing the snapshot.
+/// that project's rows outright unless the query hit its cap. Delta and capped
+/// results must be upserted rather than replacing the snapshot.
 #[allow(clippy::too_many_arguments)]
 async fn fetch_project_work_items(
     client: AdoClient,

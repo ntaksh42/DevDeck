@@ -13,9 +13,10 @@ export const VIEW_COUNT_HISTORY_MIN_POINTS = 2;
 
 export type WorkItemViewsCardMode = "card" | "compact";
 
+/** "Collapsed" is the one-row chip display, and it is the default. */
 export function loadWorkItemViewsCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(WI_VIEWS_COLLAPSED_STORAGE_KEY) === "true";
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(WI_VIEWS_COLLAPSED_STORAGE_KEY) !== "false";
 }
 
 export function saveWorkItemViewsCollapsed(collapsed: boolean): void {

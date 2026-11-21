@@ -58,6 +58,19 @@ describe("PipelinesView", () => {
   );
 
   it(
+    "previews a run without a selection and keeps list focus",
+    async () => {
+      renderView();
+      await screen.findByText("Watched pipelines", undefined, { timeout: 8000 });
+      // Nothing was clicked, yet the preview shows a run instead of the empty state.
+      await screen.findByText("Timeline", undefined, { timeout: 8000 });
+      expect(screen.queryByText("Select a run.")).toBeNull();
+      expect(document.activeElement).toBe(document.body);
+    },
+    15000,
+  );
+
+  it(
     "keeps the detail panel when unwatching a different pipeline in the same project",
     async () => {
       // CI (definition 1) and Nightly (definition 2) both live in demo-project.

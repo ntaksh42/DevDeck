@@ -288,7 +288,7 @@ describe("App — Work Items (extra)", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("button", { name: "Views" }));
-    fireEvent.click(await main.findByRole("button", { name: /Add/ }));
+    fireEvent.click(await main.findByRole("button", { name: /New view/ }));
     await screen.findByRole("dialog", { name: "Add View" });
     await main.findByText("Platform");
 
@@ -320,6 +320,8 @@ describe("App — Work Items (extra)", () => {
     expect((await screen.findAllByText("Fix view query workflow")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getByRole("option", { name: /Active Bugs/ })).toBeTruthy();
+    // Views default to one row of chips; the grid-like arrow navigation is the card display.
+    fireEvent.click(screen.getByRole("button", { name: /Show view cards/ }));
     const viewListbox = screen.getByRole("listbox", { name: "Saved work item views" });
     expect(viewListbox).toBeTruthy();
     Object.defineProperty(viewListbox, "clientWidth", {
@@ -438,7 +440,7 @@ describe("App — Work Items (extra)", () => {
     renderApp();
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("button", { name: "Views" }));
-    fireEvent.click(await within(screen.getByRole("main")).findByRole("button", { name: /Add/ }));
+    fireEvent.click(await within(screen.getByRole("main")).findByRole("button", { name: /New view/ }));
     await screen.findByRole("dialog", { name: "Add View" });
     await within(screen.getByRole("main")).findByText("Platform");
 

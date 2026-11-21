@@ -4,8 +4,9 @@ use std::sync::Arc;
 use azdo_client::TeamProject;
 use tauri::{AppHandle, Emitter};
 
+use crate::agent_notes::NoteTarget;
 use crate::auth::client_for_organization;
-use crate::commits::sync_commits_for_org;
+use crate::auto_agent::Assignments;
 use crate::db::{AppSettings, NewNotification, Organization};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
@@ -31,7 +32,7 @@ fn has_completed_sync(db: &AppDatabase, kind: &str, org_id: &str) -> bool {
 }
 
 /// Syncs one organization. Fetches the project list once (shared across the
-/// three sync kinds) and runs the PR, work-item, and commit passes concurrently.
+/// sync kinds) and runs the PR and work-item passes concurrently.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn sync_org(
     db: AppDatabase,
@@ -53,7 +54,7 @@ pub(super) async fn sync_org(
             return outcome;
         }
     };
-    // One project listing feeds PRs, work items, and commits, instead of each
+    // One project listing feeds PRs and work items, instead of each
     // sync kind issuing its own identical request.
     let projects = match client.list_projects().await {
         Ok(projects) => projects,
@@ -65,7 +66,9 @@ pub(super) async fn sync_org(
     };
     let snooze = SnoozeService::new(db.clone());
 
-    let (pr_outcome, wi_outcome, commit_outcome) = tokio::join!(
+    let mut pr_assignments = Assignments::new();
+    let mut wi_assignments = Assignments::new();
+    let (pr_outcome, wi_outcome) = tokio::join!(
         sync_org_prs(
             &db,
             &client,
@@ -78,24 +81,26 @@ pub(super) async fn sync_org(
             &budget,
             &now,
             &projects,
+            &mut pr_assignments,
         ),
         sync_org_work_items(
-            &db, &client, &handle, &org, scope, &settings, &snooze, &budget, &now, &projects,
-        ),
-        sync_org_commits(
             &db,
             &client,
             &handle,
             &org,
             scope,
-            force_refresh,
+            &settings,
+            &snooze,
             &budget,
-            &projects
+            &now,
+            &projects,
+            &mut wi_assignments,
         ),
     );
     outcome.merge(pr_outcome);
     outcome.merge(wi_outcome);
-    outcome.merge(commit_outcome);
+    pr_assignments.extend(wi_assignments);
+    crate::auto_agent::start(&db, &settings, &org, pr_assignments);
     outcome
 }
 
@@ -112,6 +117,7 @@ async fn sync_org_prs(
     budget: &SyncBudget,
     now: &str,
     projects: &[TeamProject],
+    assignments: &mut Assignments,
 ) -> SyncPassOutcome {
     let mut outcome = SyncPassOutcome::default();
     if !matches!(
@@ -122,34 +128,83 @@ async fn sync_org_prs(
     }
     let should_collect = should_collect_pr_notifications(settings);
     let baseline_established = has_completed_sync(db, "prs", &org.id);
-    let previous_reviews = if should_collect {
-        db.list_review_pull_requests(&org.id).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let previous_reviews = db.list_review_pull_requests(&org.id);
     if let Err(e) = sync_prs_for_org(db, client, org, projects, budget, force_refresh).await {
         tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
         outcome.record_failure();
         return outcome;
     }
     outcome.record_success();
-    emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
     let current_reviews = db.list_review_pull_requests(&org.id).unwrap_or_default();
+    if settings.auto_agent_enabled && baseline_established {
+        if let Ok(previous) = &previous_reviews {
+            let keys: HashSet<_> = previous
+                .iter()
+                .map(|pr| (&pr.repository_id, pr.pull_request_id))
+                .collect();
+            assignments.extend(
+                current_reviews
+                    .iter()
+                    .filter(|pr| !keys.contains(&(&pr.repository_id, pr.pull_request_id)))
+                    .map(|pr| {
+                        (
+                            NoteTarget::PullRequest,
+                            pr.repository_id.clone(),
+                            pr.pull_request_id,
+                        )
+                    }),
+            );
+        }
+    }
     // Collect comment notifications first: the call advances the comment-seen
     // markers that snooze revival then reads.
     let mut items = Vec::new();
     if should_collect {
         items = pr_review_notification_items(
-            &previous_reviews,
+            previous_reviews.as_deref().unwrap_or_default(),
             &current_reviews,
             settings,
             baseline_established,
         );
-        if settings.notify_pr_comment_replies {
-            items.extend(
-                crate::prs::collect_pr_comment_notifications(db, client, org, budget).await,
-            );
+    }
+    // One thread fetch feeds both the reply notifications and the Inbox. The
+    // Inbox is always fed, whatever the notification settings are.
+    let crate::prs::PrThreadScan {
+        prs: scanned,
+        warning: scan_warning,
+    } = crate::prs::fetch_pr_threads(db, client, org, budget).await;
+    if should_collect && settings.notify_pr_comment_replies {
+        items.extend(crate::prs::pr_comment_notifications_from(db, org, &scanned));
+    }
+    // Cached for an hour by the PR sync above, so this is normally no request.
+    let groups = match org.authenticated_user_id.as_deref() {
+        Some(me) => crate::prs::member_group_ids(db, client, org, me).await.ids,
+        None => Default::default(),
+    };
+    let inbox_update = crate::prs::update_action_inbox(db, org, &scanned, &groups);
+    super::inbox::record_inbox_health(db, org, "inbox_prs", scan_warning.as_deref());
+    let state_update = super::inbox::retire_condition_items(db, org);
+    let closed_update = crate::prs::finish_inbox_items_of_closed_prs(db, org);
+    super::reply_reminders::reconcile(db, handle, org);
+    if inbox_update.changed() || state_update.changed() || closed_update.changed() {
+        if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
+            tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
         }
+    }
+    if settings.inbox_insight_enabled {
+        let threads = crate::inbox_insight::thread_texts(scanned.iter().flat_map(|pr| {
+            pr.threads
+                .iter()
+                .map(move |thread| (pr.pr.repository_id.as_str(), thread))
+        }));
+        crate::inbox_insight::start(
+            db,
+            settings,
+            handle,
+            &org.id,
+            &crate::db::PR_INSIGHT_KINDS,
+            threads,
+        );
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn
     // which PRs remain snoozed so their notifications can be suppressed.
@@ -160,7 +215,21 @@ async fn sync_org_prs(
             HashSet::new()
         }
     };
-    if should_collect {
+    match super::merge_readiness::collect_ready_prs(
+        db,
+        client,
+        org,
+        settings,
+        budget,
+        &snoozed_pr_keys,
+    )
+    .await
+    {
+        Ok(ready_items) => items.extend(ready_items),
+        Err(error) => tracing::warn!(%error, "merge readiness sync failed"),
+    }
+    emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
+    if should_collect || !items.is_empty() {
         items.retain(|item| {
             !snoozed_pr_keys.contains(&format!("{}:{}", item.repository_id, item.pull_request_id))
         });
@@ -177,7 +246,15 @@ async fn sync_org_prs(
                 db,
                 handle,
                 &org.name,
-                pr_notification_records(&org.id, &org.name, &items),
+                pr_notification_records(
+                    &org.id,
+                    &org.name,
+                    &items
+                        .iter()
+                        .filter(|item| item.kind != PrNotificationKind::ReadyToMerge)
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                ),
             );
             let event = PullRequestNotificationEvent {
                 organization_id: org.id.clone(),
@@ -204,6 +281,7 @@ async fn sync_org_work_items(
     budget: &SyncBudget,
     now: &str,
     projects: &[TeamProject],
+    assignments: &mut Assignments,
 ) -> SyncPassOutcome {
     let mut outcome = SyncPassOutcome::default();
     if !matches!(
@@ -214,42 +292,65 @@ async fn sync_org_work_items(
     }
     let should_collect = should_collect_work_item_notifications(settings);
     let baseline_established = has_completed_sync(db, "work_items", &org.id);
-    let previous_my_work_items = if should_collect {
-        match db.list_my_work_items(&org.id) {
-            Ok(items) => items,
-            Err(e) => {
-                tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items before sync");
-                Vec::new()
-            }
-        }
-    } else {
-        Vec::new()
-    };
+    let previous_my_work_items = db.list_my_work_items(&org.id);
+    if let Err(error) = &previous_my_work_items {
+        tracing::warn!(org = %org.name, ?error, "sync: failed to snapshot work items before sync");
+    }
     if let Err(e) = sync_work_items_for_org(db, client, org, projects, budget).await {
         tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
         outcome.record_failure();
         return outcome;
     }
     outcome.record_success();
-    emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
     match db.list_my_work_items(&org.id) {
         Ok(current_my_work_items) => {
             // Revive snoozed work items past their deadline or with a newer
             // ChangedDate; remember which stay snoozed.
-            let snoozed_ids = match snooze.reconcile_work_items(
-                &org.id,
-                &current_my_work_items,
-                now,
-            ) {
+            let snoozed_ids = match snooze
+                .reconcile_work_items(&org.id, client, budget, &current_my_work_items, now)
+                .await
+            {
                 Ok(reconcile) => still_snoozed_work_item_ids(&reconcile.still_snoozed),
                 Err(e) => {
                     tracing::warn!(org = %org.name, error = ?e, "sync: WI snooze reconcile failed");
                     HashSet::new()
                 }
             };
+            emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
+            if settings.auto_agent_enabled && baseline_established {
+                if let Ok(previous) = &previous_my_work_items {
+                    let ids: HashSet<_> = previous.iter().map(|wi| wi.id).collect();
+                    assignments.extend(
+                        current_my_work_items
+                            .iter()
+                            .filter(|wi| !ids.contains(&wi.id))
+                            .map(|wi| (NoteTarget::WorkItem, wi.project_id.clone(), wi.id)),
+                    );
+                }
+            }
+            let (inbox_update, scan_warning) =
+                super::wi_mentions::update_work_item_mentions(db, client, org, projects, budget)
+                    .await;
+            super::inbox::record_inbox_health(db, org, "inbox_wi", scan_warning.as_deref());
+            let closed_update =
+                super::wi_mentions::finish_closed_work_item_mentions(db, client, org, budget).await;
+            super::reply_reminders::reconcile(db, handle, org);
+            if inbox_update.changed() || closed_update.changed() {
+                if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
+                    tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
+                }
+            }
+            crate::inbox_insight::start(
+                db,
+                settings,
+                handle,
+                &org.id,
+                &crate::db::WI_INSIGHT_KINDS,
+                Default::default(),
+            );
             if should_collect {
                 let mut items = work_item_notification_items(
-                    &previous_my_work_items,
+                    previous_my_work_items.as_deref().unwrap_or_default(),
                     &current_my_work_items,
                     settings,
                     baseline_established,
@@ -284,31 +385,6 @@ async fn sync_org_work_items(
         Err(e) => {
             tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items after sync");
         }
-    }
-    outcome
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn sync_org_commits(
-    db: &AppDatabase,
-    client: &azdo_client::AdoClient,
-    handle: &AppHandle,
-    org: &Organization,
-    scope: SyncScope,
-    force_refresh: bool,
-    budget: &SyncBudget,
-    projects: &[TeamProject],
-) -> SyncPassOutcome {
-    let mut outcome = SyncPassOutcome::default();
-    if !matches!(scope, SyncScope::All | SyncScope::Commits) {
-        return outcome;
-    }
-    if let Err(e) = sync_commits_for_org(db, client, org, projects, budget, force_refresh).await {
-        tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
-        outcome.record_failure();
-    } else {
-        outcome.record_success();
-        emit_sync_updated(handle, &org.id, vec![SyncScope::Commits]);
     }
     outcome
 }

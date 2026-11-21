@@ -4,6 +4,7 @@ import {
   isEditableTarget,
   isImeComposing,
   focusWorkItemCommentInput,
+  focusPullRequestCommentInput,
   focusFilterInput,
   focusPrimaryGrid,
   focusPrimaryPreview,
@@ -11,6 +12,9 @@ import {
 } from "@/lib/utils";
 import { dispatchWorkItemCommand, gotoViewMapFromKeybindings } from "./appHelpers";
 import { GOTO_CHAIN_TIMEOUT_MS } from "./types";
+import { toggleAgentPanel } from "@/components/agent/agentSubject";
+import { resetUiScale, stepUiScale } from "@/lib/uiScale";
+import { bindFramePaneFocus, handlePaneCycleKey } from "@/lib/paneFocus";
 import type { View } from "./types";
 
 export interface UseKeyboardShortcutsParams {
@@ -46,6 +50,23 @@ export function useKeyboardShortcuts({
   refreshCurrentView,
   focusNavigation,
 }: UseKeyboardShortcutsParams): void {
+  useEffect(() => {
+    // An iframe can gain focus before its images finish loading and onLoad
+    // fires. Bind its current document as soon as focus enters it as well.
+    function onWindowBlur() {
+      const frame = document.activeElement;
+      if (frame instanceof HTMLIFrameElement && frame.hasAttribute("srcdoc") && frame.sandbox.contains("allow-same-origin")) {
+        bindFramePaneFocus(frame);
+      }
+    }
+    const onPaneCycleKey = (event: KeyboardEvent) => { handlePaneCycleKey(event); };
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("keydown", onPaneCycleKey, true);
+    return () => {
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("keydown", onPaneCycleKey, true);
+    };
+  }, []);
   // Stable ref so the effects below don't need syncAll in their dep arrays
   // (it's a new lambda every render). The ref is always current.
   const syncAllRef = useRef(syncAll);
@@ -69,7 +90,8 @@ export function useKeyboardShortcuts({
 
     function onKeyDownCapture(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      if (isEditableTarget(event.target)) {
+      // A modal dialog owns the keyboard: no view switch may start behind it.
+      if (isEditableTarget(event.target) || document.querySelector('[aria-modal="true"]')) {
         disarm();
         return;
       }
@@ -80,7 +102,6 @@ export function useKeyboardShortcuts({
           event.preventDefault();
           event.stopPropagation();
           setView(view);
-          window.setTimeout(() => focusPrimaryGrid(), 0);
         }
         return;
       }
@@ -206,6 +227,15 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      if (!inEditableTarget && activeView === "myReviews" && (
+        matchesCombo(keybindings.focusComment, event) ||
+        (event.key.toLowerCase() === "m" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey)
+      )) {
+        event.preventDefault();
+        focusPullRequestCommentInput();
+        return;
+      }
+
       if (!inEditableTarget && matchesCombo(keybindings.focusComment, event)) {
         if (isWorkItemView) {
           event.preventDefault();
@@ -231,6 +261,34 @@ export function useKeyboardShortcuts({
       if (matchesCombo(keybindings.toggleSidebar, event)) {
         event.preventDefault();
         setSidebarCollapsed((collapsed) => !collapsed);
+        return;
+      }
+
+      if (matchesCombo(keybindings.toggleAgent, event)) {
+        event.preventDefault();
+        toggleAgentPanel();
+        return;
+      }
+
+      // Ctrl+Shift+= reports key "+", so accept it as zoom-in too.
+      if (
+        matchesCombo(keybindings.uiScaleUp, event) ||
+        (keybindings.uiScaleUp === "Ctrl+=" && event.ctrlKey && event.key === "+")
+      ) {
+        event.preventDefault();
+        stepUiScale(1);
+        return;
+      }
+
+      if (matchesCombo(keybindings.uiScaleDown, event)) {
+        event.preventDefault();
+        stepUiScale(-1);
+        return;
+      }
+
+      if (matchesCombo(keybindings.uiScaleReset, event)) {
+        event.preventDefault();
+        resetUiScale();
         return;
       }
 

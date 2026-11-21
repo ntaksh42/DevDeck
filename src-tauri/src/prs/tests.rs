@@ -281,17 +281,13 @@ fn normalize_set_drops_blanks_and_empty() {
 
 #[test]
 fn parse_date_bound_spans_start_and_end_of_day() {
-    let from = parse_date_bound(Some("2026-05-01"), false)
-        .unwrap()
-        .unwrap();
-    let to = parse_date_bound(Some(" 2026-05-31 "), true)
-        .unwrap()
-        .unwrap();
+    let bound = |day, end| parse_date_bound(Some(day), end, None).unwrap().unwrap();
+    let (from, to) = (bound("2026-05-01", false), bound(" 2026-05-31 ", true));
     assert!(from.starts_with("2026-05-01T00:00:00"));
     assert!(to.starts_with("2026-05-31T23:59:59"));
-    assert_eq!(parse_date_bound(None, false).unwrap(), None);
-    assert_eq!(parse_date_bound(Some("  "), false).unwrap(), None);
-    assert!(parse_date_bound(Some("not-a-date"), false).is_err());
+    assert_eq!(parse_date_bound(None, false, None).unwrap(), None);
+    assert_eq!(parse_date_bound(Some("  "), false, None).unwrap(), None);
+    assert!(parse_date_bound(Some("not-a-date"), false, None).is_err());
 }
 
 #[test]
@@ -321,7 +317,9 @@ fn end_of_day_bound_covers_the_whole_final_second() {
     // 23:59:59 bound sits before it and dropped the row -- both from the
     // in-memory active-cache filter and from the live query, which sends this
     // same value as `maxTime`.
-    let to = parse_date_bound(Some("2026-05-31"), true).unwrap().unwrap();
+    let to = parse_date_bound(Some("2026-05-31"), true, None)
+        .unwrap()
+        .unwrap();
     assert!(within_window(
         "2026-05-31T23:59:59.913333300+00:00",
         None,
@@ -531,4 +529,44 @@ fn is_ado_not_found_only_matches_404_api_errors() {
         "server error".to_string()
     )));
     assert!(!is_ado_not_found(&AdoError::Unauthorized));
+}
+
+#[test]
+fn reviewer_counts_tally_approvals_per_pr() {
+    use crate::shared_cache::SharedReviewer;
+    let reviewer = |pull_request_id, id: &str, vote| SharedReviewer {
+        repository_id: "repo".to_string(),
+        pull_request_id,
+        reviewer_id: id.to_string(),
+        vote,
+        is_required: false,
+    };
+    let pr = |pull_request_id| CachedPr {
+        org_id: "org".to_string(),
+        project_id: "proj".to_string(),
+        project_name: "Project".to_string(),
+        repository_id: "repo".to_string(),
+        repository_name: "Repo".to_string(),
+        pull_request_id,
+        title: String::new(),
+        status: "active".to_string(),
+        created_by: None,
+        created_by_id: None,
+        creation_date: "2024-01-01T00:00:00Z".to_string(),
+        source_ref_name: "feature".to_string(),
+        target_ref_name: "main".to_string(),
+        web_url: None,
+        is_draft: false,
+    };
+    let counts = sync::reviewer_counts(
+        &[pr(1), pr(2)],
+        &[
+            reviewer(1, "a", 10),
+            reviewer(1, "b", 5),
+            reviewer(1, "c", -10),
+        ],
+    );
+    assert_eq!((counts[0].approvals, counts[0].reviewer_count), (1, 3));
+    // A PR without reviewers is still tallied, as 0 of 0.
+    assert_eq!((counts[1].approvals, counts[1].reviewer_count), (0, 0));
 }

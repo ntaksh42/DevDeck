@@ -4,9 +4,11 @@ test("continues keyboard range selection when a new search removes the anchor", 
   await page.goto("/");
   const main = page.getByRole("main");
   const searchNav = page.getByRole("complementary").first().getByRole("button", { name: "Search" }).first();
+  // Nav buttons stay disabled until the organizations load.
+  await expect(searchNav).toBeEnabled();
   await searchNav.focus();
   await page.keyboard.press("Enter");
-  const input = main.getByPlaceholder("title, author, branch…");
+  const input = main.getByPlaceholder("Search pull requests…");
   await input.focus();
   await page.keyboard.press("Enter");
   const grid = main.getByRole("grid", { name: "Pull request search results" });

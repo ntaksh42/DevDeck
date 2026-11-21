@@ -1,17 +1,18 @@
 import { useEffect, useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Maximize2, Minimize2, WandSparkles } from 'lucide-react';
 import { formatWiql, tokenizeWiql, type WiqlCompletion } from './workItemViewsHelpers';
+import { isImeComposing } from '@/lib/utils';
 
 // The overlay and the textarea must resolve to the exact same text metrics, or
 // the highlighted tokens drift away from the characters the user is typing.
 const WIQL_TEXT_CLASSES = "px-3 py-2 font-mono text-xs leading-5 tracking-normal whitespace-pre-wrap break-words";
 
 const TOKEN_CLASSES: Record<string, string> = {
-  keyword: "font-semibold text-sky-700 dark:text-sky-300",
+  keyword: "font-semibold text-info",
   field: "text-purple-700 dark:text-purple-300",
-  macro: "font-semibold text-amber-700 dark:text-amber-300",
-  string: "text-emerald-700 dark:text-emerald-300",
-  number: "text-emerald-700 dark:text-emerald-300",
+  macro: "font-semibold text-warning",
+  string: "text-success",
+  number: "text-success",
   plain: "",
 };
 
@@ -84,6 +85,7 @@ export function WiqlEditor({
   }
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (isImeComposing(event)) return;
     if (event.ctrlKey && event.key === " ") {
       event.preventDefault();
       setActiveCompletionIndex(0);
@@ -162,7 +164,7 @@ export function WiqlEditor({
             onClick={applyFormatting}
             title="Reformat the query (Shift+Alt+F)"
             aria-keyshortcuts="Shift+Alt+F"
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium hover:bg-secondary"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs font-medium hover:bg-secondary"
           >
             <WandSparkles className="h-3 w-3" aria-hidden="true" />
             Format
@@ -172,7 +174,7 @@ export function WiqlEditor({
             onClick={() => onExpandedChange(!expanded)}
             aria-pressed={expanded}
             title={expanded ? "Shrink the editor" : "Expand the editor"}
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium hover:bg-secondary"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-2xs font-medium hover:bg-secondary"
           >
             {expanded ? (
               <Minimize2 className="h-3 w-3" aria-hidden="true" />
@@ -248,7 +250,7 @@ export function WiqlEditor({
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActiveCompletionIndex(index)}
                 onClick={() => onApplyCompletion(completion)}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] ${
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-2xs ${
                   index === activeIndex
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-secondary"
@@ -268,7 +270,7 @@ export function WiqlEditor({
         </ul>
       ) : null}
 
-      <p id="view-wiql-hint" className="text-[11px] text-muted-foreground">
+      <p id="view-wiql-hint" className="text-2xs text-muted-foreground">
         Ctrl+Space completions · ↑↓ select · Enter/Tab apply · Esc close
       </p>
     </div>

@@ -4,6 +4,7 @@ pub mod code_search;
 pub mod error;
 pub mod git;
 pub mod identity;
+mod merge_readiness;
 pub mod pipelines;
 pub mod policy;
 pub mod pr_review;
@@ -19,15 +20,15 @@ pub use error::{AdoError, Result};
 pub use git::{
     CommitSearchCriteria, GitBranchStats, GitCommitDiffs, GitCommitRef, GitDiffChange, GitDiffItem,
     GitItem, GitPullRequest, GitRef, GitRefUpdateResult, GitRepository, GitUserDate,
-    GitVersionType, IdentityRef, IdentityRefWithVote, PullRequestStatus, TeamProject,
-    ZERO_OBJECT_ID,
+    GitVersionType, IdentityRef, IdentityRefWithVote, PullRequestPageCriteria, PullRequestStatus,
+    TeamProject, ZERO_OBJECT_ID,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{
-    Approval, ApprovalStep, Build, BuildDefinitionDetail, BuildDefinitionRef,
-    BuildDefinitionRepository, BuildIdentityRef, BuildListCriteria, BuildLogTail,
-    DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic, Timeline,
-    TimelineLogRef, TimelineRecord,
+    Approval, ApprovalPipeline, ApprovalPipelineOwner, ApprovalStep, Build, BuildDefinitionDetail,
+    BuildDefinitionRef, BuildDefinitionRepository, BuildIdentityRef, BuildListCriteria,
+    BuildLogTail, DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic,
+    Timeline, TimelineLogRef, TimelineRecord,
 };
 pub use policy::{PolicyConfiguration, PolicyType};
 pub use pr_review::{
@@ -41,7 +42,7 @@ pub use project_info::{
 };
 pub use wiki::{WikiPage, WikiSearchRequest, WikiSearchResponse, WikiSearchResult};
 pub use work_items::{
-    has_asof_clause, with_asof, ClassificationNode, ClassificationNodeAttributes, CommentReaction,
+    ClassificationNode, ClassificationNodeAttributes, CommentIdentityRef, CommentReaction,
     QueryHierarchyItem, WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink,
     WorkItemReference, WorkItemRelation, WorkItemRelationAttributes, WorkItemUpdate,
 };

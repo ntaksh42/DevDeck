@@ -1,0 +1,115 @@
+import { expect, test } from "@playwright/test";
+
+test("replies and resolves PR threads in Inbox using the keyboard", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const list = page.getByRole("listbox", { name: "Inbox items" });
+  const row = list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
+  await row.click();
+  const reply = page.getByPlaceholder("Reply…", { exact: true });
+  await expect(reply).toBeVisible();
+  await list.focus();
+  await page.keyboard.press("m");
+  await expect(reply).toBeFocused();
+  await reply.fill("Confirmed the null handling in Inbox.");
+  await page.keyboard.press("Control+Enter");
+  await expect(row).toHaveCount(0);
+  await expect(list.getByRole("option", { selected: true })).toBeFocused();
+
+  const next = list.getByRole("option").filter({ hasText: "!189 " });
+  await next.click();
+  const resolve = page.getByRole("button", { name: /^Resolve \+ Done/ });
+  await resolve.focus();
+  await page.keyboard.press("Enter");
+  await expect(next).toHaveCount(0);
+  await expect(list.getByRole("option", { selected: true })).toBeFocused();
+});
+
+test("Ctrl+Enter opens the browser from Inbox preview but submits in the reply editor", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as Window & { openedUrls: string[] };
+    state.openedUrls = [];
+    window.open = (url) => {
+      state.openedUrls.push(String(url));
+      return null;
+    };
+  });
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const list = page.getByRole("listbox", { name: "Inbox items" });
+  await list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" }).click();
+  const preview = page.locator('[data-primary-preview="true"]').filter({ has: page.getByRole("heading", { name: /!42/ }) });
+  await preview.focus();
+  await page.keyboard.press("Control+Enter");
+  const urls = () => page.evaluate(() => (window as Window & { openedUrls: string[] }).openedUrls);
+  await expect.poll(urls).toEqual(["https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42"]);
+  const reply = page.getByPlaceholder("Reply…", { exact: true });
+  await reply.fill("Reply instead of opening a browser.");
+  await page.keyboard.press("Control+Enter");
+  await expect(list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" })).toHaveCount(0);
+  expect(await urls()).toHaveLength(1);
+});
+
+test("finishes, undoes and snoozes Inbox items with the keyboard alone", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const list = page.getByRole("listbox", { name: "Inbox items" });
+  const first = list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
+  await first.click();
+  const selected = list.getByRole("option", { selected: true });
+
+  // E finishes the item; the next row is selected and keeps focus.
+  await page.keyboard.press("e");
+  await expect(first).toHaveCount(0);
+  await expect(selected).toBeFocused();
+  await expect(page.getByRole("status").filter({ hasText: "Marked done" })).toBeVisible();
+
+  // U puts it back and selects it again.
+  await page.keyboard.press("u");
+  await expect(selected).toContainText("!42 Add pull request search dashboard");
+  await expect(selected).toBeFocused();
+
+  // Z opens the snooze menu; a number picks a preset and focus returns to the list.
+  await page.keyboard.press("z");
+  await expect(page.getByRole("menu", { name: "Snooze until" })).toBeVisible();
+  await page.keyboard.press("2");
+  await expect(page.getByRole("menu", { name: "Snooze until" })).toHaveCount(0);
+  await expect(first).toHaveCount(0);
+  await expect(selected).toBeFocused();
+  await expect(page.getByRole("button", { name: "Snoozed 1" })).toBeVisible();
+});
+
+test("shows the commented code and the PR summary without leaving Inbox", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const list = page.getByRole("listbox", { name: "Inbox items" });
+  const row = list.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
+  await expect(row).toContainText("dashboard.ts:7");
+  await row.click();
+  const context = page.getByRole("region", { name: "Context" });
+  await expect(context.locator('[data-commented-line="true"]')).toContainText("options.refreshIntervalMs ?? 30000");
+  await expect(context).toContainText("open conversation");
+});
+
+test("pastes a clipboard image and posts a PR reply with the keyboard", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const row = page.getByRole("option").filter({ hasText: "!42 Add pull request search dashboard" });
+  await row.click();
+  const reply = page.getByPlaceholder("Reply…", { exact: true });
+  await reply.fill("Screenshot:");
+  await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    const png = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PNG encoding failed")));
+    });
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+  });
+  await reply.press("End");
+  await reply.press("Control+V");
+  await expect(reply).toHaveValue(/Screenshot:\s+!\[Pasted image\]/);
+  await expect(reply).toBeFocused();
+  await reply.press("Control+Enter");
+  await expect(row).toHaveCount(0);
+});

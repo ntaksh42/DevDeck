@@ -10,6 +10,11 @@ import { sortLabels as reviewLabels, type SortKey as ReviewKey } from "./myRevie
 import { sortLabels as createdLabels, type SortKey as CreatedKey } from "./myPullRequestsTypes";
 import { PR_SEARCH_COLUMN_LABELS, type PrSearchColumnKey } from "./PrSearchTypes";
 
+// "Copy as Link" label, matching the single-row `l` Markdown link: "!123 Title".
+export function prLinkTarget(pr: { pullRequestId: number; title: string; webUrl?: string | null }) {
+  return { text: `!${pr.pullRequestId} ${pr.title}`, url: pr.webUrl };
+}
+
 // ID and title cells carry the PR link, like the grid's own ID button.
 const LINKED_KEYS = ["pullRequestId", "title"];
 

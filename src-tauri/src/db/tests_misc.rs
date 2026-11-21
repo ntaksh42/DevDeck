@@ -1,6 +1,7 @@
 use rusqlite::params;
 use tempfile::NamedTempFile;
 
+use super::pr_comment_seen::{get_pr_comment_seen, set_pr_comment_seen};
 use super::snooze::{list_snoozed_items, upsert_snoozed_item};
 use super::test_support::make_org_draft;
 use super::*;
@@ -162,6 +163,21 @@ fn app_settings_can_be_saved_and_cleared() {
             work_item_result_folder_path: Some("C:/reports/work-items".to_string()),
             show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
             agent_command: None,
+            codex_command: Some("codex exec {notes}".to_string()),
+            default_agent: Some("codex".to_string()),
+            agent_auto_post_enabled: true,
+            claude_model: Some("opus".to_string()),
+            codex_model: None,
+            claude_model_choices: None,
+            codex_model_choices: Some("gpt-5.1, gpt-5.1-mini".to_string()),
+            agent_workspace_path: Some("C:/src/workspace".to_string()),
+            inbox_insight_enabled: true,
+            inbox_insight_model: Some("sonnet".to_string()),
+            inbox_insight_max_per_sync: 99,
+            auto_agent_enabled: true,
+            auto_agent_max_per_sync: 99,
+            auto_agent_interval_minutes: 99999,
+            auto_agent_pipelines_enabled: true,
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,
             notification_content_preview_enabled: false,
@@ -207,6 +223,13 @@ fn app_settings_can_be_saved_and_cleared() {
     assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);
     assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
     assert!(saved.read_only_validation_mode_enabled);
+    assert!(saved.inbox_insight_enabled);
+    assert_eq!(saved.inbox_insight_model.as_deref(), Some("sonnet"));
+    assert_eq!(saved.inbox_insight_max_per_sync, 10);
+    assert!(saved.auto_agent_enabled);
+    assert_eq!(saved.auto_agent_max_per_sync, 10);
+    assert_eq!(saved.auto_agent_interval_minutes, 1440);
+    assert!(saved.auto_agent_pipelines_enabled);
     assert!(saved.desktop_notifications_enabled);
     assert!(!saved.notification_content_preview_enabled);
     assert!(saved.notify_work_item_assignments);
@@ -231,6 +254,44 @@ fn app_settings_can_be_saved_and_cleared() {
 }
 
 #[test]
+fn legacy_approval_setting_does_not_disable_automation_and_is_removed_on_save() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+    for (key, value) in [
+        ("auto_agent_enabled", "true"),
+        ("auto_agent_approval_enabled", "true"),
+        ("auto_agent_max_per_sync", "4"),
+        ("auto_agent_interval_minutes", "30"),
+    ] {
+        conn.execute(
+            "INSERT INTO app_settings(key, value, updated_at) VALUES (?1, ?2, '')",
+            params![key, value],
+        )
+        .unwrap();
+    }
+
+    let settings = get_app_settings(&conn).unwrap();
+    assert!(settings.auto_agent_enabled);
+    assert_eq!(settings.auto_agent_max_per_sync, 4);
+    assert_eq!(settings.auto_agent_interval_minutes, 30);
+    assert!(serde_json::to_value(&settings)
+        .unwrap()
+        .get("autoAgentApprovalEnabled")
+        .is_none());
+
+    let saved = update_app_settings(&conn, settings.clone()).unwrap();
+    assert_eq!(saved, settings);
+    let legacy_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM app_settings WHERE key = 'auto_agent_approval_enabled'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(legacy_rows, 0);
+}
+
+#[test]
 fn cascade_delete_clears_cache() {
     let conn = Connection::open_in_memory().unwrap();
     migrate(&conn).unwrap();
@@ -241,12 +302,6 @@ fn cascade_delete_clears_cache() {
         params!["org1", "p1", "P1", 1_i64, "Test task"],
     )
     .unwrap();
-    conn.execute(
-        r#"INSERT OR REPLACE INTO commits(org_id, project_id, project_name, repository_id, repository_name, commit_id, comment)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
-        params!["org1", "p1", "P1", "r1", "Repo", "sha1", "initial commit"],
-    )
-    .unwrap();
 
     let wi_count: i64 = conn
         .query_row("SELECT count(*) FROM work_items", [], |r| r.get(0))
@@ -254,13 +309,7 @@ fn cascade_delete_clears_cache() {
     let fts_wi: i64 = conn
         .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
         .unwrap();
-    let c_count: i64 = conn
-        .query_row("SELECT count(*) FROM commits", [], |r| r.get(0))
-        .unwrap();
-    let fts_c: i64 = conn
-        .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!((wi_count, fts_wi, c_count, fts_c), (1, 1, 1, 1));
+    assert_eq!((wi_count, fts_wi), (1, 1));
 
     conn.execute("DELETE FROM organizations WHERE id = 'org1'", [])
         .unwrap();
@@ -271,13 +320,7 @@ fn cascade_delete_clears_cache() {
     let fts_wi: i64 = conn
         .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
         .unwrap();
-    let c_count: i64 = conn
-        .query_row("SELECT count(*) FROM commits", [], |r| r.get(0))
-        .unwrap();
-    let fts_c: i64 = conn
-        .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!((wi_count, fts_wi, c_count, fts_c), (0, 0, 0, 0));
+    assert_eq!((wi_count, fts_wi), (0, 0));
 }
 
 #[test]

@@ -1,17 +1,22 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-mod result_files;
+pub(crate) mod result_files;
 mod result_html;
 
 use serde::{Deserialize, Serialize};
 
 use chrono::Utc;
 
-use crate::agent_notes::{ensure_guide, NoteTarget};
+use crate::agent_notes::{
+    ensure_guide, ensure_skills, migrate_legacy_notes, notes_root, NoteTarget,
+};
 
 use crate::db::{
-    AppDatabase, AppSettings, NotificationRule, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
+    clamp_auto_agent_interval_minutes, clamp_auto_agent_max_per_sync,
+    clamp_inbox_insight_max_per_sync, AppDatabase, AppSettings, NotificationRule,
+    DEFAULT_AUTO_AGENT_INTERVAL_MINUTES, DEFAULT_AUTO_AGENT_MAX_PER_SYNC,
+    DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
     DEFAULT_REVIEW_STALE_THRESHOLD_DAYS, DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
     REVIEW_STALE_THRESHOLD_DAY_OPTIONS, WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
@@ -26,6 +31,36 @@ pub struct UpdateAppSettingsInput {
     pub show_window_hotkey: Option<String>,
     #[serde(default)]
     pub agent_command: Option<String>,
+    #[serde(default)]
+    pub codex_command: Option<String>,
+    #[serde(default)]
+    pub default_agent: Option<String>,
+    #[serde(default)]
+    pub agent_auto_post_enabled: Option<bool>,
+    #[serde(default)]
+    pub claude_model: Option<String>,
+    #[serde(default)]
+    pub codex_model: Option<String>,
+    #[serde(default)]
+    pub claude_model_choices: Option<String>,
+    #[serde(default)]
+    pub codex_model_choices: Option<String>,
+    #[serde(default)]
+    pub agent_workspace_path: Option<String>,
+    #[serde(default)]
+    pub inbox_insight_enabled: Option<bool>,
+    #[serde(default)]
+    pub inbox_insight_model: Option<String>,
+    #[serde(default)]
+    pub inbox_insight_max_per_sync: Option<i64>,
+    #[serde(default)]
+    pub auto_agent_enabled: Option<bool>,
+    #[serde(default)]
+    pub auto_agent_max_per_sync: Option<i64>,
+    #[serde(default)]
+    pub auto_agent_interval_minutes: Option<i64>,
+    #[serde(default)]
+    pub auto_agent_pipelines_enabled: Option<bool>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
     pub notification_content_preview_enabled: Option<bool>,
@@ -58,6 +93,19 @@ pub struct GetReviewResultPreviewInput {
 #[serde(rename_all = "camelCase")]
 pub struct GetWorkItemResultPreviewInput {
     pub work_item_id: i64,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ResultTarget {
+    PullRequest,
+    WorkItem,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListResultItemIdsInput {
+    pub target: ResultTarget,
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,7 +161,7 @@ impl SettingsService {
 
     pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
         let saved = self.db.update_app_settings(settings)?;
-        place_agent_guides(&saved);
+        prepare_agent_notes(&saved, &notes_root(&self.db));
         Ok(saved)
     }
 
@@ -175,20 +223,26 @@ impl SettingsService {
     }
 }
 
-/// Places or refreshes the agent notes guide in both result folders. Best
-/// effort: a folder that cannot take the guide must not block saving the rest
-/// of the settings or starting the app.
-pub(crate) fn place_agent_guides(settings: &AppSettings) {
+/// Moves notes left in both result folders by older versions into
+/// `notes_root`, then places or refreshes the agent notes guide there and the
+/// `devdeck-notes` skill for the installed agents. Best
+/// effort: a folder that cannot take either must not block saving the rest of
+/// the settings or starting the app.
+pub(crate) fn prepare_agent_notes(settings: &AppSettings, notes_root: &Path) {
     for (folder, target) in [
         (&settings.work_item_result_folder_path, NoteTarget::WorkItem),
         (&settings.review_result_folder_path, NoteTarget::PullRequest),
     ] {
         if let Some(folder) = folder {
-            if let Err(err) = ensure_guide(Path::new(folder), target) {
+            if let Err(err) = migrate_legacy_notes(Path::new(folder), target, notes_root) {
+                tracing::warn!(%folder, error = %err, "could not move legacy agent notes");
+            }
+            if let Err(err) = ensure_guide(Path::new(folder), target, notes_root) {
                 tracing::warn!(%folder, error = %err, "could not place agent notes guide");
             }
         }
     }
+    ensure_skills(notes_root);
 }
 
 pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
@@ -197,6 +251,34 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         work_item_result_folder_path: normalize_path(input.work_item_result_folder_path),
         show_window_hotkey: normalize_path(input.show_window_hotkey),
         agent_command: normalize_path(input.agent_command),
+        codex_command: normalize_path(input.codex_command),
+        claude_model: normalize_path(input.claude_model),
+        codex_model: normalize_path(input.codex_model),
+        claude_model_choices: normalize_path(input.claude_model_choices),
+        codex_model_choices: normalize_path(input.codex_model_choices),
+        // Only Codex is stored; anything else means the default, Claude Code.
+        default_agent: input
+            .default_agent
+            .filter(|agent| agent == "codex")
+            .map(|_| "codex".to_string()),
+        agent_auto_post_enabled: input.agent_auto_post_enabled.unwrap_or(false),
+        agent_workspace_path: normalize_path(input.agent_workspace_path),
+        inbox_insight_enabled: input.inbox_insight_enabled.unwrap_or(false),
+        inbox_insight_model: normalize_path(input.inbox_insight_model),
+        inbox_insight_max_per_sync: input
+            .inbox_insight_max_per_sync
+            .map(clamp_inbox_insight_max_per_sync)
+            .unwrap_or(DEFAULT_INBOX_INSIGHT_MAX_PER_SYNC),
+        auto_agent_enabled: input.auto_agent_enabled.unwrap_or(false),
+        auto_agent_max_per_sync: input
+            .auto_agent_max_per_sync
+            .map(clamp_auto_agent_max_per_sync)
+            .unwrap_or(DEFAULT_AUTO_AGENT_MAX_PER_SYNC),
+        auto_agent_interval_minutes: input
+            .auto_agent_interval_minutes
+            .map(clamp_auto_agent_interval_minutes)
+            .unwrap_or(DEFAULT_AUTO_AGENT_INTERVAL_MINUTES),
+        auto_agent_pipelines_enabled: input.auto_agent_pipelines_enabled.unwrap_or(false),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
         notification_content_preview_enabled: input
@@ -292,6 +374,23 @@ impl SettingsService {
             file_path: file_path.display().to_string(),
             content,
         }))
+    }
+
+    /// Ids of the items that have a result file, for the grid marks. A folder
+    /// that is not set or does not exist yields no ids rather than an error.
+    pub fn result_item_ids(&self, input: ListResultItemIdsInput) -> Result<Vec<i64>> {
+        let settings = self.db.get_app_settings()?;
+        let folder_path = match input.target {
+            ResultTarget::PullRequest => settings.review_result_folder_path,
+            ResultTarget::WorkItem => settings.work_item_result_folder_path,
+        };
+        let Some(folder) = folder_path.map(PathBuf::from).filter(|path| path.is_dir()) else {
+            return Ok(Vec::new());
+        };
+        match input.target {
+            ResultTarget::PullRequest => result_files::list_review_result_ids(&folder),
+            ResultTarget::WorkItem => result_files::list_work_item_result_ids(&folder),
+        }
     }
 
     pub fn work_item_result_preview(

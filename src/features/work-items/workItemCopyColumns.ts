@@ -34,6 +34,7 @@ function cellText(item: WorkItemSummary, key: WiSortKey): string {
 export function workItemCopyColumns(
   visibleColumns: WiSortKey[],
   extraColumns: string[],
+  columnLabel: (referenceName: string) => string = extraColumnLabel,
 ): CopyColumn<WorkItemSummary>[] {
   return [
     ...visibleColumns.map((key) => ({
@@ -42,7 +43,7 @@ export function workItemCopyColumns(
       href: key === "id" || key === "title" ? (item: WorkItemSummary) => item.webUrl : undefined,
     })),
     ...extraColumns.map((referenceName) => ({
-      label: extraColumnLabel(referenceName),
+      label: columnLabel(referenceName),
       text: (item: WorkItemSummary) => extraFieldValue(item, referenceName) ?? "",
     })),
   ];

@@ -26,7 +26,7 @@ function failedStages(nodes: TreeNode[]): { identifier: string; name: string }[]
 }
 
 const BUTTON =
-  "inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-2xs text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 // Re-runs one failed stage of a finished run instead of queueing a whole new
 // run: "Retry failed jobs" re-runs only what failed, "Retry all jobs" the whole

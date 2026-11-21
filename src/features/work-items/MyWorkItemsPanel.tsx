@@ -1,15 +1,19 @@
 import { useState, useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, Star } from 'lucide-react';
-import { listMyWorkItems, listFollowedWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
+import { listMyWorkItems, listFollowedWorkItems, runAssignedWorkItemInvestigations, commandErrorMessage } from '@/lib/azdoCommands';
+import { pushToast } from '@/lib/toast';
+import { ConfirmDialog, useConfirm } from '@/components/ConfirmDialog';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
+import { HeaderToolbarPortal } from '@/components/HeaderToolbarSlot';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemFilterBar } from './WorkItemFilterBar';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { toMatchTarget } from './workItemMatchTarget';
+import { InvestigateSplitButton, type InvestigateAgentChoice } from './InvestigateSplitButton';
 import { workItemQueryKeys } from './queryKeys';
 
 type WorkItemScope = 'assigned' | 'followed';
@@ -36,6 +40,20 @@ export function MyWorkItemsPanel() {
     staleTime: 60_000,
   });
   const query = scope === 'assigned' ? assignedQuery : followedQuery;
+  const { confirm, dialogProps } = useConfirm();
+  const [investigateAgent, setInvestigateAgent] = useState<InvestigateAgentChoice>('');
+  const investigateAll = useMutation({
+    mutationFn: () => runAssignedWorkItemInvestigations(investigateAgent || undefined),
+    onSuccess: (count) =>
+      pushToast(
+        count === 0
+          ? 'No assigned work item is waiting for an investigation.'
+          : `Investigating ${count} work items, three at a time. Results appear in the result folder.`,
+        undefined,
+        5000,
+      ),
+    onError: (error) => pushToast(commandErrorMessage(error)),
+  });
 
   const allResults = query.data ?? [];
   const results = useMemo(() => {
@@ -52,18 +70,19 @@ export function MyWorkItemsPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <HeaderToolbarPortal>
+        <div className="flex shrink-0 items-center gap-2">
         <div
           role="group"
           aria-label="Work item scope"
-          className="inline-flex h-8 items-center rounded-md border border-border p-0.5"
+          className="inline-flex h-7 items-center rounded-md border border-border p-0.5"
         >
           <button
             type="button"
             aria-pressed={scope === 'assigned'}
             onClick={() => setScope('assigned')}
             title="Work items assigned to you"
-            className={`inline-flex h-7 items-center rounded px-2 text-xs font-medium ${scope === 'assigned' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
+            className={`inline-flex h-5 items-center rounded px-2 text-xs font-medium ${scope === 'assigned' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
           >
             Assigned to me
           </button>
@@ -72,7 +91,7 @@ export function MyWorkItemsPanel() {
             aria-pressed={scope === 'followed'}
             onClick={() => setScope('followed')}
             title="Work items you are following"
-            className={`inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium ${scope === 'followed' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
+            className={`inline-flex h-5 items-center gap-1 rounded px-2 text-xs font-medium ${scope === 'followed' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
           >
             <Star className="h-3 w-3" aria-hidden="true" />
             Followed
@@ -82,11 +101,26 @@ export function MyWorkItemsPanel() {
           type="button"
           onClick={() => setCreateDraft({})}
           title="Create a new work item"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           New item
         </button>
+        <InvestigateSplitButton
+          agent={investigateAgent}
+          onAgentChange={setInvestigateAgent}
+          pending={investigateAll.isPending}
+          title="Investigate every unhandled work item assigned to you, three at a time"
+          onRun={() =>
+            confirm({
+              title: 'Investigate all assigned work items?',
+              message:
+                'The agent investigates every New or Active work item assigned to you that was changed in the last 30 days and has no result yet, three at a time. This uses the agent and its model for each one.',
+              confirmLabel: 'Start',
+              onConfirm: () => investigateAll.mutate(),
+            })
+          }
+        />
         <WorkItemTemplatesPanel
           onApplyTemplate={(fields) =>
             setCreateDraft({
@@ -99,12 +133,13 @@ export function MyWorkItemsPanel() {
             })
           }
         />
-        {createdStatus ? (
-          <span role="status" className="truncate text-[11px] text-muted-foreground">
-            {createdStatus}
-          </span>
-        ) : null}
-      </div>
+        </div>
+      </HeaderToolbarPortal>
+      {createdStatus ? (
+        <span role="status" className="shrink-0 truncate text-2xs text-muted-foreground">
+          {createdStatus}
+        </span>
+      ) : null}
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : null}
@@ -126,8 +161,14 @@ export function MyWorkItemsPanel() {
         triageScope={`${scope === 'assigned' ? 'myWorkItems' : 'followedWorkItems'}:${selectedOrganizationId}`}
         snoozeOrganizationId={selectedOrganizationId}
         filterBar={<WorkItemFilterBar value={filter} onChange={setFilter} />}
+        agentList={{
+          id: scope === 'assigned' ? 'my-work-items' : 'followed-work-items',
+          title: scope === 'assigned' ? 'My work items (assigned to me)' : 'Followed work items',
+          notes: [filter.trim() && `Text filter: ${filter.trim()}`],
+        }}
       />
 
+      {dialogProps ? <ConfirmDialog {...dialogProps} /> : null}
       {createDraft ? (
         <CreateWorkItemDialog
           initialDraft={createDraft}

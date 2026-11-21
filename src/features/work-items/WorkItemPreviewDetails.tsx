@@ -13,7 +13,6 @@ import type {
 import { richFieldHtml } from "./workItemHtml";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
-import { Columns2, Rows2 } from "lucide-react";
 import type { CustomPreviewField, PreviewFieldKey } from "./previewFieldsStorage";
 import { TitleEditor } from "./PreviewEditors";
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
@@ -25,7 +24,6 @@ import { RichHtmlFrame } from "./RichHtmlFrame";
 import { PreviewToolbarPortal } from "@/components/PreviewToolbarSlot";
 import { WorkItemCommentsSection } from "./WorkItemCommentsSection";
 import { WorkItemHistorySection } from "./WorkItemHistorySection";
-import { FieldConfigMenu } from "./FieldConfigMenu";
 import { WorkItemLinksSection } from "./WorkItemLinksSection";
 import {
   isWidePreviewField,
@@ -39,6 +37,7 @@ export { workItemStateDotClass, workItemTypeColor } from "./WorkItemBadges";
 /** Panel width (CSS px, before zoom) at which comments go beside the details by default. */
 const SIDE_BY_SIDE_MIN_WIDTH = 880;
 const COMMENTS_LAYOUT_KEY = "azdodeck:wiPreview:commentsLayout";
+const FIELDS_EXPANDED_KEY = "azdodeck:wiPreview:fieldsExpanded";
 type CommentsLayout = "auto" | "side" | "below";
 
 export function WorkItemPreviewDetails({
@@ -52,22 +51,18 @@ export function WorkItemPreviewDetails({
   deletingCommentId,
   editingCommentId,
   editPending,
-  actionsControl,
   deletePending,
   mentionDisplayNames,
   recentMentionOptions,
   mentionPriorityNames,
   selfOrg,
   onMentionApplied,
-  onCustomPreviewFieldsChange,
   onDeleteComment,
   onEditComment,
   onToggleCommentReaction,
   reactionPendingCommentId,
-  onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
-  presetsControl,
   renderCustomFieldControl,
   resolveImageSource,
   selectedFieldKeys,
@@ -78,12 +73,11 @@ export function WorkItemPreviewDetails({
   onTitleChange,
   titlePending,
   zoom,
-  zoomControl,
+  renderToolbar,
   composer,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
-  actionsControl?: ReactNode;
   areaControl?: ReactNode;
   assigneeControl: ReactNode;
   iterationControl?: ReactNode;
@@ -98,13 +92,10 @@ export function WorkItemPreviewDetails({
   mentionPriorityNames: string[];
   selfOrg: Organization | undefined;
   onMentionApplied: (candidate: MentionCandidate) => void;
-  onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onEditComment: (commentId: number, markdown: string) => void;
   onToggleCommentReaction?: (commentId: number, reactionType: string, engaged: boolean) => void;
   reactionPendingCommentId?: number | null;
-  onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
-  presetsControl?: ReactNode;
   priorityControl: ReactNode;
   reasonControl: ReactNode;
   renderCustomFieldControl: (field: CustomPreviewField) => ReactNode;
@@ -117,7 +108,8 @@ export function WorkItemPreviewDetails({
   onTitleChange: (title: string) => void;
   titlePending: boolean;
   zoom: number;
-  zoomControl?: ReactNode;
+  /** Tab-strip controls; gets the comments layout state that lives here. */
+  renderToolbar: (layout: { sideBySide: boolean; onToggle: () => void }) => ReactNode;
   /** The new-comment box; follows the comments into the side column. */
   composer?: ReactNode;
 }) {
@@ -136,6 +128,16 @@ export function WorkItemPreviewDetails({
     ),
   );
   const sideBySide = commentsLayout === "side" || (commentsLayout === "auto" && wideEnough);
+
+  const [fieldsExpanded, setFieldsExpanded] = useState<boolean>(() =>
+    readStoredJson<boolean>(FIELDS_EXPANDED_KEY, (raw) => (raw === true ? true : undefined), false),
+  );
+
+  function toggleFieldsExpanded() {
+    const next = !fieldsExpanded;
+    setFieldsExpanded(next);
+    writeStoredJson(FIELDS_EXPANDED_KEY, next);
+  }
 
   function toggleCommentsLayout() {
     const next = sideBySide ? "below" : "side";
@@ -209,6 +211,22 @@ export function WorkItemPreviewDetails({
     sideBySide,
     visible: visibleSections,
   });
+  // Only State / Assigned / Priority stay in view; the other field pills sit
+  // behind a "+N" toggle so the header isn't three rows of chips.
+  const isPrimaryField = (editable: string | undefined) =>
+    editable === "state" || editable === "assignee" || editable === "priority";
+  const secondaryFieldCount =
+    selectedFieldDefinitions.filter((field) => !isPrimaryField(field.editable)).length +
+    customPreviewFields.length;
+  // Hidden with CSS rather than unmounted so the pickers keep their state.
+  function wrapSecondaryField(node: ReactNode, key: string, editable: string | undefined) {
+    if (isPrimaryField(editable)) return node;
+    return (
+      <span key={key} className={fieldsExpanded ? "contents" : "hidden"}>
+        {node}
+      </span>
+    );
+  }
   const mainColumn = sideBySide ? "main" : null;
   const commentsInSide = sideBySide && sectionColumn(sections.layout, "comments") === "side";
 
@@ -218,7 +236,12 @@ export function WorkItemPreviewDetails({
       case "acceptanceCriteria": {
         const title = id === "description" ? "Description" : "Acceptance Criteria";
         return (
-          <PreviewSection accentColor="border-l-primary" collapseId={id} title={title}>
+          <PreviewSection
+            accentColor="border-l-primary"
+            primary={id === "description"}
+            collapseId={id}
+            title={title}
+          >
             {/* Unframed: the section band already marks where the field starts. */}
             <RichHtmlFrame
               baseUrl={preview.webUrl}
@@ -249,10 +272,12 @@ export function WorkItemPreviewDetails({
       ref={rootRef}
       aria-keyshortcuts="Control+P"
       aria-label="Work item preview"
-      className={`min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02] ${
+      className={`min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-[13px] outline-none focus:bg-primary/[0.02] ${
         sections.dragging ? "[&_iframe]:pointer-events-none" : ""
       }`}
       data-primary-preview="true"
+      data-pane-editable="true"
+      data-focus-pane={sideBySide ? "work-item-details" : undefined}
       {...sections.columnDropProps(mainColumn)}
       style={sideBySide ? undefined : { zoom }}
       onKeyDown={(event) => {
@@ -277,7 +302,7 @@ export function WorkItemPreviewDetails({
         <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-mono text-[11px] font-bold leading-5 text-slate-600 dark:text-slate-300">
+            <span className="shrink-0 font-mono text-2xs font-bold leading-5 text-muted-foreground">
               #{preview.id}
             </span>
             {/* Type and state stay whole; the "updated" text is what gives way. */}
@@ -293,7 +318,7 @@ export function WorkItemPreviewDetails({
             ) : null}
             {preview.changedDate ? (
               <span
-                className="hidden min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
+                className="hidden min-w-0 truncate text-2xs font-medium text-muted-foreground sm:inline"
                 title={preview.changedDate}
               >
                 updated {formatRelativeDate(preview.changedDate)}
@@ -304,33 +329,7 @@ export function WorkItemPreviewDetails({
           {/* In the dock tab strip when the host provides a slot (Work Items
               grid); inline at the end of this row otherwise (board, PR pane). */}
           <PreviewToolbarPortal>
-            <div className="flex shrink-0 items-center gap-1">
-              {actionsControl}
-              {presetsControl}
-              {zoomControl}
-              <button
-                type="button"
-                onClick={toggleCommentsLayout}
-                aria-pressed={sideBySide}
-                aria-label={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
-                title={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
-                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {sideBySide ? (
-                  <Rows2 className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-              </button>
-              <FieldConfigMenu
-                organizationId={preview.organizationId}
-                projectId={preview.projectId}
-                selectedFieldKeys={selectedFieldKeys}
-                onSelectedFieldKeysChange={onSelectedFieldKeysChange}
-                customPreviewFields={customPreviewFields}
-                onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
-              />
-            </div>
+            {renderToolbar({ sideBySide, onToggle: toggleCommentsLayout })}
           </PreviewToolbarPortal>
         </div>
         {/* Chips instead of a fixed-column grid: a short value (e.g. Priority
@@ -339,7 +338,7 @@ export function WorkItemPreviewDetails({
             block doesn't leave dead space when values are short. */}
         <div className="flex flex-wrap items-center gap-1 pt-1.5">
           {selectedFieldDefinitions.map((field) =>
-            field.editable === "state" ? (
+            wrapSecondaryField(field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
                 {stateControl}
               </PreviewControl>
@@ -382,13 +381,27 @@ export function WorkItemPreviewDetails({
                 value={previewFieldValue(preview, field.key) ?? "—"}
                 wide={isWidePreviewField(field.key)}
               />
+            ), field.key, field.editable),
+          )}
+          {customPreviewFields.map((field) =>
+            wrapSecondaryField(
+              <Fragment key={field.referenceName}>
+                {renderCustomFieldControl(field)}
+              </Fragment>,
+              field.referenceName,
+              undefined,
             ),
           )}
-          {customPreviewFields.map((field) => (
-            <Fragment key={field.referenceName}>
-              {renderCustomFieldControl(field)}
-            </Fragment>
-          ))}
+          {secondaryFieldCount > 0 ? (
+            <button
+              type="button"
+              aria-expanded={fieldsExpanded}
+              onClick={toggleFieldsExpanded}
+              className="rounded px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-secondary focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {fieldsExpanded ? "Less ▴" : `+${secondaryFieldCount} ▾`}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -420,25 +433,33 @@ export function WorkItemPreviewDetails({
       {sideBySide ? (
         <div className="flex min-h-0 flex-1" style={{ zoom }}>
           <div className="flex min-w-0 flex-1 flex-col">
-            {details}
+            <div data-focus-frame className="flex min-h-0 flex-1 flex-col">
+              {details}
+            </div>
             {commentsInSide ? null : composer}
           </div>
           <div className="flex w-[42%] min-w-48 max-w-xl shrink-0 flex-col border-l border-border bg-card text-xs">
-            <div
-              className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 ${
-                sections.dragging ? "[&_iframe]:pointer-events-none" : ""
-              }`}
-              {...sections.columnDropProps("side")}
-            >
-              {sections.renderColumn("side", renderSection)}
-              {sections.appendIndicator("side")}
-              {commentsInSide && !hasComments ? (
-                <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
-              ) : sections.visibleIn("side").length === 0 ? (
-                <p className="rounded border border-dashed border-border px-2 py-3 text-center text-[11px] text-muted-foreground">
-                  Drag a section header here (or focus it and press Alt+→).
-                </p>
-              ) : null}
+            <div data-focus-frame className="flex min-h-0 flex-1 flex-col">
+              <div
+                data-focus-pane="work-item-side"
+                data-pane-editable={commentsInSide && composer ? "true" : undefined}
+                data-pane-focus-target="true"
+                tabIndex={-1}
+                className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+                  sections.dragging ? "[&_iframe]:pointer-events-none" : ""
+                }`}
+                {...sections.columnDropProps("side")}
+              >
+                {sections.renderColumn("side", renderSection)}
+                {sections.appendIndicator("side")}
+                {commentsInSide && !hasComments ? (
+                  <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
+                ) : sections.visibleIn("side").length === 0 ? (
+                  <p className="rounded border border-dashed border-border px-2 py-3 text-center text-2xs text-muted-foreground">
+                    Drag a section header here (or focus it and press Alt+→).
+                  </p>
+                ) : null}
+              </div>
             </div>
             {commentsInSide ? composer : null}
           </div>

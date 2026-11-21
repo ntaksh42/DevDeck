@@ -1,0 +1,236 @@
+import type { RefObject } from "react";
+import type { MentionCandidate } from "@/lib/azdoCommands";
+import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
+import {
+  inboxKindClass,
+  inboxKindLabel,
+  isPullRequestItem,
+  isThreadItem,
+  isWorkItemItem,
+  shortRefName,
+  type InboxEntry,
+  type InboxLink,
+  type InboxTab,
+} from "./inboxPresentation";
+import {
+  ACTION_BUTTON,
+  type ReplySeed,
+  Kbd,
+  ThreadPanel,
+  WorkItemPanel,
+} from "./InboxPreviewPanels";
+import type { InboxDetail } from "./useInboxDetail";
+import { InboxInsightPanel } from "./InboxInsightPanel";
+import { InboxContextCode, InboxContextDescription, InboxContextSummary } from "./InboxContext";
+import { InboxRelatedLinks } from "./InboxRelatedLinks";
+
+function bandTitle(item: InboxEntry): string {
+  if (isThreadItem(item)) return "Thread";
+  if (isWorkItemItem(item)) return item.kind === "wi_mention" || item.kind === "wi_reply" ? "Discussion" : "Work item";
+  return "Details";
+}
+
+export function InboxPreview({
+  item,
+  tab,
+  zoom,
+  detail,
+  readOnly,
+  previewRef,
+  mentionSearch,
+  resolveImageSource,
+  onReply,
+  onReplyAndResolve,
+  onToggleStatus,
+  onComment,
+  onResolveAndDone,
+  onDone,
+  onReopen,
+  onSnooze,
+  onWake,
+  onOpenLink,
+  contextExpanded,
+  onToggleContext,
+  draft,
+  onUseDraft,
+  onGenerateInsight,
+}: {
+  item: InboxEntry | null;
+  tab: InboxTab;
+  zoom: number;
+  detail: InboxDetail;
+  readOnly: boolean;
+  previewRef: RefObject<HTMLDivElement | null>;
+  mentionSearch: (query: string) => Promise<MentionCandidate[]>;
+  resolveImageSource: (url: string) => Promise<string | null>;
+  onReply: (content: string) => Promise<void>;
+  onReplyAndResolve: (content: string) => Promise<void>;
+  onToggleStatus: () => void;
+  onComment: (markdown: string) => Promise<void>;
+  onResolveAndDone: () => void;
+  onDone: () => void;
+  onReopen: () => void;
+  onSnooze: (anchor: DOMRect) => void;
+  onWake: () => void;
+  onOpenLink: (link: InboxLink) => void;
+  contextExpanded: boolean;
+  onToggleContext: () => void;
+  /** Claude's reply draft, once the user asked to use it. */
+  draft?: ReplySeed;
+  onUseDraft: (text: string) => void;
+  /** Writes Claude's notes for this item now; unset when it cannot be asked. */
+  onGenerateInsight?: () => void;
+}) {
+  if (!item) {
+    return (
+      <div ref={previewRef} data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
+        <PreviewEmptyState message="Nothing needs your response." />
+      </div>
+    );
+  }
+
+  const { review, thread, workItem, links } = detail;
+  const heading = isPullRequestItem(item)
+    ? `!${item.subjectId} ${review?.title ?? item.title}`
+    : isWorkItemItem(item)
+      ? `#${item.subjectId} ${workItem?.title ?? item.title}`
+      : item.title;
+  const branches = review
+    ? `${shortRefName(review.sourceRefName)} → ${shortRefName(review.targetRefName)}`
+    : null;
+  const contextProps = { item, review, thread, workItem };
+  const editable =
+    !readOnly && !detail.isLoading && ((isThreadItem(item) && !!thread) || (isWorkItemItem(item) && !!workItem));
+  // Folded to one line each and placed after the comment, so the comment is on the first screen.
+  const folded = (
+    <>
+      {!detail.isLoading && !detail.error ? (
+        <InboxContextDescription
+          {...contextProps}
+          expanded={contextExpanded}
+          onToggleExpanded={onToggleContext}
+          resolveImageSource={resolveImageSource}
+        />
+      ) : null}
+      {!detail.isLoading ? <InboxRelatedLinks itemId={item.id} links={links} onOpen={onOpenLink} /> : null}
+    </>
+  );
+
+  return (
+    <div
+      ref={previewRef}
+      data-primary-preview="true"
+      data-pane-editable={editable ? "true" : undefined}
+      tabIndex={-1}
+      style={{ zoom }}
+      // A thread's reply box stays pinned to the bottom while its thread is in view.
+      // Children keep their height (the clamped heading would otherwise shrink
+      // away once a long thread overflows the pane).
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto [&>*]:shrink-0 px-3 py-2 outline-none [&_[data-thread-reply-area]]:sticky [&_[data-thread-reply-area]]:bottom-0 [&_[data-thread-reply-area]]:z-10 [&_[data-thread-reply-area]]:bg-card [&_[data-thread-reply-area]]:py-0.5"
+    >
+      <h2 className="line-clamp-2 text-base font-semibold leading-snug">{heading}</h2>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        <span className={`font-semibold ${inboxKindClass(item.kind)}`}>{inboxKindLabel(item.kind)}</span>
+        <span>
+          {item.projectName}
+          {item.repositoryName ? ` / ${item.repositoryName}` : ""}
+        </span>
+        {branches ? <span className="font-mono text-2xs">{branches}</span> : null}
+        <span title={formatDate(item.detectedAt)}>
+          {item.author ? `${item.author} · ` : ""}
+          {formatRelativeDate(item.detectedAt)}
+        </span>
+      </div>
+
+      {!detail.isLoading && !detail.error ? <InboxContextSummary {...contextProps} /> : null}
+      <InboxInsightPanel itemId={item.id} insight={item.insight} onUseDraft={onUseDraft} onGenerate={onGenerateInsight} />
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {tab === "open" ? (
+          <>
+            {isThreadItem(item) && thread && !thread.isResolved && !readOnly ? (
+              <button
+                type="button"
+                className={ACTION_BUTTON}
+                disabled={detail.busy}
+                onClick={onResolveAndDone}
+              >
+                Resolve + Done <Kbd>Shift+E</Kbd>
+              </button>
+            ) : null}
+            <button type="button" className={ACTION_BUTTON} onClick={onDone}>
+              Done <Kbd>E</Kbd>
+            </button>
+            <button
+              type="button"
+              className={ACTION_BUTTON}
+              onClick={(event) => onSnooze(event.currentTarget.getBoundingClientRect())}
+            >
+              Snooze <Kbd>Z</Kbd>
+            </button>
+          </>
+        ) : null}
+        {tab === "snoozed" ? (
+          <button type="button" className={ACTION_BUTTON} onClick={onWake}>
+            Unsnooze <Kbd>Z</Kbd>
+          </button>
+        ) : null}
+        {tab === "done" ? (
+          <button type="button" className={ACTION_BUTTON} onClick={onReopen}>
+            Reopen <Kbd>E</Kbd>
+          </button>
+        ) : null}
+      </div>
+
+      <h3 className="mt-2 rounded border-l-4 border-l-primary bg-info/10 px-1.5 py-0.5 text-sm font-semibold leading-5 text-foreground">
+        {bandTitle(item)}
+      </h3>
+      {detail.isLoading ? (
+        <LoadingState />
+      ) : detail.error ? (
+        <ErrorState message={detail.error} />
+      ) : null}
+
+      {isThreadItem(item) && !detail.isLoading ? (
+        <ThreadPanel
+          key={item.id}
+          item={item}
+          thread={thread}
+          busy={detail.busy}
+          readOnly={readOnly}
+          mentionSearch={mentionSearch}
+          resolveImageSource={resolveImageSource}
+          onReply={onReply}
+          onReplyAndResolve={onReplyAndResolve}
+          onToggleStatus={onToggleStatus}
+          beforeComposer={
+            <>
+              {!detail.error ? <InboxContextCode {...contextProps} /> : null}
+              {folded}
+            </>
+          }
+          draft={draft}
+        />
+      ) : null}
+      {/* Without a thread there is no composer to sit before, so the folded lines follow the panel. */}
+      {isThreadItem(item) && !thread ? folded : null}
+      {isWorkItemItem(item) && !detail.isLoading ? (
+        <WorkItemPanel
+          key={item.id}
+          item={item}
+          workItem={workItem}
+          busy={detail.busy}
+          readOnly={readOnly}
+          mentionSearch={mentionSearch}
+          resolveImageSource={resolveImageSource}
+          onComment={onComment}
+          draft={draft}
+        />
+      ) : null}
+
+      {!isThreadItem(item) ? folded : null}
+      {!isThreadItem(item) && !detail.isLoading && !detail.error ? <InboxContextCode {...contextProps} /> : null}
+    </div>
+  );
+}

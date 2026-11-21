@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildRichHtmlDocument, hydrateAuthenticatedImages } from "./workItemHtml";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
+import { bindFramePaneFocus } from "@/lib/paneFocus";
 
 export function RichHtmlFrame({
   baseUrl,
@@ -90,8 +91,9 @@ export function RichHtmlFrame({
         const doc = frame.contentDocument;
         const body = doc?.body;
         if (!body) return;
+        bindFramePaneFocus(frame);
         const syncHeight = () => {
-          const next = Math.max(minHeight, Math.ceil(body.scrollHeight));
+          const next = Math.max(minHeight, Math.ceil(Math.max(body.scrollHeight, doc.documentElement.scrollHeight)));
           setHeight(next);
           onHeight?.(next);
         };
@@ -115,6 +117,7 @@ export function RichHtmlFrame({
         if (ResizeObserverCtor) {
           const resizeObserver = new ResizeObserverCtor(syncHeight);
           resizeObserver.observe(body);
+          resizeObserver.observe(doc.documentElement);
           resizeObserverRef.current = resizeObserver;
         }
       }}

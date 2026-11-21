@@ -157,6 +157,7 @@ export function OrganizationSettings({
                   onClick={() => jumpToGroup(group.id)}
                   disabled={!matches}
                   aria-current={active ? "true" : undefined}
+                  data-grid-focus-fallback={active ? "true" : undefined}
                   className={`w-full rounded-md px-2.5 py-1.5 text-left text-sm disabled:cursor-default disabled:opacity-40 ${
                     active
                       ? "bg-secondary font-medium text-foreground"
@@ -171,7 +172,7 @@ export function OrganizationSettings({
         </ul>
       </nav>
 
-      <div ref={contentRef} className="min-w-0 space-y-5">
+      <div ref={contentRef} className="min-w-0 max-w-[900px] space-y-5">
         {filteredGroups.length === 0 ? (
           <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
             <p>No settings match “{query}”.</p>
@@ -190,7 +191,7 @@ export function OrganizationSettings({
               aria-label={group.label}
               data-settings-group={group.id}
               tabIndex={-1}
-              className="scroll-mt-1 space-y-3 outline-none"
+              className="scroll-mt-1 space-y-2 outline-none"
             >
               <p
                 aria-hidden="true"
@@ -198,11 +199,13 @@ export function OrganizationSettings({
               >
                 {group.label}
               </p>
+              <div className="divide-y divide-border rounded-md border border-border bg-card px-4">
               {group.entries.map((entry) => (
                 <div key={entry.id} data-settings-entry={entry.id} className="scroll-mt-1">
                   {entry.render(organizations)}
                 </div>
               ))}
+              </div>
             </section>
           ))
         )}

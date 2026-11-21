@@ -21,25 +21,26 @@
 //! separately from the entry rows themselves, so a reader can check "is this
 //! fresh enough" without touching the entry tables. How stale a caller is
 //! willing to accept is that caller's own policy, not part of this schema.
-//!
-//! A `pull_requests` snapshot for a scope must be that project's complete
-//! active PR list together with every reviewer of those PRs: a reader that
-//! finds the scope fresh replaces its own rows with it. A writer whose fetch
-//! was truncated must not mark the scope synced.
 
+mod pr_snapshot;
 mod pull_requests;
 mod work_items;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension};
+#[cfg(test)]
+use rusqlite::OptionalExtension;
+use rusqlite::{params, Connection};
 
 use crate::error::{AppError, Result};
 
-pub use pull_requests::{
-    read_pull_requests, read_reviewers, write_pull_requests, SharedPullRequest, SharedReviewer,
+pub(crate) use pr_snapshot::{
+    read_active_pr_snapshot, write_active_pr_snapshot, ActivePrScope, ActivePrSnapshot,
 };
+#[cfg(test)]
+pub use pull_requests::write_pull_requests;
+pub use pull_requests::{SharedPullRequest, SharedReviewer};
 pub use work_items::{upsert_work_items, write_work_items, SharedWorkItem};
 
 #[cfg(not(test))]
@@ -53,6 +54,10 @@ pub const SYNCED_BY: &str = "devdeck";
 
 #[cfg(not(test))]
 pub fn path() -> Option<PathBuf> {
+    // A fake-server session keeps its shared cache next to its own database.
+    if let Some(dir) = crate::dev_overrides::data_dir() {
+        return Some(dir.join(DIR_NAME).join(FILE_NAME));
+    }
     std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join(DIR_NAME).join(FILE_NAME))
 }
 
@@ -159,6 +164,7 @@ pub fn open_at(path: Option<PathBuf>) -> Result<Connection> {
         INSERT OR IGNORE INTO cache_meta (key, value) VALUES ('schema_version', '1');",
     )?;
     check_schema_version(&conn)?;
+    pr_snapshot::initialize(&conn)?;
     Ok(conn)
 }
 
@@ -189,6 +195,7 @@ pub const KIND_WORK_ITEMS: &str = "work_items";
 
 /// Whether anyone (this app or the other one) refreshed `(organization,
 /// project, kind)` within `max_age`. Missing rows are treated as stale.
+#[cfg(test)]
 pub fn is_fresh(
     conn: &Connection,
     organization: &str,
@@ -240,6 +247,7 @@ pub fn delete_organization(conn: &Connection, organization: &str) -> Result<()> 
         "pull_requests",
         "work_items",
         "sync_state",
+        "active_pr_snapshot_scope",
     ] {
         conn.execute(
             &format!("DELETE FROM {table} WHERE organization = ?1"),

@@ -12,8 +12,6 @@ pub enum AppError {
     NotSupported(String),
     #[error("secret storage error: {0}")]
     Secret(String),
-    #[error("Operation was cancelled.")]
-    Cancelled,
     #[error("Azure DevOps error: {0}")]
     AzureDevOps(String),
     #[error("GitHub error: {0}")]
