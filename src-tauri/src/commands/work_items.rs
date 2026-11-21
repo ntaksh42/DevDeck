@@ -4,19 +4,19 @@ use crate::app_state::{ensure_write_enabled, run_blocking, AppState};
 use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
-    ClassificationNodesResult, CreateWorkItemInput, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, FollowWorkItemInput, GetSavedQueryInput, GetWorkItemPreviewInput,
-    ListClassificationNodesInput, ListFollowedWorkItemsInput, ListMyWorkItemsInput,
-    ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
-    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemTypesInput,
-    ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption, RecordAssigneeInteractionInput,
-    RecordMentionInteractionInput, RemoveWorkItemLinkInput, ResolveMentionIdentitiesInput,
-    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
-    UnfollowWorkItemInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
-    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
-    WorkItemPreview, WorkItemProjectOption, WorkItemSummary, WorkItemUpdateSummary,
+    CachedWorkItemQueryResult, ClassificationNodesResult, CreateWorkItemInput,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, FollowWorkItemInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListClassificationNodesInput, ListFollowedWorkItemsInput,
+    ListMyWorkItemsInput, ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption,
+    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
+    ResolveMentionIdentitiesInput, RunWorkItemQueryInput, SavedQueryResult,
+    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
+    SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
+    SetWorkItemsTagsInput, UnfollowWorkItemInput, UpdateWorkItemCommentInput,
+    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[tauri::command]
@@ -56,6 +56,16 @@ pub async fn run_work_item_query(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
     super::query_deadline::with_query_deadline(state.work_items.run_query(input)).await
+}
+
+/// The rows `run_work_item_query` returned for this query last time, if any.
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_cached_work_item_query(
+    input: RunWorkItemQueryInput,
+    state: State<'_, AppState>,
+) -> Result<Option<CachedWorkItemQueryResult>> {
+    state.work_items.cached_query(input)
 }
 
 #[tauri::command]

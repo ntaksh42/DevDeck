@@ -483,7 +483,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 
 - アクセス: `AppDatabase` がパスラッパとして呼び出しごとに接続を開く (`rusqlite`)。
 - 移行: `src-tauri/src/db.rs` の `migrate()` が `PRAGMA user_version` を使用。
-  **現行スキーマバージョン: 34** (v34 で Home の提案の緊急度 `bot_suggestions.urgency` を追加、v33 で Home の worker が答える会話 (`home_dispatches.note_target` / `note_id`) を追加、v32 で Home Bot 用に `bot_runs` / `bot_suggestions` / `home_chat_messages` / `home_dispatches` を追加、v31 で Inbox の「返信が来なければ再通知」用に `reply_reminders` を追加、v30 で Inbox の会話単位の一意インデックスを `pr_group_mention` / `wi_reply` を含む種別で作り直し、v29 で自作 PR のマージ可能判定・通知済み状態を保存する `pr_merge_readiness` を追加、v28 で My Pull Requests 用に `pr_reviewer_counts` (PR ごとの承認数・レビュアー総数) を追加、v27 で Inbox を会話ごとに 1 行にし、`action_inbox_items.hit_count` と会話単位の一意インデックスを追加、v26 で Inbox 項目ごとの Claude の判断メモ `action_inbox_insights` を追加、v25 で Inbox 項目にコメント位置 `action_inbox_items.file_path` / `line` を追加、v24 で Inbox 用の `action_inbox_items` / `action_inbox_cursor` を追加、v23 で Commits ビュー廃止に伴い `commits` / `commits_fts` / `commit_prs` と commit 同期の `sync_state` 行を削除、v22 でコミットの committer 名/メール/日時 `commits.committer_*` を追加、v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
+  **現行スキーマバージョン: 35** (v35 で Work Item View の前回結果 `work_item_view_results` を追加、v34 で Home の提案の緊急度 `bot_suggestions.urgency` を追加、v33 で Home の worker が答える会話 (`home_dispatches.note_target` / `note_id`) を追加、v32 で Home Bot 用に `bot_runs` / `bot_suggestions` / `home_chat_messages` / `home_dispatches` を追加、v31 で Inbox の「返信が来なければ再通知」用に `reply_reminders` を追加、v30 で Inbox の会話単位の一意インデックスを `pr_group_mention` / `wi_reply` を含む種別で作り直し、v29 で自作 PR のマージ可能判定・通知済み状態を保存する `pr_merge_readiness` を追加、v28 で My Pull Requests 用に `pr_reviewer_counts` (PR ごとの承認数・レビュアー総数) を追加、v27 で Inbox を会話ごとに 1 行にし、`action_inbox_items.hit_count` と会話単位の一意インデックスを追加、v26 で Inbox 項目ごとの Claude の判断メモ `action_inbox_insights` を追加、v25 で Inbox 項目にコメント位置 `action_inbox_items.file_path` / `line` を追加、v24 で Inbox 用の `action_inbox_items` / `action_inbox_cursor` を追加、v23 で Commits ビュー廃止に伴い `commits` / `commits_fts` / `commit_prs` と commit 同期の `sync_state` 行を削除、v22 でコミットの committer 名/メール/日時 `commits.committer_*` を追加、v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
   v20 で `pull_requests.created_by_id` を追加)。
 - 主なテーブル: 組織、アクティブ/レビュー対象 PR、作業項目、My Work Items スナップショット、
   各種 FTS インデックス、同期状態、スヌーズ、
@@ -915,6 +915,12 @@ Enter/Space/↓ で開き、↑↓ で項目移動、Enter/Space でトグル、
 パネルが単一定義前提) のため、単一選択の `FilterableSelect` のままとする。
 
 ### Work Item Views
+
+ビューの結果は `run_work_item_query` が毎回 Azure DevOps から取得する。取得に成功するたびに、
+結果を `work_item_view_results` へクエリのシグネチャ (プロジェクト・WIQL・取得上限・追加列)
+ごとに保存する (新しい順に 100 件まで)。ビューを開くと `get_cached_work_item_query` で前回の結果を読み、
+クエリの応答が届くまでグリッドに表示する。このときグリッドの更新時刻は前回の取得時刻を示し、
+再取得中の表示を出す。保存した結果が無いクエリは、従来どおり応答を待つ。ブラウザのデモでは保存しない。
 
 結果グリッドは、作業項目に `ArtifactLink` (Pull Request) の関連付けがあり、
 かつそのPRがローカル同期済みのActive PRキャッシュ (`pull_requests` テーブル、

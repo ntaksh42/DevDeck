@@ -329,6 +329,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: RunWorkItemQueryInput } | undefined)?.input;
       return demoRunWorkItemQuery(input);
     }
+    case "get_cached_work_item_query":
+      return null;
     case "count_work_item_query": {
       const input = (args as { input?: RunWorkItemQueryInput } | undefined)?.input;
       const snoozed = demoSnoozedKeys("work_item");

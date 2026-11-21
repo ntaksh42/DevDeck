@@ -25,6 +25,7 @@ mod snooze;
 mod sync_state;
 mod util;
 mod work_item_follows;
+mod work_item_view_cache;
 mod work_items;
 mod work_items_query;
 
@@ -64,7 +65,7 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 34;
+pub(crate) const SCHEMA_VERSION: i64 = 35;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

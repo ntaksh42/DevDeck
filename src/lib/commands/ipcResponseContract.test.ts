@@ -6,7 +6,7 @@ import { getAppSettings } from "./orgs";
 import { listPipelineRuns } from "./pipelines";
 import { listMyCreatedPullRequests } from "./prs";
 import { invokeCommand } from "./runtime";
-import { runWorkItemQuery } from "./workItems";
+import { getCachedWorkItemQuery, runWorkItemQuery } from "./workItems";
 
 vi.mock("./runtime", () => ({ invokeCommand: vi.fn() }));
 const project = { organizationId: "fixture-org", projectId: "fixture-project" };
@@ -14,6 +14,7 @@ const project = { organizationId: "fixture-org", projectId: "fixture-project" };
 const commands = {
   get_app_settings: getAppSettings,
   list_my_created_pull_requests: () => listMyCreatedPullRequests({ organizationId: project.organizationId }),
+  get_cached_work_item_query: () => getCachedWorkItemQuery({ ...project, wiql: "SELECT [System.Id] FROM WorkItems" }),
   run_work_item_query: () => runWorkItemQuery({ ...project, wiql: "SELECT [System.Id] FROM WorkItemLinks" }),
   list_pipeline_runs: () => listPipelineRuns(project),
   list_agent_work: listAgentWork,
