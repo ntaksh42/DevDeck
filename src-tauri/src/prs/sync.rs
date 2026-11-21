@@ -133,14 +133,21 @@ pub(crate) async fn do_sync_prs(
     // same projects but issue independent queries, all bounded by the shared
     // budget. The review pass is only meaningful when the signed-in user is known.
     let review_user = org.authenticated_user_id.clone();
-    // Reviews requested from a group the user belongs to are found by matching
-    // the active PR list's reviewers (live or shared-cache) against these ids.
+    // Reviews requested from a group the user belongs to are found in the active
+    // PR list, which needs live reviewer data, so the shared-cache shortcut is
+    // skipped whenever the user has groups.
     let groups = match review_user.as_deref() {
         Some(user_id) => Some(member_group_ids(db, client, org, user_id).await),
         None => None,
     };
     let (active, review) = tokio::join!(
-        fetch_all_active_prs(client, org, projects, budget, force_refresh),
+        fetch_all_active_prs(
+            client,
+            org,
+            projects,
+            budget,
+            force_refresh || groups.as_ref().is_some_and(|groups| !groups.ids.is_empty())
+        ),
         async {
             match review_user.as_deref() {
                 Some(user_id) => {
