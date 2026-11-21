@@ -359,6 +359,19 @@ export async function runWorkItemQuery(
   return workItemSummariesSchema.parse(result);
 }
 
+const cachedWorkItemQuerySchema = z
+  .object({ items: workItemSummariesSchema, fetchedAt: z.string() })
+  .nullable();
+export type CachedWorkItemQuery = z.infer<typeof cachedWorkItemQuerySchema>;
+
+/** The rows this query returned last time (kept across restarts), if any. */
+export async function getCachedWorkItemQuery(
+  input: RunWorkItemQueryInput,
+): Promise<CachedWorkItemQuery> {
+  const result = await invokeCommand("get_cached_work_item_query", { input });
+  return cachedWorkItemQuerySchema.parse(result);
+}
+
 export async function countWorkItemQuery(
   input: RunWorkItemQueryInput,
 ): Promise<number> {

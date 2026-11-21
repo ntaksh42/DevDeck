@@ -50,6 +50,22 @@ export const workItemQueryKeys = {
       limit,
       extraFieldsSignature ?? '',
     ] as const,
+  /** Last persisted result of a view query; see `getCachedWorkItemQuery`. */
+  queryViewCache: ({
+    organizationId,
+    projectId,
+    wiql,
+    limit,
+    extraFieldsSignature,
+  }: WorkItemQueryViewKeyInput) =>
+    [
+      'workItemQueryViewCache',
+      organizationId,
+      projectId,
+      wiql,
+      limit,
+      extraFieldsSignature ?? '',
+    ] as const,
   queryViewRoot: (organizationId?: string) =>
     organizationId
       ? (['workItemQueryView', organizationId] as const)

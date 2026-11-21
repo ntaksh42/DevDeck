@@ -10,7 +10,7 @@ use crate::home_bot::{
 };
 use crate::pipelines::PipelineRunSummary;
 use crate::prs::{MyCreatedPullRequestSummary, MyCreatedPullRequestsResult};
-use crate::work_items::{WorkItemCustomField, WorkItemSummary};
+use crate::work_items::{CachedWorkItemQueryResult, WorkItemCustomField, WorkItemSummary};
 
 const ORG: &str = "fixture-org";
 const PROJECT: &str = "fixture-project";
@@ -162,9 +162,15 @@ fn ipc_response_contract() {
         error: None,
     };
 
+    let cached_view = CachedWorkItemQueryResult {
+        items: serde_json::to_value([&work_item]).unwrap(),
+        fetched_at: TIMESTAMP.into(),
+    };
+
     let actual = json!({
         "get_app_settings": settings,
         "list_my_created_pull_requests": pull_requests,
+        "get_cached_work_item_query": cached_view,
         "run_work_item_query": [work_item],
         "list_pipeline_runs": [pipeline],
         "list_agent_work": [agent_work],
