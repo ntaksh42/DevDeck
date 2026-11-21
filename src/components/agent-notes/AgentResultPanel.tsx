@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Bot, ExternalLink } from "lucide-react";
 import {
@@ -7,12 +8,19 @@ import {
   REVEAL_NOTE_EVENT,
   type NoteRequestDetail,
 } from "@/components/agent/agentSubject";
-import { commandErrorMessage, noteNeedsYou, type AgentNoteItem } from "@/lib/azdoCommands";
+import {
+  commandErrorMessage,
+  noteNeedsYou,
+  postPullRequestComment,
+  type AgentNoteItem,
+  type PrLocatorInput,
+} from "@/lib/azdoCommands";
 import { openLocalPath } from "@/lib/openExternal";
 import { matchesCombo, resolveKeybindings } from "@/lib/keybindings";
 import { focusPrimaryGrid, isEditableTarget } from "@/lib/utils";
 import { LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { ResultFrame } from "./ResultFrame";
+import type { ResultComment } from "./resultComment";
 import { lastAgentReplyAt, markItemSeen } from "./noteSeen";
 import { buildTextIndex, hashResult, listBlocks, locateQuote } from "./resultAnchoring";
 import { useAgentNoteActions } from "./useAgentNoteActions";
@@ -39,6 +47,7 @@ export function AgentResultPanel({
   noMatchMessage,
   commentModeRequest = 0,
   primaryPreview = false,
+  pullRequest,
 }: {
   item: AgentNoteItem;
   hasFolder: boolean;
@@ -51,9 +60,20 @@ export function AgentResultPanel({
   commentModeRequest?: number;
   /** Marks the panel as the focus target of Enter / Ctrl+P from the grid. */
   primaryPreview?: boolean;
+  /** The reviewed pull request; lets finding links in the result post their comment to it. */
+  pullRequest?: PrLocatorInput;
 }) {
   const { target, itemId } = item;
   const actions = useAgentNoteActions(item, hasFolder);
+  const queryClient = useQueryClient();
+  const postComment = pullRequest
+    ? async ({ filePath, line, content }: ResultComment) => {
+        await postPullRequestComment({ ...pullRequest, content, filePath, rightLine: line });
+        void queryClient.invalidateQueries({
+          queryKey: ["prReview", pullRequest.organizationId, pullRequest.repositoryId, pullRequest.pullRequestId],
+        });
+      }
+    : undefined;
 
   const frameRef = useRef<HTMLIFrameElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -352,6 +372,7 @@ export function AgentResultPanel({
             onComment={startComment}
             onRevealNote={reveal}
             onOpenNote={openNote}
+            onPostComment={postComment}
           />
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-border p-4">

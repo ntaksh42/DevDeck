@@ -6,6 +6,7 @@ import { focusPrimaryGrid } from "@/lib/utils";
 import { bindFramePaneFocus } from "@/lib/paneFocus";
 import { openExternalUrl } from "@/lib/openExternal";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
+import { POST_STATE_ATTR, postFromLink, readResultComment, type ResultComment } from "./resultComment";
 import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
 // Renders the investigation result in a script-less sandboxed iframe and layers
@@ -52,12 +53,15 @@ type Props = {
   onComment: (request: CommentRequest) => void;
   onRevealNote: (id: string) => void;
   onOpenNote: (id: string) => void;
+  /** Posts a finding link's comment to the pull request. Without it, such links just open. */
+  onPostComment?: (comment: ResultComment) => Promise<void>;
 };
 
 export function ResultFrame({
   html, title, frameRef, frame, onFrameLoad, anchors, activeId, pendingRange,
-  onComment, onRevealNote, onOpenNote,
+  onComment, onRevealNote, onOpenNote, onPostComment,
 }: Props) {
+  const onPostCommentRef = useLatestRef(onPostComment);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [blockMode, setBlockMode] = useState(false);
   const [blockIdx, setBlockIdx] = useState(0);
@@ -167,11 +171,19 @@ export function ResultFrame({
       doc.head.appendChild(style);
     }
     // The sandbox blocks navigation, so web links open in the user's browser.
+    // A finding link with a comment posts it on that line first (once).
     doc?.addEventListener("click", (event) => {
       const link = (event.target as Element | null)?.closest?.("a[href]");
       const href = link?.getAttribute("href") ?? "";
-      if (!/^https?:\/\//i.test(href)) return;
+      if (!link || !/^https?:\/\//i.test(href)) return;
       event.preventDefault();
+      const comment = readResultComment(link);
+      const post = onPostCommentRef.current;
+      if (comment && post && !link.hasAttribute(POST_STATE_ATTR)) {
+        void postFromLink(link, comment, post, href);
+        return;
+      }
+      if (link.getAttribute(POST_STATE_ATTR) === "posting") return;
       void openExternalUrl(href).catch(() => undefined);
     });
     onFrameLoad();

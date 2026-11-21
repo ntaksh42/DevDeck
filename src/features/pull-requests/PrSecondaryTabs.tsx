@@ -14,7 +14,8 @@ export function ResultTab({
   selectedPr,
   commentModeRequest = 0,
 }: {
-  selectedPr: Pick<ReviewPullRequestSummary, "pullRequestId">;
+  selectedPr: Pick<ReviewPullRequestSummary, "pullRequestId"> &
+    Partial<Pick<ReviewPullRequestSummary, "organizationId" | "projectId" | "repositoryId">>;
   commentModeRequest?: number;
 }) {
   const settingsQuery = useQuery({
@@ -29,6 +30,9 @@ export function ResultTab({
   });
 
   const hasFolder = !!settingsQuery.data?.reviewResultFolderPath;
+  // Finding links post their comment only when the pull request is fully known.
+  const { organizationId, projectId, repositoryId, pullRequestId } = selectedPr;
+  const pullRequest = projectId && repositoryId ? { organizationId, projectId, repositoryId, pullRequestId } : undefined;
 
   return (
     <AgentResultPanel
@@ -42,6 +46,7 @@ export function ResultTab({
       noMatchMessage={`No HTML file matched PR${selectedPr.pullRequestId}.`}
       commentModeRequest={commentModeRequest}
       primaryPreview
+      pullRequest={pullRequest}
     />
   );
 }
