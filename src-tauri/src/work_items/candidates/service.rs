@@ -15,10 +15,10 @@ use super::{
     assignee_candidate_from_history, assignee_candidate_from_identity_picker,
     assignee_candidate_from_mention, assignee_candidate_matches_query,
     assignee_candidates_from_updates, is_authenticated_user, is_mention_resolvable_id,
-    mention_candidate_from_assignee, mention_candidate_from_history,
-    mention_candidate_from_identity_picker, mention_candidate_matches_query,
+    mention_candidate_from_assignee, mention_candidate_from_identity_picker,
+    mention_candidate_matches_query, mention_candidates_from_history,
     push_unique_assignee_candidate, push_unique_mention_candidate,
-    search_identity_picker_with_fallback, summarize_mention_candidate,
+    search_identity_picker_with_fallback, summarize_mention_candidate, MENTION_HISTORY_SCAN_LIMIT,
 };
 
 impl WorkItemService {
@@ -138,12 +138,12 @@ impl WorkItemService {
             }
         }
 
-        match self.db.list_mention_history(&organization.id, 20) {
+        match self
+            .db
+            .list_mention_history(&organization.id, MENTION_HISTORY_SCAN_LIMIT)
+        {
             Ok(entries) => {
-                for candidate in entries
-                    .into_iter()
-                    .filter_map(mention_candidate_from_history)
-                {
+                for candidate in mention_candidates_from_history(entries, query) {
                     push_unique_mention_candidate(&mut candidates, candidate);
                 }
             }

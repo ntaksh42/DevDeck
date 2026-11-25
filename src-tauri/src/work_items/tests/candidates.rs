@@ -365,3 +365,30 @@ fn test_keep_entirely_different_candidate() {
     push_unique_mention_candidate(&mut candidates, mc("id-2", "Bob", Some("bob@corp.com")));
     assert_eq!(candidates.len(), 2);
 }
+
+#[test]
+fn mention_candidates_from_history_filters_before_limiting() {
+    // 30 people share a surname; the one asked for is the 30th most used
+    // overall but must still surface once the typed text narrows the list.
+    let mut entries: Vec<crate::db::MentionHistoryEntry> = (0..29)
+        .map(|index| crate::db::MentionHistoryEntry {
+            unique_name: format!("other{index}@corp.com"),
+            display_name: format!("Other {index}"),
+            user_id: Some(format!("00000000-0000-0000-0000-{index:012}")),
+        })
+        .collect();
+    entries.push(crate::db::MentionHistoryEntry {
+        unique_name: "sato.taro@corp.com".to_string(),
+        display_name: "佐藤 太郎".to_string(),
+        user_id: Some("d6245f20-2af8-44f4-9451-8107cb2767db".to_string()),
+    });
+
+    let matches = mention_candidates_from_history(entries.clone(), "佐藤");
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].display_name, "佐藤 太郎");
+
+    // An empty query keeps the most-used order, capped.
+    let all = mention_candidates_from_history(entries, "");
+    assert_eq!(all.len(), MENTION_HISTORY_MATCH_LIMIT);
+    assert_eq!(all[0].display_name, "Other 0");
+}

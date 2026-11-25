@@ -102,6 +102,29 @@ pub(crate) fn mention_candidate_from_history(
     })
 }
 
+/// How many history rows to read before filtering by the typed text. The
+/// filter must run first: reading only the overall top rows would drop a
+/// frequently mentioned person whose name is shared by many others.
+pub(crate) const MENTION_HISTORY_SCAN_LIMIT: usize = 500;
+/// How many matching history entries to put ahead of the directory search.
+pub(crate) const MENTION_HISTORY_MATCH_LIMIT: usize = 20;
+
+/// History entries (already ordered most-used first) that match `query`,
+/// mapped to usable mention candidates.
+pub(crate) fn mention_candidates_from_history(
+    entries: Vec<MentionHistoryEntry>,
+    query: &str,
+) -> Vec<MentionCandidate> {
+    entries
+        .into_iter()
+        .filter_map(mention_candidate_from_history)
+        .filter(|c| {
+            mention_candidate_matches_query(&c.display_name, c.unique_name.as_deref(), query)
+        })
+        .take(MENTION_HISTORY_MATCH_LIMIT)
+        .collect()
+}
+
 pub(crate) fn mention_candidate_matches_query(
     display_name: &str,
     unique_name: Option<&str>,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import type { MentionSearch } from "./prMentionSearch";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
-import { type MentionCandidate, type PrThread } from "@/lib/azdoCommands";
+import { type PrThread } from "@/lib/azdoCommands";
 import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { MarkdownView } from "@/lib/markdown";
@@ -253,7 +254,7 @@ export function PrThreadCard({
   onToggleStatus: () => void;
   onEditComment?: (commentId: number, content: string) => Promise<void>;
   onDeleteComment?: (commentId: number) => Promise<void>;
-  mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  mentionSearch?: MentionSearch;
   imageTarget?: CommentImageTarget;
   resolveImageSource?: (url: string) => Promise<string | null>;
   baseUrl?: string | null;

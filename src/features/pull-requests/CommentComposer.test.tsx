@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommentComposer } from "./CommentComposer";
 import type { MentionCandidate } from "@/lib/azdoCommands";
@@ -88,6 +88,35 @@ describe("CommentComposer mentions", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       `@<${candidate.id}> thanks!`,
     );
+  });
+
+  it("reports only mentions still in the posted text so they rank first next time", async () => {
+    const other: MentionCandidate = {
+      id: "66666666-7777-8888-9999-000000000000",
+      displayName: "佐藤花子",
+      uniqueName: "sato@contoso.example",
+    };
+    const recordPosted = vi.fn();
+    const mentionSearch = Object.assign(
+      vi.fn(async (query: string) => (query.startsWith("田") ? [candidate] : [other])),
+      { recordPosted },
+    );
+    render(
+      <CommentComposer placeholder="Reply…" onSubmit={async () => {}} mentionSearch={mentionSearch} />,
+    );
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "@田中" } });
+    fireEvent.mouseDown(await screen.findByText("田中太郎"));
+    fireEvent.change(textarea, { target: { value: "@田中太郎 @佐藤" } });
+    fireEvent.mouseDown(await screen.findByText("佐藤花子"));
+    // The second mention is typed over before posting.
+    fireEvent.change(textarea, { target: { value: "@田中太郎 thanks!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+    await waitFor(() => expect(recordPosted).toHaveBeenCalledTimes(1));
+    expect(recordPosted).toHaveBeenCalledWith([
+      { id: candidate.id, displayName: candidate.displayName, uniqueName: candidate.uniqueName },
+    ]);
   });
 });
 
