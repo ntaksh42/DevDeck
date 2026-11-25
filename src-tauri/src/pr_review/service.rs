@@ -2,7 +2,10 @@ use crate::auth::client_for_organization;
 use crate::error::Result;
 use crate::prs::{short_ref, vote_label};
 use crate::repos::encode_path_segment;
-use crate::work_items::{summarize_mention_candidate, MentionCandidate};
+use crate::work_items::{
+    mention_candidates_from_history, push_unique_mention_candidate, summarize_mention_candidate,
+    MentionCandidate, MENTION_HISTORY_SCAN_LIMIT,
+};
 
 use super::helpers::{fetch_side, map_threads, ChangeFlags};
 use super::types::*;
@@ -213,10 +216,25 @@ impl PrReviewService {
             .db
             .resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
+        // People this user mentions often go first, so a common surname does
+        // not bury them below the directory's own ordering.
+        let mut candidates = match self
+            .db
+            .list_mention_history(&organization.id, MENTION_HISTORY_SCAN_LIMIT)
+        {
+            Ok(entries) => mention_candidates_from_history(entries, query),
+            Err(error) => {
+                tracing::warn!(%error, "failed to load mention history for PR mention candidates");
+                Vec::new()
+            }
+        };
         let identities = client.search_identities(query, 40).await?;
-        Ok(identities
+        for candidate in identities
             .into_iter()
             .filter_map(summarize_mention_candidate)
-            .collect())
+        {
+            push_unique_mention_candidate(&mut candidates, candidate);
+        }
+        Ok(candidates)
     }
 }

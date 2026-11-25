@@ -7,7 +7,9 @@ import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
   activeMentionAt,
   addSelectedMention,
+  isMentionResolvableId,
   mentionTokenDeletionStart,
+  mentionTokenPattern,
   renderAzureMentionMarkdown,
   scrollMentionOptionIntoView,
   type SelectedMention,
@@ -16,6 +18,7 @@ import {
   PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY,
   usePersistedTextareaHeight,
 } from "@/lib/usePersistedTextareaHeight";
+import type { MentionSearch } from "./prMentionSearch";
 
 const NO_MENTIONS: SelectedMention[] = [];
 
@@ -56,7 +59,7 @@ export function CommentComposer({
   altSubmitHint?: string;
   onCancel?: () => void;
   onSubmitted?: () => void;
-  mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  mentionSearch?: MentionSearch;
   /** Folds to a one-line button while empty and unfocused; Esc folds it back. */
   collapsible?: boolean;
   /** Where focus goes after Esc folds it (default: the owning preview). */
@@ -84,6 +87,13 @@ export function CommentComposer({
     setSubmitting(true);
     try {
       await handler(content);
+      mentionSearch?.recordPosted?.(
+        selectedMentions.filter(
+          (selected) =>
+            isMentionResolvableId(selected.id) &&
+            mentionTokenPattern(selected.displayName).test(trimmed),
+        ),
+      );
       setText("");
       setMention(null);
       setSelectedMentions([]);

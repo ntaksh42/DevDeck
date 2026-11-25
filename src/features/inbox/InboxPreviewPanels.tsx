@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
+import type { MentionSearch } from "@/features/pull-requests/prMentionSearch";
 import { useEffect, useRef, useState } from "react";
 import type {
-  MentionCandidate,
   PrThread,
   WorkItemComment,
   WorkItemPreview,
@@ -42,7 +42,7 @@ export function ThreadPanel({
   thread: PrThread | null;
   busy: boolean;
   readOnly: boolean;
-  mentionSearch: (query: string) => Promise<MentionCandidate[]>;
+  mentionSearch: MentionSearch;
   resolveImageSource: (url: string) => Promise<string | null>;
   onReply: (content: string) => Promise<void>;
   /** Ctrl+Shift+Enter in the reply box: reply, then resolve the thread. */
@@ -143,7 +143,7 @@ export function WorkItemPanel({
   workItem: WorkItemPreview | null;
   busy: boolean;
   readOnly: boolean;
-  mentionSearch: (query: string) => Promise<MentionCandidate[]>;
+  mentionSearch: MentionSearch;
   resolveImageSource: (url: string) => Promise<string | null>;
   onComment: (markdown: string) => Promise<void>;
   draft?: ReplySeed;

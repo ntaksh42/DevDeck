@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import type { MentionCandidate } from "@/lib/azdoCommands";
+import type { MentionSearch } from "@/features/pull-requests/prMentionSearch";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import {
@@ -62,7 +62,7 @@ export function InboxPreview({
   detail: InboxDetail;
   readOnly: boolean;
   previewRef: RefObject<HTMLDivElement | null>;
-  mentionSearch: (query: string) => Promise<MentionCandidate[]>;
+  mentionSearch: MentionSearch;
   resolveImageSource: (url: string) => Promise<string | null>;
   onReply: (content: string) => Promise<void>;
   onReplyAndResolve: (content: string) => Promise<void>;

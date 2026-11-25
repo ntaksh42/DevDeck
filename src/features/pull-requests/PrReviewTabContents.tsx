@@ -1,12 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { createPrMentionSearch } from "./prMentionSearch";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2, Pencil, X } from "lucide-react";
 import {
   getAppSettings,
   listPullRequestCommits,
   prLocator,
-  searchPullRequestMentions,
-  type MentionCandidate,
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
@@ -26,11 +25,7 @@ import { NativeSelect } from "@/components/SearchBar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 function usePrMentionSearch(organizationId: string) {
-  return useCallback(
-    (query: string): Promise<MentionCandidate[]> =>
-      searchPullRequestMentions({ organizationId, query }),
-    [organizationId],
-  );
+  return useMemo(() => createPrMentionSearch(organizationId), [organizationId]);
 }
 
 type VoteValue = -10 | -5 | 0 | 5 | 10;

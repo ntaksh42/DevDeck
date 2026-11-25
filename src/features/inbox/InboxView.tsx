@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInboxMeta } from "./useInboxMeta";
 import {
   commandErrorMessage,
   generateActionInboxInsight,
-  searchPullRequestMentions,
-  type MentionCandidate,
 } from "@/lib/azdoCommands";
+import { createPrMentionSearch } from "@/features/pull-requests/prMentionSearch";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { pushToast } from "@/lib/toast";
 import { clamp, isEditableTarget } from "@/lib/utils";
@@ -124,9 +123,8 @@ export function InboxView() {
     setDraft(undefined);
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const mentionSearch = useCallback(
-    (query: string): Promise<MentionCandidate[]> =>
-      searchPullRequestMentions({ organizationId: selected?.organizationId, query }),
+  const mentionSearch = useMemo(
+    () => createPrMentionSearch(selected?.organizationId),
     [selected?.organizationId],
   );
   const resolveImageSource = useCallback(

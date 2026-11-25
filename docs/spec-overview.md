@@ -420,6 +420,10 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   で置換し、残りの GUID は `resolve_mention_identities` (vssps `_apis/identities?identityIds=`、最大 50 件) で
   表示名に引く。結果はセッション中キャッシュする (`useMentionIdentityNames`)。Work Item のコメント、Inbox の
   Work Item コメント / PR スレッド / 説明、PR のスレッド / 説明が対象。引けない GUID は `@<GUID>` のまま表示する。
+- **メンション候補の並び**: Work Item・PR・Inbox のどのコメント欄でも、投稿したメンションの回数を
+  `record_mention_interaction` で `mention_history` に記録する。候補を出すときは、履歴 (回数の多い順に最大 500 行) を
+  入力文字で絞ってから、最大 20 人をディレクトリ検索の結果より前に置く。同じ姓の人が多くても、よくメンションする人が
+  上に出る。Work Item では、その WI の更新履歴にいる人をさらに前に置く (`search_work_item_mentions`)。
 - **PR レビュアー管理**: レビューパネルから既存レビュアーの必須/任意切替・削除に加え、
   レビュアーの追加ができる。「Add」は @メンションと同じディレクトリ検索 (`search_pull_request_mentions`、
   2 文字以上、既存レビュアーは除外) の候補を `↑↓` で選び Enter で追加 (「Required」で必須指定、Esc で閉じて
