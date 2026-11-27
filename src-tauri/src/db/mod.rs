@@ -19,6 +19,7 @@ mod notifications;
 mod organizations;
 mod pr_comment_seen;
 mod prs;
+mod prs_closed;
 mod reply_reminders;
 mod settings;
 mod settings_kv;

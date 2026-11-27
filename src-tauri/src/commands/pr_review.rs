@@ -132,7 +132,37 @@ pub async fn update_pull_request(
     state: State<'_, AppState>,
 ) -> Result<PrStatusResult> {
     ensure_write_enabled(&state).await?;
-    state.provider().await?.update_pull_request(input).await
+    let locator = input.pr.clone();
+    let result = state.provider().await?.update_pull_request(input).await?;
+    if let Some(status) = result.status.as_deref().filter(|s| *s != "active") {
+        forget_closed_pull_request(&state, &locator, status).await;
+    }
+    Ok(result)
+}
+
+/// The grids read the synced cache, which still lists a PR this app just
+/// completed or abandoned; drop it now instead of waiting for the next sync.
+/// Best-effort: the next sync removes it anyway.
+async fn forget_closed_pull_request(state: &AppState, pr: &PrLocator, status: &str) {
+    let db = state.db.clone();
+    let (pr, status) = (pr.clone(), status.to_string());
+    let shared_cache_path = crate::shared_cache::path();
+    let outcome = tokio::task::spawn_blocking(move || -> Result<()> {
+        let org = db.resolve_organization(pr.organization_id.as_deref())?;
+        db.forget_closed_pull_request(&org.id, &pr.repository_id, pr.pull_request_id)?;
+        let conn = crate::shared_cache::open_at(shared_cache_path)?;
+        crate::shared_cache::set_pull_request_status(
+            &conn,
+            &org.name,
+            &pr.repository_id,
+            pr.pull_request_id,
+            &status,
+        )
+    })
+    .await;
+    if let Ok(Err(error)) = outcome {
+        tracing::warn!(%error, "failed to drop a closed pull request from the cache");
+    }
 }
 
 #[tauri::command]

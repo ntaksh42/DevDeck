@@ -40,7 +40,7 @@ pub(crate) use pr_snapshot::{
 };
 #[cfg(test)]
 pub use pull_requests::write_pull_requests;
-pub use pull_requests::{SharedPullRequest, SharedReviewer};
+pub use pull_requests::{set_pull_request_status, SharedPullRequest, SharedReviewer};
 pub use work_items::{upsert_work_items, write_work_items, SharedWorkItem};
 
 #[cfg(not(test))]
