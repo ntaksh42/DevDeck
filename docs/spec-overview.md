@@ -434,6 +434,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
 - **PR ラベル**: レビューパネルのヘッダーに PR のラベル (有効なもののみ) をチップ表示し、「Label」から名前を入力して Enter で付与、各チップの X で削除できる (`add_pull_request_label` / `remove_pull_request_label`、`get_pull_request_review` の `labels`)。Esc で入力を取り消し「Label」へフォーカスを戻す。重複 (大文字小文字無視)・空の名前は送らない。書き込み系のため read-only 検証モードでは拒否する。GitHub 接続は未対応。一覧 (グリッド) のラベル列とラベルによる絞り込みは、ラベルが同期キャッシュに載っていないため未対応。
 - **PR 編集**: ライフサイクル操作 (abandon / reactivate / publish / draft / complete、`update_pull_request`) に加え、
   レビューパネルからタイトル・説明をインライン編集できる (`update_pull_request_details`)。
+  操作の結果 PR が active でなくなったとき (complete / abandon) は、次の同期を待たずにその PR をローカルキャッシュ (`pull_requests` / `review_pull_requests` / `pr_reviewer_counts`) から消し、共有キャッシュの行の `status` も更新する。
 - **PR 操作**: レビューパネルから publish / Convert to draft (`draft` アクション、Azure DevOps のみ。
   GitHub は未対応でエラー) / complete / abandon に加え、自動完了 (auto-complete) の
   有効化・解除が可能 (`update_pull_request` の `enableAutoComplete` / `cancelAutoComplete` アクション、
@@ -518,7 +519,7 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 6) で上限を設け、
   ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。クライアントの
   エンドポイント単位スロットル (8 件) より小さくし、同期中も画面からのオンデマンド取得に枠を残す。
-- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録し、以前取得できたグループ一覧が残っていれば (TTL 切れでも) それで続行する。前回値も無ければ、直接レビューに含まれない既存のレビュー行をそのまま残す (グループ宛てレビューが 1 パスだけ消えて、次のパスで新規レビュー依頼として再通知されるのを防ぐ)。active PR 一覧が上限 (`PROJECT_PR_SYNC_TOP`) に達したプロジェクトでは一覧が欠けるため、グループ ID ごとに `searchCriteria.reviewerId` で取得してレビュー対象を補完する (`prs/group_reviews_capped.rs`。1 件でも失敗したプロジェクトは前回の行を保持して警告に記録する)。`reviewerId` / `creatorId` の `$skip` ページングは、サーバーが `$top` より少なく返しても打ち切らず、空ページまで進める (`$skip` は実際に返った件数ぶん進め、重複は除く)。
+- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録し、以前取得できたグループ一覧が残っていれば (TTL 切れでも) それで続行する。前回値も無ければ、直接レビューに含まれない既存のレビュー行をそのまま残す (ただし active PR 一覧を上限未満で取得できたプロジェクトでは、その一覧に無い行は完了/破棄済みとして消す) (グループ宛てレビューが 1 パスだけ消えて、次のパスで新規レビュー依頼として再通知されるのを防ぐ)。active PR 一覧が上限 (`PROJECT_PR_SYNC_TOP`) に達したプロジェクトでは一覧が欠けるため、グループ ID ごとに `searchCriteria.reviewerId` で取得してレビュー対象を補完する (`prs/group_reviews_capped.rs`。1 件でも失敗したプロジェクトは前回の行を保持して警告に記録する)。`reviewerId` / `creatorId` の `$skip` ページングは、サーバーが `$top` より少なく返しても打ち切らず、空ページまで進める (`$skip` は実際に返った件数ぶん進め、重複は除く)。
   レビューキャッシュはプロジェクト単位で置換し、取得に失敗したプロジェクトだけ前回の行を保持する (1 プロジェクトの失敗で一覧全体が古いままにならない)。保持上限は 5000 件。
   ドラフトは既定で非表示だが、件数をタブ帯の Show Drafts チェックボックスに出し、チェックで表示する。
 - PR 同期: active PR とレビュー対象 PR の取得を重ね合わせ、CI ステータスは最新 50 件を後段で付与。

@@ -168,6 +168,23 @@ pub(super) fn replace_rows(
     Ok(())
 }
 
+/// Records a status change of one PR made from this app (e.g. completed), so a
+/// snapshot that is still fresh does not bring a closed PR back as active.
+pub fn set_pull_request_status(
+    conn: &Connection,
+    organization: &str,
+    repository_id: &str,
+    pull_request_id: i64,
+    status: &str,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE pull_requests SET status = ?4
+         WHERE organization = ?1 AND repository_id = ?2 AND pull_request_id = ?3",
+        params![organization, repository_id, pull_request_id, status],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

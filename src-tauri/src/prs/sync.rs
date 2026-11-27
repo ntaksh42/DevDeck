@@ -307,8 +307,20 @@ pub(crate) async fn do_sync_prs(
                 let unknown: HashMap<String, Option<String>> =
                     synced.iter().map(|id| (id.clone(), None)).collect();
                 let previous = db.list_review_pull_requests(&org.id)?;
-                let carried =
+                let mut carried =
                     carry_forward_reviews(previous, &review.cached_reviews, &synced, &unknown);
+                // Where the active list is complete, a carried row missing from
+                // it was completed or abandoned; keeping it would list the PR
+                // for as long as the group lookup keeps failing.
+                let active_keys: std::collections::HashSet<(&str, i64)> = active
+                    .cached_prs
+                    .iter()
+                    .map(|pr| (pr.repository_id.as_str(), pr.pull_request_id))
+                    .collect();
+                carried.retain(|pr| {
+                    !active.synced_project_ids.contains(&pr.project_id)
+                        || active_keys.contains(&(pr.repository_id.as_str(), pr.pull_request_id))
+                });
                 review.cached_reviews.extend(carried);
             }
             if !review.failed_projects.is_empty() {

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::AppDatabase;
 use crate::secrets::SecretStore;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrLocator {
     pub organization_id: Option<String>,

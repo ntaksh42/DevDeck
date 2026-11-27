@@ -30,6 +30,8 @@ mod tests_inbox_hits;
 
 #[cfg(test)]
 mod tests_capped;
+#[cfg(test)]
+mod tests_closed;
 
 #[cfg(test)]
 mod tests_dates;
