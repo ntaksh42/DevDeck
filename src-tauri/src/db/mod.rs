@@ -63,6 +63,7 @@ pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;
 pub use prs::*;
+pub use prs_closed::CachedPrKey;
 pub use reply_reminders::*;
 pub use settings::*;
 pub use sync_state::*;

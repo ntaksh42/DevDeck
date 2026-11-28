@@ -13,6 +13,7 @@ mod service;
 mod sync;
 mod sync_ci;
 mod sync_fetch;
+mod sync_verify;
 mod types;
 mod util;
 
@@ -46,5 +47,6 @@ pub(crate) use search::*;
 pub use service::*;
 pub use sync::*;
 pub(crate) use sync_fetch::*;
+pub(crate) use sync_verify::request_rebuild;
 pub use types::*;
 pub(crate) use util::*;

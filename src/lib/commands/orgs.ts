@@ -258,6 +258,8 @@ export type TriggerSyncInput = {
   scope?: SyncScope;
   /** An explicit user refresh: skip the shared-cache shortcut and hit the API. */
   force?: boolean;
+  /** Rebuild the PR cache: replace every cached PR row on this sync. */
+  rebuildPullRequests?: boolean;
 };
 
 export async function listOrganizations(): Promise<Organization[]> {

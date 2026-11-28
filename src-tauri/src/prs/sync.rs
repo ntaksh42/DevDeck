@@ -108,6 +108,7 @@ struct ActivePrsFetch {
     synced_project_ids: Vec<String>,
     /// Projects whose result hit the query cap; their rows are merged, not replaced.
     capped: Vec<String>,
+    capped_ids: Vec<String>,
     refreshed_creator_projects: Vec<String>,
     creator_failures: Vec<String>,
     skipped: Vec<String>,
@@ -157,7 +158,12 @@ pub(crate) async fn do_sync_prs(
             }
         }
     );
-    let active = active?;
+    let mut active = active?;
+    // A rebuild (Settings > Sync health) replaces capped projects as well.
+    let rebuild = super::sync_verify::take_rebuild(&org.id);
+    if rebuild {
+        active.synced_project_ids.append(&mut active.capped_ids);
+    }
 
     // If nothing synced and we have a real error, surface it instead of
     // recording a spurious success.
@@ -179,6 +185,8 @@ pub(crate) async fn do_sync_prs(
         &active.refreshed_creator_projects,
         &active.cached_prs,
     )?;
+    let capped = (&active.capped_ids, active.cached_prs.as_slice());
+    super::sync_verify::prune_capped(db, client, org, capped, budget).await;
     db.save_pr_reviewer_counts(
         &org.id,
         &reviewer_counts(&active.cached_prs, &active.reviewers),
@@ -303,7 +311,7 @@ pub(crate) async fn do_sync_prs(
             // apart from stale rows, so keep previous rows the direct query did not
             // return; they neither vanish for a pass nor re-notify as new requests
             // when the lookup recovers.
-            if !groups.known {
+            if !groups.known && !rebuild {
                 let unknown: HashMap<String, Option<String>> =
                     synced.iter().map(|id| (id.clone(), None)).collect();
                 let previous = db.list_review_pull_requests(&org.id)?;
@@ -399,6 +407,7 @@ async fn fetch_all_active_prs(
                 }
                 if fetch.capped {
                     out.capped.push(fetch.label);
+                    out.capped_ids.push(fetch.project_id);
                 } else {
                     out.synced_project_ids.push(fetch.project_id);
                 }
@@ -467,25 +476,4 @@ async fn fetch_all_review_prs(
         failed_projects,
         synced_project_ids,
     })
-}
-
-fn collect_review_fetch(
-    org: &Organization,
-    project_name: String,
-    result: Result<Vec<CachedReviewPr>>,
-    cached_reviews: &mut Vec<CachedReviewPr>,
-    review_failed_projects: &mut Vec<String>,
-) {
-    match result {
-        Ok(reviews) => cached_reviews.extend(reviews),
-        Err(e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project_name,
-                error = %e,
-                "review PR sync failed for project, preserving cached data"
-            );
-            review_failed_projects.push(project_name);
-        }
-    }
 }

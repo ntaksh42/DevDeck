@@ -453,3 +453,24 @@ pub(crate) fn review_prs_to_cached(
     }
     cached_reviews
 }
+
+pub(super) fn collect_review_fetch(
+    org: &Organization,
+    project_name: String,
+    result: Result<Vec<CachedReviewPr>>,
+    cached_reviews: &mut Vec<CachedReviewPr>,
+    review_failed_projects: &mut Vec<String>,
+) {
+    match result {
+        Ok(reviews) => cached_reviews.extend(reviews),
+        Err(e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project_name,
+                error = %e,
+                "review PR sync failed for project, preserving cached data"
+            );
+            review_failed_projects.push(project_name);
+        }
+    }
+}
