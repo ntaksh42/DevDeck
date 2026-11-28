@@ -98,6 +98,10 @@ pub(crate) struct TriggerSyncInput {
     /// API. Automatic triggers (startup, window focus) leave this unset.
     #[serde(default)]
     pub(crate) force: bool,
+    /// Rebuild the PR cache: the next PR sync replaces every cached row,
+    /// including projects past the sync cap. Implies `force`.
+    #[serde(default)]
+    pub(crate) rebuild_pull_requests: bool,
 }
 
 // Keeps SQLite and file I/O off the main thread, where synchronous Tauri

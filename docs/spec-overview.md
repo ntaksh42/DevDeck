@@ -532,6 +532,8 @@ My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnin
   プロジェクトは取得結果が切り詰められているため、フル同期でもそのプロジェクトの既存行を削除せず、本体・共有キャッシュともにマージ
   (`apply_work_items_delta` 相当) し、「上限より古い項目は更新されない (キャッシュ行は保持)」旨を `last_warning` に
   記録して Sync health で「Limited」(完了したが一部スキップ/切り詰めあり) と表示する。
+- active PR 一覧が上限 (`PROJECT_PR_SYNC_TOP`) に達したプロジェクトでも、完了した PR がキャッシュに残り続けないようにする (`prs/sync_verify.rs`)。今回の取得に含まれなかったキャッシュ行のうち、取得した中で最も古い PR より新しい行は完了/破棄済みとして消す。それより古い行は 1 回の同期でプロジェクトあたり 30 件 (`VERIFY_LIMIT`) まで PR を個別に取得し、active でない (または 404) なら消す。確認する行は同期ごとにずらす。
+- Settings > Sync health の「Rebuild PR cache」は `trigger_sync` に `rebuildPullRequests: true` を渡す。次の PR 同期では上限に達したプロジェクトも含めて全キャッシュ行を置き換え、所属グループ不明時の My Reviews の行の持ち越しもしない (`force` も兼ねる)。
 - プロセス内キャッシュ: リポジトリ一覧 (1 時間)・プロジェクト一覧 (5 分)・所属グループのキャッシュは、接続の追加/削除で
   世代 (`cache_epoch`) が進むと無効になり、別アカウントで再追加した接続が古い結果を使わない。
 - イベント: 同期完了で `sync:updated` (org_id + 完了スコープ)。

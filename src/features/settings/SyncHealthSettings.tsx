@@ -24,6 +24,13 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
     },
   });
 
+  const rebuildMutation = useMutation({
+    mutationFn: () => triggerSync({ scope: "myReviews", rebuildPullRequests: true }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
+    },
+  });
+
   const states = statesQuery.data ?? [];
   const orgNames = new Map(organizations.map((org) => [org.id, org.name]));
 
@@ -143,6 +150,30 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
         {syncMutation.isError ? (
           <p role="alert" className="mt-2 text-sm text-destructive">
             {commandErrorMessage(syncMutation.error)}
+          </p>
+        ) : null}
+
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">
+            Completed or abandoned PRs still listed? Rebuild replaces every cached pull request
+            with a fresh fetch.
+          </span>
+          <button
+            type="button"
+            disabled={rebuildMutation.isPending}
+            onClick={() => rebuildMutation.mutate()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${rebuildMutation.isPending ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            Rebuild PR cache
+          </button>
+        </div>
+        {rebuildMutation.isError ? (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {commandErrorMessage(rebuildMutation.error)}
           </p>
         ) : null}
       </div>

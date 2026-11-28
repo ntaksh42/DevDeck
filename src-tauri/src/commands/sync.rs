@@ -12,7 +12,15 @@ pub async fn trigger_sync(
     state: State<'_, AppState>,
 ) -> Result<()> {
     let (tx, rx) = oneshot::channel();
-    let force = input.as_ref().is_some_and(|input| input.force);
+    let rebuild = input
+        .as_ref()
+        .is_some_and(|input| input.rebuild_pull_requests);
+    if rebuild {
+        let db = state.db.clone();
+        let orgs = crate::app_state::run_blocking(move || db.list_organizations()).await?;
+        crate::prs::request_rebuild(orgs.into_iter().map(|org| org.id));
+    }
+    let force = rebuild || input.as_ref().is_some_and(|input| input.force);
     state
         .sync_trigger
         .send(SyncTrigger {
